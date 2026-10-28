@@ -19,6 +19,9 @@ The current Housekeeping-only project document is
 It keeps the professor's required format and covers the implemented ERD, DFD,
 flowchart, UI screens, database dictionary, tests, and user manual.
 
+For a complete Windows setup using the main combined repository, see
+[`RUNNING_THE_COMBINED_PROJECT.md`](RUNNING_THE_COMBINED_PROJECT.md).
+
 ## Running it locally
 
 1. Create a PostgreSQL database and load the schema and sample data:
