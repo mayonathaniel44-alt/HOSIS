@@ -4,10 +4,4 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  server: {
-    // Shared development API for every HOSIS subsystem.
-    proxy: {
-      '/api': 'http://localhost:5000',
-    },
-  },
 })
