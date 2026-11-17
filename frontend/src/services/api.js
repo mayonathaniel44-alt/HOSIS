@@ -73,7 +73,7 @@ function json(method, value) {
 }
 
 export const authApi = {
-  login: (username, password) => request('/auth/login', json('POST', { username, password })),
+  login: (username, password, role) => request('/auth/login', json('POST', { username, password, role })),
   me: () => request('/auth/me'),
   logout: () => request('/auth/logout', { method: 'POST' }),
   saveSession,
@@ -108,4 +108,14 @@ export const frontOfficeApi = {
   createPayment: (invoiceId, payment) => request(`/front-office/invoices/${invoiceId}/payments`, json('POST', payment)),
   payment: (id) => request(`/front-office/payments/${id}`),
   updatePayment: (id, fields) => request(`/front-office/payments/${id}`, json('PATCH', fields)),
+}
+
+export const adminApi = {
+  dashboard: () => request('/admin/dashboard'),
+  staff: () => request('/admin/staff'),
+  createStaff: (staff) => request('/admin/staff', json('POST', staff)),
+  updateStaff: (id, fields) => request(`/admin/staff/${id}`, json('PATCH', fields)),
+  activity: (limit = 50) => request(`/admin/activity?limit=${limit}`),
+  settings: () => request('/admin/settings'),
+  updateSettings: (settings) => request('/admin/settings', json('PUT', settings)),
 }

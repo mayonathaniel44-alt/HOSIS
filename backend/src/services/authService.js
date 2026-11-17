@@ -10,17 +10,17 @@ const invalidCredentials = () => {
   return error
 }
 
-async function login(username, password) {
+async function login(username, password, requestedRole) {
   const user = await userModel.findByUsername(username)
   if (!user || !user.is_active || !['FRONT_OFFICE', 'ADMIN'].includes(user.role)) {
     throw invalidCredentials()
   }
 
   const matches = await bcrypt.compare(password, user.password_hash)
-  if (!matches) throw invalidCredentials()
+  if (!matches || (requestedRole && user.role !== requestedRole)) throw invalidCredentials()
 
   const token = jwt.sign(
-    { role: user.role },
+    { role: user.role, sessionVersion: user.sessionVersion },
     env.jwtSecret,
     { subject: String(user.id), expiresIn: env.jwtExpiresIn },
   )

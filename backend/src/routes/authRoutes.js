@@ -4,7 +4,6 @@ const authenticate = require('../middleware/authenticate')
 const { requireBody } = require('../middleware/validate')
 
 const router = express.Router()
-
 router.post('/login', requireBody, controller.login)
 router.get('/me', authenticate, controller.me)
 router.post('/logout', authenticate, controller.logout)

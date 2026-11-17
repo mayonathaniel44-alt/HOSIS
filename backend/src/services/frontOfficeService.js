@@ -1,9 +1,10 @@
 const model = require('../models/frontOfficeModel')
+const money = require('../lib/money')
 
-const roomStatuses = new Set(['AVAILABLE', 'DIRTY', 'CLEAN', 'INSPECTED', 'OUT_OF_ORDER'])
+const roomStatuses = new Set(['CLEAN', 'INSPECTED', 'AVAILABLE'])
 const requestStatuses = new Set(['NEW', 'IN_PROGRESS', 'COMPLETED'])
 const paymentMethods = new Set(['CASH', 'CARD', 'BANK_TRANSFER', 'OTHER'])
-const invoiceStatuses = new Set(['UNPAID', 'PARTIALLY_PAID', 'PAID', 'VOID'])
+const invoiceStatuses = new Set(['VOID'])
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 async function createGuest(body, userId) {
@@ -30,11 +31,25 @@ async function deleteGuest(id, userId) {
   return model.deleteGuest(id, userId)
 }
 
+async function dashboard() {
+  return model.dashboard()
+}
+
+async function listGuests(search) {
+  return model.listGuests(search)
+}
+
+async function getGuest(id) {
+  return model.getGuest(id)
+}
+
 async function createReservation(body, userId) {
   const checkIn = date(body.checkIn, 'checkIn')
   const checkOut = date(body.checkOut, 'checkOut')
   if (checkOut <= checkIn) throw badRequest('INVALID_STAY', 'Check-out must be later than check-in.')
-  let guestId = body.guestId ? positiveInteger(body.guestId, 'guestId') : null
+  let guestId = body.guestId === undefined || body.guestId === null || body.guestId === ''
+    ? null
+    : positiveInteger(body.guestId, 'guestId')
   let firstName
   let lastName
   if (!guestId) {
@@ -55,11 +70,21 @@ async function createReservation(body, userId) {
     lastName,
     email: optionalEmail(body.guest?.email),
     phone: optionalText(body.guest?.phone, 'guest.phone', 40),
-    roomId: body.roomId ? positiveInteger(body.roomId, 'roomId') : null,
+    roomId: body.roomId === undefined || body.roomId === null || body.roomId === ''
+      ? null
+      : positiveInteger(body.roomId, 'roomId'),
     roomType: text(body.roomType, 'roomType', 100),
     checkIn,
     checkOut,
   }, userId)
+}
+
+async function listReservations(search) {
+  return model.listReservations(search)
+}
+
+async function getReservation(id) {
+  return model.getReservation(id)
 }
 
 async function updateReservation(id, body, userId) {
@@ -71,6 +96,26 @@ async function updateReservation(id, body, userId) {
   return model.updateReservation(id, fields, userId)
 }
 
+async function cancelReservation(id, userId) {
+  return model.cancelReservation(id, userId)
+}
+
+async function checkIn(id, userId) {
+  return model.checkIn(id, userId)
+}
+
+async function checkOut(id, userId) {
+  return model.checkOut(id, userId)
+}
+
+async function listRooms(search) {
+  return model.listRooms(search)
+}
+
+async function getRoom(id) {
+  return model.getRoom(id)
+}
+
 async function updateRoom(id, body, userId) {
   const status = text(body.status, 'status', 30).toUpperCase()
   if (!roomStatuses.has(status)) {
@@ -79,13 +124,21 @@ async function updateRoom(id, body, userId) {
   return model.updateRoomStatus(id, status, userId)
 }
 
+async function listRequests(search) {
+  return model.listRequests(search)
+}
+
 async function createRequest(body, userId) {
   const guestName = text(body.guestName, 'guestName', 201)
   const request = text(body.request, 'request', 2000)
   const priority = (optionalText(body.priority, 'priority', 20) || 'STANDARD').toUpperCase()
   if (!['STANDARD', 'URGENT'].includes(priority)) throw badRequest('INVALID_PRIORITY', 'Priority must be STANDARD or URGENT.')
-  const guestId = body.guestId ? positiveInteger(body.guestId, 'guestId') : null
-  const roomId = body.roomId ? positiveInteger(body.roomId, 'roomId') : null
+  const guestId = body.guestId === undefined || body.guestId === null || body.guestId === ''
+    ? null
+    : positiveInteger(body.guestId, 'guestId')
+  const roomId = body.roomId === undefined || body.roomId === null || body.roomId === ''
+    ? null
+    : positiveInteger(body.roomId, 'roomId')
   return model.createRequest({ guestId, guestName, roomId, request, priority }, userId)
 }
 
@@ -103,12 +156,22 @@ async function updateRequest(id, body, userId) {
   return model.updateRequest(id, fields, userId)
 }
 
+async function listInvoices(search) {
+  return model.listInvoices(search)
+}
+
+async function getInvoice(id) {
+  return model.getInvoice(id)
+}
+
 async function createInvoice(body, userId) {
   const amount = money(body.amount, 'amount')
   if (Number(amount) <= 0) throw badRequest('INVALID_AMOUNT', 'Invoice amount must be greater than zero.')
   return model.createInvoice({
     guestId: positiveInteger(body.guestId, 'guestId'),
-    reservationId: body.reservationId ? positiveInteger(body.reservationId, 'reservationId') : null,
+    reservationId: body.reservationId === undefined || body.reservationId === null || body.reservationId === ''
+      ? null
+      : positiveInteger(body.reservationId, 'reservationId'),
     amount,
     notes: optionalText(body.notes, 'notes', 2000),
   }, userId)
@@ -124,6 +187,10 @@ async function updateInvoice(id, body, userId) {
   return model.updateInvoice(id, fields, userId)
 }
 
+async function listPayments(invoiceId) {
+  return model.listPayments(invoiceId)
+}
+
 async function createPayment(invoiceId, body, userId) {
   const amount = money(body.amount, 'amount')
   if (amount <= 0) throw badRequest('INVALID_AMOUNT', 'Payment amount must be greater than zero.')
@@ -134,6 +201,10 @@ async function createPayment(invoiceId, body, userId) {
     paymentMethod,
     reference: optionalText(body.reference, 'reference', 120),
   }, userId)
+}
+
+async function getPayment(id) {
+  return model.getPayment(id)
 }
 
 async function updatePayment(id, body, userId) {
@@ -170,6 +241,10 @@ function optionalEmail(value) {
 }
 
 function positiveInteger(value, field) {
+  if ((typeof value !== 'number' && typeof value !== 'string')
+      || (typeof value === 'string' && !/^[1-9]\d*$/.test(value))) {
+    throw badRequest('INVALID_FIELD', `${field} must be a positive integer.`)
+  }
   const number = Number(value)
   if (!Number.isSafeInteger(number) || number < 1) throw badRequest('INVALID_FIELD', `${field} must be a positive integer.`)
   return number
@@ -186,14 +261,6 @@ function date(value, field) {
   return value
 }
 
-function money(value, field) {
-  const amount = Number(value)
-  if (!Number.isFinite(amount) || amount < 0 || Math.round(amount * 100) !== amount * 100) {
-    throw badRequest('INVALID_AMOUNT', `${field} must be a non-negative amount with at most two decimal places.`)
-  }
-  return amount.toFixed(2)
-}
-
 function badRequest(codeName, message) {
   const error = new Error(message)
   error.status = 400
@@ -202,16 +269,31 @@ function badRequest(codeName, message) {
 }
 
 module.exports = {
+  dashboard,
+  listGuests,
+  getGuest,
   createGuest,
   updateGuest,
   deleteGuest,
+  listReservations,
+  getReservation,
   createReservation,
   updateReservation,
+  cancelReservation,
+  checkIn,
+  checkOut,
+  listRooms,
+  getRoom,
   updateRoom,
+  listRequests,
   createRequest,
   updateRequest,
+  listInvoices,
+  getInvoice,
   createInvoice,
   updateInvoice,
+  listPayments,
   createPayment,
+  getPayment,
   updatePayment,
 }
