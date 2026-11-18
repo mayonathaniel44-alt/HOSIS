@@ -6,8 +6,8 @@ async function login(req, res) {
   if (typeof username !== 'string' || !username.trim() || typeof password !== 'string' || !password) {
     throw appError(400, 'INVALID_CREDENTIALS', 'Username and password are required.')
   }
-  if (role !== undefined && !['FRONT_OFFICE', 'ADMIN'].includes(role)) {
-    throw appError(400, 'INVALID_ROLE', 'Access type must be FRONT_OFFICE or ADMIN.')
+  if (role !== undefined && !['FRONT_OFFICE', 'ADMIN', 'FINANCE'].includes(role)) {
+    throw appError(400, 'INVALID_ROLE', 'Access type must be FRONT_OFFICE, ADMIN, or FINANCE.')
   }
   const session = await authService.login(username.trim(), password, role)
   res.json({ data: session })

@@ -16,7 +16,7 @@ const departments = [
   { name: 'Front Office', status: 'Operational', detail: 'Reservations, guests, rooms, requests, and billing are connected.' },
   { name: 'Housekeeping', status: 'Not integrated', detail: 'Staff access can be assigned now; operational workflows are not connected yet.' },
   { name: 'Engineering', status: 'Not integrated', detail: 'Staff access can be assigned now; operational workflows are not connected yet.' },
-  { name: 'Accounting & Finance', status: 'Not integrated', detail: 'Finance staff roles are available; reporting workflows are not connected yet.' },
+  { name: 'Accounting & Finance', status: 'Operational', detail: 'Invoices, payments, expenses, revenue monitoring, and financial reporting are available.' },
   { name: 'Human Resources', status: 'Not integrated', detail: 'HR staff roles are available; employee workflows are not connected yet.' },
 ]
 
@@ -32,7 +32,7 @@ function StatusTag({ tone, children }) {
   return <span className={`status status-${tone}`}><i />{children}</span>
 }
 
-export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut }) {
+export default function AdminDashboard({ username, onOpenFrontOffice, onOpenFinance, onSignOut }) {
   const [section, setSection] = useState('Overview')
   const [overview, setOverview] = useState(null)
   const [staff, setStaff] = useState([])
@@ -172,6 +172,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
             </button>
           ))}
           <button className="nav-item admin-front-office-link" onClick={onOpenFrontOffice}><i className="admin-nav-mark" aria-hidden="true">↗</i><span>Front Office</span></button>
+          <button className="nav-item" onClick={onOpenFinance}><i className="admin-nav-mark" aria-hidden="true">↗</i><span>Finance</span></button>
         </nav>
         <div className="sidebar-bottom admin-sidebar-bottom">
           <div className="help-card"><span className="help-icon" aria-hidden="true">✦</span><strong>Administration</strong><p>Manage staff access and connected hotel operations.</p></div>
@@ -323,7 +324,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
                     <div className="admin-integration-top"><span className={`admin-status-dot ${department.status === 'Operational' ? 'admin-status-live' : 'admin-status-pending'}`} /><StatusTag tone={department.status === 'Operational' ? 'green' : 'slate'}>{department.status}</StatusTag></div>
                     <h2>{department.name}</h2><p>{department.detail}</p>
                     {department.status === 'Operational'
-                      ? <button className="button button-secondary" onClick={onOpenFrontOffice}>Open workspace</button>
+                      ? <button className="button button-secondary" onClick={department.name === 'Front Office' ? onOpenFrontOffice : onOpenFinance}>Open workspace</button>
                       : <button className="button button-secondary" onClick={() => setSection('Staff & access')}>Manage staff access</button>}
                   </article>
                 ))}

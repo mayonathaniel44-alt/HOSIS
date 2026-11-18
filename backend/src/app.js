@@ -5,6 +5,7 @@ const pool = require('./config/database')
 const authRoutes = require('./routes/authRoutes')
 const frontOfficeRoutes = require('./routes/frontOfficeRoutes')
 const adminRoutes = require('./routes/adminRoutes')
+const financeRoutes = require('./routes/financeRoutes')
 
 const app = express()
 const api = express.Router()
@@ -35,6 +36,7 @@ api.get('/health', async (req, res, next) => {
 api.use('/auth', authRoutes)
 api.use('/front-office', frontOfficeRoutes)
 api.use('/admin', adminRoutes)
+api.use('/finance', financeRoutes)
 app.use('/api/v1', api)
 
 app.use((req, res) => {

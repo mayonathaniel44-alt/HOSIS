@@ -12,7 +12,7 @@ const invalidCredentials = () => {
 
 async function login(username, password, requestedRole) {
   const user = await userModel.findByUsername(username)
-  if (!user || !user.is_active || !['FRONT_OFFICE', 'ADMIN'].includes(user.role)) {
+  if (!user || !user.is_active || !['FRONT_OFFICE', 'ADMIN', 'FINANCE'].includes(user.role)) {
     throw invalidCredentials()
   }
 

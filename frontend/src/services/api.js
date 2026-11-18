@@ -119,3 +119,20 @@ export const adminApi = {
   settings: () => request('/admin/settings'),
   updateSettings: (settings) => request('/admin/settings', json('PUT', settings)),
 }
+
+export const financeApi = {
+  dashboard: () => request('/finance/dashboard'),
+  invoices: (search = '', status = '') => request(`/finance/invoices?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`),
+  invoice: (id) => request(`/finance/invoices/${id}`),
+  createInvoice: (invoice) => request('/finance/invoices', json('POST', invoice)),
+  updateInvoice: (id, fields) => request(`/finance/invoices/${id}`, json('PATCH', fields)),
+  payments: (search = '', method = '') => request(`/finance/payments?search=${encodeURIComponent(search)}&method=${encodeURIComponent(method)}`),
+  createPayment: (payment) => request('/finance/payments', json('POST', payment)),
+  expenses: (status = '') => request(`/finance/expenses?status=${encodeURIComponent(status)}`),
+  createExpense: (expense) => request('/finance/expenses', json('POST', expense)),
+  approveExpense: (id) => request(`/finance/expenses/${id}/approve`, { method: 'PATCH' }),
+  revenue: () => request('/finance/revenue'),
+  payroll: () => request('/finance/payroll'),
+  audit: (search = '', eventType = '') => request(`/finance/audit?search=${encodeURIComponent(search)}&eventType=${encodeURIComponent(eventType)}`),
+  reports: (reportType = '') => request(`/finance/reports?reportType=${encodeURIComponent(reportType)}`),
+}
