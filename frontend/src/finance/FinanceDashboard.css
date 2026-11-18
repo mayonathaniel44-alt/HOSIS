@@ -173,8 +173,7 @@
   flex: 1;
   height: 100vh;
   max-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  display: block;
   padding: 24px 32px 36px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -210,7 +209,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .finance-header-titles h1 {
@@ -234,20 +233,28 @@
   gap: 10px;
 }
 
-/* Top Sub-Nav Pills */
+/* Top Sub-Nav Pills - Below header, unclipped and properly aligned */
 .finance-subnav {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 20px;
+  margin-top: 14px;
+  margin-bottom: 22px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding: 4px 0 8px;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .finance-subnav-btn {
-  padding: 7px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 16px;
   border-radius: 8px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   background: #ffffff;
@@ -255,6 +262,9 @@
   border: 1px solid #d1d5db;
   transition: all 0.15s ease;
   white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  line-height: 1;
 }
 
 .finance-subnav-btn:hover {

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { payrollEmployees } from '../financeData'
 
-export default function PayrollView({ showToast }) {
+export default function PayrollView({ subnav, showToast }) {
   const [selectedEmp, setSelectedEmp] = useState(payrollEmployees[0])
 
   return (
@@ -25,6 +25,7 @@ export default function PayrollView({ showToast }) {
           <span>Export payroll register</span>
         </button>
       </header>
+      {subnav}
 
       {/* Filter Row */}
       <div className="fin-surface" style={{ padding: '12px 18px', marginBottom: '16px' }}>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { initialPayments, initialInvoiceRecords } from '../financeData'
 import { financeApi } from '../../services/api'
 
-export default function PaymentsView({ showToast }) {
+export default function PaymentsView({ subnav, showToast }) {
   const [payments, setPayments] = useState(initialPayments)
   const [searchTerm, setSearchTerm] = useState('')
   const [methodFilter, setMethodFilter] = useState('All')
@@ -107,6 +107,7 @@ export default function PaymentsView({ showToast }) {
           <span>Export records</span>
         </button>
       </header>
+      {subnav}
 
       {/* KPI Cards */}
       <section className="fin-kpi-grid fin-kpi-grid-3">

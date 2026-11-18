@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { initialExpenses } from '../financeData'
 import { financeApi } from '../../services/api'
 
-export default function ExpensesView({ showToast }) {
+export default function ExpensesView({ subnav, showToast }) {
   const [expenses, setExpenses] = useState(initialExpenses)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({
@@ -95,6 +95,7 @@ export default function ExpensesView({ showToast }) {
           + Record expense
         </button>
       </header>
+      {subnav}
 
       {/* KPI Cards */}
       <section className="fin-kpi-grid fin-kpi-grid-3">

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { initialInvoiceRecords, reservationLookupPool } from '../financeData'
 import { financeApi } from '../../services/api'
 
-export default function InvoicesView({ showToast }) {
+export default function InvoicesView({ subnav, showToast }) {
   const [subMode, setSubMode] = useState('list') // 'list' | 'create' | 'edit-draft'
   const [invoices, setInvoices] = useState(initialInvoiceRecords)
   const [searchTerm, setSearchTerm] = useState('')
@@ -189,6 +189,7 @@ export default function InvoicesView({ showToast }) {
             Unsaved invoice
           </span>
         </header>
+        {subnav}
 
         <div className="fin-grid-2-1">
           {/* Left Column */}
@@ -470,6 +471,7 @@ export default function InvoicesView({ showToast }) {
             Draft · Editing permitted
           </span>
         </header>
+        {subnav}
 
         <div
           style={{
@@ -726,6 +728,7 @@ export default function InvoicesView({ showToast }) {
           + Create invoice
         </button>
       </header>
+      {subnav}
 
       {/* KPI Row */}
       <section className="fin-kpi-grid">

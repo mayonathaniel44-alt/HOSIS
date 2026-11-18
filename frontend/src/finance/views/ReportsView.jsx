@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function ReportsView({ showToast }) {
+export default function ReportsView({ subnav, showToast }) {
   const [reportType, setReportType] = useState('Income & expenditure')
   const [startDate, setStartDate] = useState('2026-10-01')
   const [endDate, setEndDate] = useState('2026-10-15')
@@ -27,6 +27,7 @@ export default function ReportsView({ showToast }) {
           Authorized finance access
         </span>
       </header>
+      {subnav}
 
       {/* Report Parameters Card */}
       <div className="fin-surface">
