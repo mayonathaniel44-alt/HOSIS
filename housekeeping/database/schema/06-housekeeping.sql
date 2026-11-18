@@ -253,3 +253,18 @@ CREATE INDEX IF NOT EXISTS idx_hk_tasks_staff    ON hk_cleaning_tasks (staff_id)
 CREATE INDEX IF NOT EXISTS idx_hk_logs_room      ON hk_room_status_logs (room_id);
 CREATE INDEX IF NOT EXISTS idx_hk_schedules_date ON hk_schedules (shift_date);
 CREATE INDEX IF NOT EXISTS idx_hk_requests_state ON hk_guest_requests (request_status);
+
+-- LOST_FOUND_AUDIT: every action on a lost-and-found item is logged here
+-- so supervisors can see the full chain of custody.
+CREATE TABLE IF NOT EXISTS hk_lost_found_audit (
+    audit_id   SERIAL PRIMARY KEY,
+    item_id    INT          NOT NULL REFERENCES hk_lost_found_items(item_id),
+    user_id    INT          NOT NULL REFERENCES users(user_id),
+    action     VARCHAR(30)  NOT NULL
+        CHECK (action IN ('CREATED', 'UPDATED', 'PHOTO_ADDED', 'PHOTO_REMOVED',
+                          'LABEL_PRINTED', 'CLAIM_PROCESSED', 'DISPOSED', 'VIEWED')),
+    details    VARCHAR(255),
+    acted_at   TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_hk_lf_audit_item ON hk_lost_found_audit (item_id, acted_at);

@@ -86,6 +86,115 @@ router.get('/me/record', async (req, res) => {
   });
 });
 
+// GET /api/housekeeping/me/work-report?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Everything the signed-in staff member did between two dates, for the
+// "Download my work report" button (PDF / Excel / CSV are made in the browser).
+// Supervisors may add &staffId= to get the same report for one of their staff.
+// Without dates it covers the current month; at most one year at a time.
+router.get('/me/work-report', async (req, res) => {
+  let userId = req.user.userId;
+  if (req.query.staffId !== undefined && Number(req.query.staffId) !== userId) {
+    if (req.user.position !== 'SUPERVISOR' && req.user.role !== 'ADMIN') {
+      throw new HttpError(403, 'You can only download your own work report.');
+    }
+    userId = v.id(req.query.staffId, 'staff id');
+  }
+  const today = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const from = req.query.from ? v.date(req.query.from, 'From date')
+    : `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`;
+  const to = req.query.to ? v.date(req.query.to, 'To date')
+    : `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  if (from > to) {
+    throw new HttpError(400, 'The From date must be on or before the To date.');
+  }
+  if ((new Date(to) - new Date(from)) / 86400000 > 366) {
+    throw new HttpError(400, 'A work report can cover at most one year.');
+  }
+  // Rows are kept when their date falls from `from` 00:00 up to the end of `to`.
+  const range = [userId, from, to];
+  const inRange = (col) => `${col} >= $2::date AND ${col} < $3::date + 1`;
+  const [profile, tasks, inspections, requests, items, issues, shifts] = await Promise.all([
+    db.query(
+      `SELECT user_id, first_name, last_name, position, employment_status
+         FROM users WHERE user_id = $1 AND role = 'HOUSEKEEPING'`,
+      [userId]
+    ),
+    db.query(
+      `SELECT t.task_id, r.room_number, t.task_type, t.priority, t.task_status, t.assigned_date,
+              t.start_time, t.completion_time
+         FROM hk_cleaning_tasks t JOIN rooms r ON r.room_id = t.room_id
+        WHERE t.staff_id = $1 AND ${inRange('t.assigned_date')}
+        ORDER BY t.assigned_date, r.room_number`,
+      range
+    ),
+    db.query(
+      `SELECT i.inspection_id, r.room_number, t.task_type, i.inspection_result, i.remarks, i.inspected_at,
+              CONCAT(u.first_name, ' ', u.last_name) AS inspector
+         FROM hk_inspections i
+         JOIN hk_cleaning_tasks t ON t.task_id = i.task_id
+         JOIN rooms r ON r.room_id = t.room_id
+         JOIN users u ON u.user_id = i.inspected_by
+        WHERE t.staff_id = $1 AND ${inRange('i.inspected_at')}
+        ORDER BY i.inspected_at`,
+      range
+    ),
+    db.query(
+      `SELECT q.request_id, r.room_number, q.request_type, q.priority, q.request_status, q.requested_at, q.completed_at
+         FROM hk_guest_requests q JOIN rooms r ON r.room_id = q.room_id
+        WHERE q.staff_id = $1 AND ${inRange('q.requested_at')}
+        ORDER BY q.requested_at`,
+      range
+    ),
+    db.query(
+      `SELECT l.storage_label, l.item_description, l.item_status, l.found_at, r.room_number, l.found_location
+         FROM hk_lost_found_items l LEFT JOIN rooms r ON r.room_id = l.room_id
+        WHERE l.found_by = $1 AND ${inRange('l.found_at')}
+        ORDER BY l.found_at`,
+      range
+    ),
+    db.query(
+      `SELECT m.request_id, r.room_number, m.issue_category, m.priority, m.status, m.reported_at
+         FROM hk_maintenance_requests m JOIN rooms r ON r.room_id = m.room_id
+        WHERE m.reported_by = $1 AND ${inRange('m.reported_at')}
+        ORDER BY m.reported_at`,
+      range
+    ),
+    db.query(
+      `SELECT shift_date, shift, start_time, end_time, assigned_area
+         FROM hk_schedules WHERE staff_id = $1 AND ${inRange('shift_date')}
+        ORDER BY shift_date, start_time`,
+      range
+    ),
+  ]);
+  if (!profile.rows[0]) {
+    throw new HttpError(404, 'Staff member not found.');
+  }
+  const done = tasks.rows.filter((t) => ['COMPLETED', 'INSPECTED'].includes(t.task_status)).length;
+  const passed = inspections.rows.filter((i) => i.inspection_result === 'PASSED').length;
+  res.json({
+    from,
+    to,
+    profile: profile.rows[0],
+    totals: {
+      tasks_assigned: tasks.rows.length,
+      tasks_completed: done,
+      inspections_passed: passed,
+      inspections_failed: inspections.rows.length - passed,
+      requests_completed: requests.rows.filter((q) => q.request_status === 'COMPLETED').length,
+      items_found: items.rows.length,
+      issues_reported: issues.rows.length,
+      shifts: shifts.rows.length,
+    },
+    tasks: tasks.rows,
+    inspections: inspections.rows,
+    requests: requests.rows,
+    items: items.rows,
+    issues: issues.rows,
+    shifts: shifts.rows,
+  });
+});
+
 // GET /api/housekeeping/me/reports: room condition reports this user sent to
 // Front Office and maintenance requests they reported, newest first.
 router.get('/me/reports', async (req, res) => {

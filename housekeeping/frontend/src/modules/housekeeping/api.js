@@ -151,6 +151,9 @@ export const api = {
   releaseRoom: (id) => request('POST', `${HK}/maintenance/${id}/release`),
 
   myRecord: () => request('GET', `${HK}/me/record`),
+  workReport: (q = '') => request('GET', `${HK}/me/work-report${q}`),
+  itemAudit: (id) => request('GET', `${HK}/lost-found/${id}/audit`),
+  logLabelPrint: (id) => request('POST', `${HK}/lost-found/${id}/label-printed`),
   myReports: () => request('GET', `${HK}/me/reports`),
   reportCondition: (body) => request('POST', `${HK}/room-reports`, body),
 }

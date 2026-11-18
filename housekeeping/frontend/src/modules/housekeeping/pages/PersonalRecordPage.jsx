@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { api } from '../api.js'
-import { Badge, Card, DataTable, LoadState } from '../components/ui.jsx'
-import { formatDateTime, label, longDate, staffId } from '../format.js'
+import ExportMenu from '../components/ExportMenu.jsx'
+import { Badge, Card, DataTable, Field, LoadState } from '../components/ui.jsx'
+import { formatDateTime, label, longDate, staffId, todayISO } from '../format.js'
 import { useLoad } from '../useLoad.js'
+import { workReportSections } from '../workReport.js'
 
 const ACTIVITY = {
   TASK: 'Cleaning',
@@ -46,6 +49,8 @@ export default function PersonalRecordPage() {
         <RecordStat title="REPORTS FILED" value={t.issues_reported + t.conditions_reported + t.items_found} note={`${t.issues_reported} maintenance · ${t.conditions_reported} Front Office · ${t.items_found} found item${t.items_found === 1 ? '' : 's'}`} />
       </div>
 
+      <WorkReportCard name={`${p.first_name}-${p.last_name}`} />
+
       <div className="hk-grid">
         <Card title="Inspection results" subtitle="Your most recent rooms checked by an inspector">
           <DataTable
@@ -79,6 +84,41 @@ export default function PersonalRecordPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+// "Download my work report": the staff member picks a period and downloads
+// their shifts, cleaning tasks, inspection results, guest requests, found
+// items and maintenance reports as PDF, Excel or CSV.
+function WorkReportCard({ name }) {
+  const today = todayISO()
+  const [from, setFrom] = useState(`${today.slice(0, 8)}01`)
+  const [to, setTo] = useState(today)
+  const invalid = !from || !to || from > to
+
+  async function getReport() {
+    const data = await api.workReport(`?from=${from}&to=${to}`)
+    return workReportSections(data)
+  }
+
+  return (
+    <Card title="Download my work report" subtitle="Your shifts, rooms cleaned, inspection results, guest requests and reports for a period">
+      <div className="hk-form hk-form--inline">
+        <Field label="From">
+          <input type="date" value={from} max={to || today} onChange={(e) => setFrom(e.target.value)} />
+        </Field>
+        <Field label="To">
+          <input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
+        </Field>
+        <div className="hk-form__end">
+          {invalid ? (
+            <span className="hk-muted">Pick a From date on or before the To date.</span>
+          ) : (
+            <ExportMenu title="Housekeeping Work Report" fileName={`work-report-${name.toLowerCase()}-${from}-to-${to}`} getReport={getReport} label="Download report" />
+          )}
+        </div>
+      </div>
+    </Card>
   )
 }
 

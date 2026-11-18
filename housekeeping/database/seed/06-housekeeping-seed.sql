@@ -24,7 +24,8 @@
 SET TIME ZONE 'Asia/Manila';
 
 TRUNCATE hk_inventory_movements, hk_inventory_items, hk_password_must_change,
-         hk_password_resets, hk_login_failures, hk_lost_found_photos,
+         hk_password_resets, hk_login_failures, hk_lost_found_audit,
+         hk_lost_found_photos,
          hk_front_office_notifications, hk_maintenance_requests, hk_item_claims,
          hk_lost_found_items, hk_guest_requests, hk_schedules, hk_inspections,
          hk_cleaning_tasks, hk_room_status_logs

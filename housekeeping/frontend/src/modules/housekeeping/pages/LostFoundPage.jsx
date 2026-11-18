@@ -33,6 +33,7 @@ const REPORT_COLUMNS = [
 // HK-010 Record Found Item -> Store/Label -> HK-011 Search/View -> Valid Claim? -> HK-012 Release.
 export default function LostFoundPage({ search: topSearch, user }) {
   const supervisor = user?.position === 'SUPERVISOR' || user?.role === 'ADMIN'
+  const canProcessClaim = supervisor || user?.position === 'INSPECTOR'
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [selectedId, setSelectedId] = useState(null)
@@ -141,7 +142,7 @@ export default function LostFoundPage({ search: topSearch, user }) {
 
       {opened && (
         <Modal title={`Found item ${opened.storage_label}`} onClose={() => setOpenId(null)}>
-          <ItemDetail key={opened.item_id} item={opened} onSaved={refresh} supervisor={supervisor} onPhotoAdded={items.reload} />
+          <ItemDetail key={opened.item_id} item={opened} onSaved={refresh} supervisor={supervisor} canProcessClaim={canProcessClaim} onPhotoAdded={items.reload} />
         </Modal>
       )}
       {labelFor && (
@@ -243,7 +244,7 @@ function NewItemForm({ rooms, onSaved }) {
   )
 }
 
-function ItemDetail({ item, onSaved, supervisor, onPhotoAdded }) {
+function ItemDetail({ item, onSaved, supervisor, canProcessClaim, onPhotoAdded }) {
   const [form, setForm] = useState({ description: item.item_description, storageLocation: item.storage_location })
   const [claim, setClaim] = useState({ claimantName: '', claimantContact: '', idType: '', idNumber: '', idVerified: false, descriptionMatch: false })
   const [disposeReason, setDisposeReason] = useState('')
@@ -335,7 +336,7 @@ function ItemDetail({ item, onSaved, supervisor, onPhotoAdded }) {
         </Field>
       </div>
 
-      {stored && (
+      {stored && canProcessClaim && (
         <>
           <h3 className="hk-subhead">Claimant verification</h3>
           <div className="hk-form">
@@ -372,16 +373,23 @@ function ItemDetail({ item, onSaved, supervisor, onPhotoAdded }) {
           )}
         </>
       )}
+      {stored && !canProcessClaim && (
+        <Notice tone="amber" title="View only">Only supervisors and inspectors can process claims and release items.</Notice>
+      )}
       {error && <Notice tone="red" title="Not saved">{error}</Notice>}
       {stored && (
         <div className="hk-actions">
           <button type="button" className="hk-btn hk-btn--secondary" disabled={busy} onClick={update}>Save item details</button>
-          <button type="button" className="hk-btn hk-btn--secondary" disabled={busy || !hasClaimant || verified} onClick={processClaim}>
-            Record rejected claim
-          </button>
-          <button type="button" className="hk-btn hk-btn--primary" disabled={busy || !releaseReady} onClick={processClaim}>
-            Release item
-          </button>
+          {canProcessClaim && (
+            <>
+              <button type="button" className="hk-btn hk-btn--secondary" disabled={busy || !hasClaimant || verified} onClick={processClaim}>
+                Record rejected claim
+              </button>
+              <button type="button" className="hk-btn hk-btn--primary" disabled={busy || !releaseReady} onClick={processClaim}>
+                Release item
+              </button>
+            </>
+          )}
         </div>
       )}
       {stored && supervisor && (
@@ -397,7 +405,45 @@ function ItemDetail({ item, onSaved, supervisor, onPhotoAdded }) {
           </div>
         </>
       )}
+      {canProcessClaim && <AuditTrail itemId={item.item_id} />}
     </Card>
+  )
+}
+
+const ACTION_LABEL = {
+  CREATED: 'Recorded item',
+  UPDATED: 'Updated details',
+  PHOTO_ADDED: 'Added photo',
+  PHOTO_REMOVED: 'Removed photo',
+  LABEL_PRINTED: 'Printed label',
+  CLAIM_PROCESSED: 'Processed claim',
+  DISPOSED: 'Disposed item',
+  VIEWED: 'Viewed record',
+}
+
+function AuditTrail({ itemId }) {
+  const { data, loading } = useLoad(() => api.itemAudit(itemId), [itemId])
+  const rows = data?.audit || []
+  if (loading && !data) return null
+  return (
+    <>
+      <h3 className="hk-subhead">Audit trail</h3>
+      {rows.length ? (
+        <DataTable
+          rowKey="audit_id"
+          rows={rows}
+          empty="No activity recorded."
+          columns={[
+            { key: 'when', title: 'Date / time', render: (a) => formatDateTime(a.acted_at) },
+            { key: 'action', title: 'Action', render: (a) => ACTION_LABEL[a.action] || label(a.action) },
+            { key: 'who', title: 'Staff', render: (a) => <span>{a.staff_name}<small className="hk-block">{label(a.position)}</small></span> },
+            { key: 'details', title: 'Details', render: (a) => a.details || '' },
+          ]}
+        />
+      ) : (
+        <p className="hk-muted">No audit records yet.</p>
+      )}
+    </>
   )
 }
 
@@ -500,6 +546,8 @@ function ItemLabel({ item }) {
   }, [item])
 
   function print() {
+    // Log the label print for the audit trail (best effort).
+    api.logLabelPrint(item.item_id).catch(() => {})
     document.body.classList.add('hk-printing-label')
     const done = () => {
       document.body.classList.remove('hk-printing-label')

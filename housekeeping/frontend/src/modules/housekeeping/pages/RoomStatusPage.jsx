@@ -1,33 +1,82 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../api.js'
-import { Badge, Card, DataTable, Field, LoadState, Notice, SearchBox, StatusChips } from '../components/ui.jsx'
+import ExportMenu from '../components/ExportMenu.jsx'
+import { Badge, Card, DataTable, Field, LoadState, Notice, Pager, SearchBox, StatusChips } from '../components/ui.jsx'
 import { formatDateTime, label, ROOM_STATUSES } from '../format.js'
 import { useLoad } from '../useLoad.js'
 
 // Occupancy column from the Figma design, derived from the room status.
 const OCCUPANCY = { OCCUPIED: 'Occupied', RESERVED: 'Reserved', OUT_OF_ORDER: 'Blocked' }
 
+const REPORT_COLUMNS = [
+  { title: 'Room', value: (r) => r.room_number },
+  { title: 'Type', value: (r) => r.room_type },
+  { title: 'Floor', value: (r) => r.floor_number },
+  { title: 'Occupancy', value: (r) => OCCUPANCY[r.room_status] || 'Vacant' },
+  { title: 'HK status', value: (r) => label(r.room_status) },
+  { title: 'Housekeeper', value: (r) => r.housekeeper?.trim() || (r.task_id ? 'Unassigned' : '-') },
+  { title: 'Cleaning task', value: (r) => (r.task_status ? label(r.task_status) : '-') },
+]
+
+// Waits until typing stops before searching, so each key press is not a request.
+function useDebounced(value, ms = 300) {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms)
+    return () => clearTimeout(t)
+  }, [value, ms])
+  return debounced
+}
+
 // HK-001 View Room Status, HK-002 Select Room, HK-003 Update Room Status.
+// The room list is paged on the server: only one page of rooms is loaded at a time.
 export default function RoomStatusPage({ search: topSearch }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('')
   const [floor, setFloor] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [selectedId, setSelectedId] = useState(null)
-  const rooms = useLoad(() => api.rooms(filter ? `?status=${filter}` : ''), [filter])
+  const query = useDebounced((search || topSearch).trim())
 
-  const query = (search || topSearch).toLowerCase()
-  const floors = [...new Set((rooms.data?.rooms || []).map((r) => r.floor_number))].sort()
-  const list = (rooms.data?.rooms || []).filter(
-    (r) =>
-      (!floor || String(r.floor_number) === floor) &&
-      (!query || `${r.room_number} ${r.room_type} ${r.housekeeper || ''}`.toLowerCase().includes(query))
-  )
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  if (filter) params.set('status', filter)
+  if (floor) params.set('floor', floor)
+  if (query) params.set('search', query)
+  const qs = `?${params}`
+  const rooms = useLoad(() => api.rooms(qs), [qs])
+
+  // A new search goes back to the first page.
+  const [lastQuery, setLastQuery] = useState(query)
+  if (query !== lastQuery) {
+    setLastQuery(query)
+    setPage(1)
+  }
+
+  const floors = rooms.data?.floors || []
+  const list = rooms.data?.rooms || []
+  const paging = rooms.data?.paging
   const summary = rooms.data?.summary
   const activeId = selectedId ?? list[0]?.room_id
 
   function pick(value) {
     setFilter(value)
+    setPage(1)
     setSelectedId(null)
+  }
+
+  function goTo(n) {
+    setPage(n)
+    setSelectedId(null)
+  }
+
+  // The download covers every room that matches the filters, not just this page.
+  async function allMatching() {
+    const all = new URLSearchParams(params)
+    all.delete('page')
+    all.delete('pageSize')
+    const res = await api.rooms(all.size ? `?${all}` : '')
+    return res.rooms
   }
 
   return (
@@ -42,11 +91,12 @@ export default function RoomStatusPage({ search: topSearch }) {
       <div className="hk-grid">
         <Card
           title="Room overview"
-          subtitle={summary ? `${list.length} of ${Object.values(summary).reduce((x, y) => x + y, 0)} rooms shown · ${summary.DIRTY} dirty · ${summary.OUT_OF_ORDER} out of order` : ''}
+          subtitle={summary && paging ? `${paging.total} of ${Object.values(summary).reduce((x, y) => x + y, 0)} rooms match · ${summary.DIRTY} dirty · ${summary.OUT_OF_ORDER} out of order` : ''}
+          actions={<ExportMenu title="Room Status Report" fileName="room-status" columns={REPORT_COLUMNS} rows={list} getRows={allMatching} label="Download" />}
         >
           <div className="hk-toolbar">
-            <SearchBox value={search} onChange={setSearch} placeholder="Search room number" />
-            <select value={floor} onChange={(e) => setFloor(e.target.value)} aria-label="Floor">
+            <SearchBox value={search} onChange={setSearch} placeholder="Search room, type or housekeeper" />
+            <select value={floor} onChange={(e) => { setFloor(e.target.value); goTo(1) }} aria-label="Floor">
               <option value="">All floors</option>
               {floors.map((f) => <option key={f} value={f}>Floor {f}</option>)}
             </select>
@@ -65,6 +115,16 @@ export default function RoomStatusPage({ search: topSearch }) {
               { key: 'task', title: 'Cleaning task', render: (r) => (r.task_status ? label(r.task_status) : '-') },
             ]}
           />
+          {paging && (
+            <Pager
+              page={paging.page}
+              pageCount={paging.pageCount}
+              total={paging.total}
+              pageSize={paging.pageSize}
+              onPage={goTo}
+              onPageSize={(n) => { setPageSize(n); goTo(1) }}
+            />
+          )}
           <p className="hk-footnote">Front Office releases INSPECTED rooms as AVAILABLE.</p>
         </Card>
         {activeId ? (

@@ -6,6 +6,12 @@ const { requirePosition } = require('../../middleware/auth');
 
 const router = express.Router();
 
+// ---- Audit helper: logs every action on a lost-and-found item. ----------
+async function audit(client, itemId, userId, action, details) {
+  const q = `INSERT INTO hk_lost_found_audit (item_id, user_id, action, details) VALUES ($1, $2, $3, $4)`;
+  await (client || db).query(q, [itemId, userId, action, (details || '').slice(0, 255) || null]);
+}
+
 const ITEM_STATUSES = ['STORED', 'RELEASED', 'DISPOSED'];
 const ID_TYPES = ['PASSPORT', 'DRIVERS_LICENSE', 'NATIONAL_ID', 'UMID', 'SSS', 'PHILHEALTH', 'POSTAL_ID', 'VOTERS_ID', 'COMPANY_ID', 'OTHER'];
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -78,6 +84,7 @@ router.post('/', async (req, res) => {
       [itemId, v.optionalId(body.roomId, 'room'), req.user.userId, body.description, body.foundLocation,
         `LF-${String(itemId).padStart(4, '0')}`, body.storageLocation, foundAt]
     );
+    await audit(client, itemId, req.user.userId, 'CREATED', `Recorded: ${body.description}`);
     return rows[0];
   });
   res.status(201).json({ item });
@@ -93,6 +100,18 @@ router.patch('/:id', async (req, res) => {
   }
   v.maxLengths(body, ITEM_TEXT);
   v.notBlank(body, { description: 'Description', storageLocation: 'Storage location' });
+
+  // Only the person who found the item or a supervisor can edit it.
+  const { rows: existing } = await db.query(
+    'SELECT found_by, item_status FROM hk_lost_found_items WHERE item_id = $1', [itemId]
+  );
+  if (!existing[0] || existing[0].item_status !== 'STORED') {
+    throw new HttpError(409, 'Item not found, or it was already released or disposed.');
+  }
+  if (existing[0].found_by !== req.user.userId && req.user.position !== 'SUPERVISOR' && req.user.role !== 'ADMIN') {
+    throw new HttpError(403, 'Only the staff member who found this item or a supervisor can edit it.');
+  }
+
   const { rows } = await db.query(
     `UPDATE hk_lost_found_items
         SET item_description = COALESCE($1, item_description),
@@ -103,6 +122,8 @@ router.patch('/:id', async (req, res) => {
   if (!rows[0]) {
     throw new HttpError(409, 'Item not found, or it was already released or disposed.');
   }
+  const changes = [body.description && 'description', body.storageLocation && 'storage location'].filter(Boolean).join(', ');
+  await audit(null, itemId, req.user.userId, 'UPDATED', `Changed ${changes}`);
   res.json({ item: rows[0] });
 });
 
@@ -125,6 +146,7 @@ router.post('/:id/dispose', requirePosition('SUPERVISOR'), async (req, res) => {
   if (!rows[0]) {
     throw new HttpError(409, 'Item not found, or it was already released or disposed.');
   }
+  await audit(null, itemId, req.user.userId, 'DISPOSED', reason);
   res.json({ item: rows[0] });
 });
 
@@ -163,6 +185,7 @@ router.post('/:id/photos', async (req, res) => {
        VALUES ($1, $2, $3, $4) RETURNING photo_id, item_id, content_type, uploaded_at`,
       [itemId, match[1], data, req.user.userId]
     );
+    await audit(client, itemId, req.user.userId, 'PHOTO_ADDED', `Photo ${rows[0].photo_id}`);
     return rows[0];
   });
   res.status(201).json({ photo });
@@ -195,12 +218,13 @@ router.delete('/:id/photos/:photoId', async (req, res) => {
   if (!rowCount) {
     throw new HttpError(404, 'Photo not found, or the item is no longer stored.');
   }
+  await audit(null, itemId, req.user.userId, 'PHOTO_REMOVED', `Photo ${photoId}`);
   res.status(204).end();
 });
 
-// HK-012: process a claim. The item is released only when the claimant's ID
-// is verified and the description matches; otherwise the claim is rejected.
-router.post('/:id/claims', async (req, res) => {
+// HK-012: process a claim. Only supervisors and inspectors can release items
+// to claimants (housekeepers record found items but do not handle releases).
+router.post('/:id/claims', requirePosition('SUPERVISOR', 'INSPECTOR'), async (req, res) => {
   const itemId = v.id(req.params.id, 'item id');
   const body = req.body;
   v.required(body, ['claimantName', 'claimantContact']);
@@ -240,9 +264,37 @@ router.post('/:id/claims', async (req, res) => {
       );
       item = rows[0];
     }
+    await audit(client, itemId, req.user.userId, 'CLAIM_PROCESSED',
+      `${valid ? 'Released' : 'Rejected'} — claimant: ${body.claimantName}`);
     return { claim: claims[0], item, released: valid };
   });
   res.status(201).json(result);
+});
+
+// Audit trail for one item — supervisors and inspectors only.
+router.get('/:id/audit', requirePosition('SUPERVISOR', 'INSPECTOR'), async (req, res) => {
+  const itemId = v.id(req.params.id, 'item id');
+  const { rows } = await db.query(
+    `SELECT a.audit_id, a.action, a.details, a.acted_at,
+            CONCAT(u.first_name, ' ', u.last_name) AS staff_name, u.position
+       FROM hk_lost_found_audit a JOIN users u ON u.user_id = a.user_id
+      WHERE a.item_id = $1 ORDER BY a.acted_at DESC`,
+    [itemId]
+  );
+  res.json({ audit: rows });
+});
+
+// Log that a QR label was printed — any staff can print, but we record it.
+router.post('/:id/label-printed', async (req, res) => {
+  const itemId = v.id(req.params.id, 'item id');
+  const { rows } = await db.query(
+    'SELECT item_id FROM hk_lost_found_items WHERE item_id = $1', [itemId]
+  );
+  if (!rows[0]) {
+    throw new HttpError(404, 'Item not found.');
+  }
+  await audit(null, itemId, req.user.userId, 'LABEL_PRINTED', 'QR label printed');
+  res.json({ logged: true });
 });
 
 module.exports = router;

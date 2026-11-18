@@ -103,6 +103,41 @@ export function DataTable({ columns, rows, rowKey, selectedKey, onSelect, empty 
   )
 }
 
+// Page controls under a table: "Showing 11-20 of 34", page size, and
+// First / Previous / page numbers / Next / Last buttons.
+export function Pager({ page, pageCount, total, pageSize, onPage, onPageSize, sizes = [10, 20, 50] }) {
+  if (!total) return null
+  const first = (page - 1) * pageSize + 1
+  const last = Math.min(page * pageSize, total)
+  // Up to five page numbers around the current page.
+  const start = Math.max(1, Math.min(page - 2, pageCount - 4))
+  const numbers = Array.from({ length: Math.min(5, pageCount) }, (_, i) => start + i)
+  return (
+    <nav className="hk-pager" aria-label="Pages">
+      <span className="hk-pager__info">Showing {first}-{last} of {total}</span>
+      {onPageSize && (
+        <label className="hk-pager__size">
+          Rows per page
+          <select value={pageSize} onChange={(e) => onPageSize(Number(e.target.value))}>
+            {sizes.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      )}
+      <div className="hk-pager__buttons">
+        <button type="button" onClick={() => onPage(1)} disabled={page <= 1} aria-label="First page">«</button>
+        <button type="button" onClick={() => onPage(page - 1)} disabled={page <= 1} aria-label="Previous page">‹</button>
+        {numbers.map((n) => (
+          <button key={n} type="button" className={n === page ? 'is-active' : ''} aria-current={n === page ? 'page' : undefined} onClick={() => onPage(n)}>
+            {n}
+          </button>
+        ))}
+        <button type="button" onClick={() => onPage(page + 1)} disabled={page >= pageCount} aria-label="Next page">›</button>
+        <button type="button" onClick={() => onPage(pageCount)} disabled={page >= pageCount} aria-label="Last page">»</button>
+      </div>
+    </nav>
+  )
+}
+
 export function LoadState({ loading, error }) {
   if (error) return <Notice tone="red" title="Could not load data">{error.message}</Notice>
   if (loading) return <p className="hk-muted">Loading...</p>

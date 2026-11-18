@@ -187,6 +187,7 @@ test('room status: only allowed manual changes', async () => {
 
 test('lost and found: invalid claim is rejected, valid claim releases', async () => {
   const liza = await login('hk.liza');
+  const sup = await login('hk.supervisor');
   const created = await api('POST', '/housekeeping/lost-found', {
     token: liza.token,
     body: { roomId: await roomId('101'), description: 'Red scarf', foundLocation: 'Closet', storageLocation: 'Cabinet A' },
@@ -195,15 +196,22 @@ test('lost and found: invalid claim is rejected, valid claim releases', async ()
   assert.match(created.body.item.storage_label, /^LF-\d{4}$/);
   const itemId = created.body.item.item_id;
 
-  const rejected = await api('POST', `/housekeeping/lost-found/${itemId}/claims`, {
+  // A housekeeper cannot process claims — only supervisors and inspectors can.
+  const denied = await api('POST', `/housekeeping/lost-found/${itemId}/claims`, {
     token: liza.token,
+    body: { claimantName: 'Someone', claimantContact: '0917', idVerified: false, descriptionMatch: false },
+  });
+  assert.equal(denied.status, 403);
+
+  const rejected = await api('POST', `/housekeeping/lost-found/${itemId}/claims`, {
+    token: sup.token,
     body: { claimantName: 'Someone', claimantContact: '0917', idVerified: true, idType: 'NATIONAL_ID', idNumber: '1234-5678-9012', descriptionMatch: false },
   });
   assert.equal(rejected.body.released, false);
   assert.equal(rejected.body.item.item_status, 'STORED');
 
   const valid = await api('POST', `/housekeeping/lost-found/${itemId}/claims`, {
-    token: liza.token,
+    token: sup.token,
     body: { claimantName: 'Grace Lim', claimantContact: '0918', idVerified: true, idType: 'PASSPORT', idNumber: 'P1234567A', descriptionMatch: true },
   });
   assert.equal(valid.body.released, true);
@@ -219,7 +227,7 @@ test('lost and found: invalid claim is rejected, valid claim releases', async ()
   assert.equal(storedItems.body.items.some((item) => item.item_id === itemId), false);
 
   const again = await api('POST', `/housekeeping/lost-found/${itemId}/claims`, {
-    token: liza.token,
+    token: sup.token,
     body: { claimantName: 'X', claimantContact: 'Y', idVerified: true, idType: 'OTHER', idNumber: '9999', descriptionMatch: true },
   });
   assert.equal(again.status, 409);
@@ -637,8 +645,8 @@ test('lost and found: only supervisors dispose, with a reason; photos', async ()
   assert.equal(disposed.body.item.item_status, 'DISPOSED');
   assert.equal(disposed.body.item.disposed_by, sup.user.userId);
   assert.equal(disposed.body.item.disposal_reason, 'Unclaimed after 90 days, donated');
-  // A claim must record which ID was checked.
-  const noId = await api('POST', `/housekeeping/lost-found/1/claims`, { token: liza.token, body: { claimantName: 'A', claimantContact: 'B', idVerified: true, descriptionMatch: true } });
+  // A claim must record which ID was checked (supervisor can process claims).
+  const noId = await api('POST', `/housekeeping/lost-found/1/claims`, { token: sup.token, body: { claimantName: 'A', claimantContact: 'B', idVerified: true, descriptionMatch: true } });
   assert.equal(noId.status, 400);
 });
 

@@ -309,6 +309,57 @@
   min-width: 130px;
 }
 
+/* Page controls under a table */
+.hk-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--hk-muted);
+}
+
+.hk-pager__size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hk-pager__size select {
+  padding: 3px 6px;
+}
+
+.hk-pager__buttons {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.hk-pager__buttons button {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--hk-line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--hk-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.hk-pager__buttons button.is-active {
+  background: var(--hk-navy);
+  border-color: var(--hk-navy);
+  color: #fff;
+  font-weight: 700;
+}
+
+.hk-pager__buttons button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .hk-search {
   display: flex;
   align-items: center;
@@ -406,6 +457,18 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 12px;
+}
+
+/* Short forms on one line, e.g. the work report period */
+.hk-form--inline {
+  grid-template-columns: repeat(auto-fit, minmax(160px, max-content));
+  align-items: end;
+}
+
+.hk-form__end {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
 }
 
 .hk-field {

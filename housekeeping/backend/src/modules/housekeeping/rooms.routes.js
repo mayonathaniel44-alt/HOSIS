@@ -6,9 +6,16 @@ const { ROOM_STATUSES, MANUAL_TRANSITIONS, changeRoomStatus } = require('./roomS
 
 const router = express.Router();
 
+// Room Status paging: rooms per page by default, and the most a caller may ask for.
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 50;
+
 // HK-001: view room status, with counts for the summary cards.
+// Paging: ?page=1&pageSize=10 returns one page of rooms plus the total, so the
+// Room Status page never loads every room at once. Without ?page the whole
+// list comes back (the room dropdowns on other pages need all rooms).
 router.get('/', async (req, res) => {
-  const { status, search } = req.query;
+  const { status, search, floor } = req.query;
   v.oneOf(status, ROOM_STATUSES, 'status');
   const params = [];
   const where = [];
@@ -18,20 +25,43 @@ router.get('/', async (req, res) => {
   }
   if (search) {
     params.push(`%${search}%`);
-    where.push(`(r.room_number ILIKE $${params.length} OR r.room_type ILIKE $${params.length})`);
+    where.push(`(r.room_number ILIKE $${params.length} OR r.room_type ILIKE $${params.length}
+                 OR CONCAT(u.first_name, ' ', u.last_name) ILIKE $${params.length})`);
   }
-  const { rows: rooms } = await db.query(
-    `SELECT r.*, t.task_id, t.task_status, t.priority AS task_priority,
-            CONCAT(u.first_name, ' ', u.last_name) AS housekeeper
-       FROM rooms r
+  if (floor !== undefined && floor !== '') {
+    params.push(v.int(floor, 'floor', { min: 0, max: 500 }));
+    where.push(`r.floor_number = $${params.length}`);
+  }
+  const paged = req.query.page !== undefined;
+  let page = 1;
+  let pageSize = 0;
+  if (paged) {
+    page = v.int(req.query.page, 'page', { min: 1, max: 100000 });
+    pageSize = req.query.pageSize === undefined
+      ? DEFAULT_PAGE_SIZE
+      : v.int(req.query.pageSize, 'page size', { min: 1, max: MAX_PAGE_SIZE });
+  }
+  const from = `FROM rooms r
        LEFT JOIN LATERAL (
          SELECT * FROM hk_cleaning_tasks ct
           WHERE ct.room_id = r.room_id AND ct.task_status <> 'INSPECTED'
           ORDER BY ct.created_at DESC LIMIT 1
        ) t ON TRUE
        LEFT JOIN users u ON u.user_id = t.staff_id
-      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-      ORDER BY r.room_number`,
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}`;
+  const { rows: totalRows } = await db.query(`SELECT COUNT(*)::int AS total ${from}`, params);
+  const total = totalRows[0].total;
+  // A page past the end (e.g. after a filter shrinks the list) shows the last page.
+  const pageCount = paged ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+  page = Math.min(page, pageCount);
+  if (paged) {
+    params.push(pageSize, (page - 1) * pageSize);
+  }
+  const { rows: rooms } = await db.query(
+    `SELECT r.*, t.task_id, t.task_status, t.priority AS task_priority,
+            CONCAT(u.first_name, ' ', u.last_name) AS housekeeper
+       ${from}
+      ORDER BY r.room_number${paged ? ` LIMIT $${params.length - 1} OFFSET $${params.length}` : ''}`,
     params
   );
   const { rows: counts } = await db.query(
@@ -39,7 +69,13 @@ router.get('/', async (req, res) => {
   );
   const summary = Object.fromEntries(ROOM_STATUSES.map((s) => [s, 0]));
   counts.forEach((c) => (summary[c.room_status] = c.count));
-  res.json({ rooms, summary });
+  const { rows: floors } = await db.query('SELECT DISTINCT floor_number FROM rooms ORDER BY floor_number');
+  res.json({
+    rooms,
+    summary,
+    floors: floors.map((f) => f.floor_number),
+    paging: { page, pageSize: paged ? pageSize : total, total, pageCount },
+  });
 });
 
 // HK-002: select a room to see its details and status history.
