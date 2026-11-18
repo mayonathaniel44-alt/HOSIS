@@ -152,34 +152,6 @@ function NavIcon({ name, size = 18 }) {
   }
 }
 
-function FinanceSubnav({ activeTab, onSelectTab }) {
-  const items = [
-    { id: 'overview', label: '← Overview' },
-    { id: 'invoices', label: 'Invoices' },
-    { id: 'payments', label: 'Payments' },
-    { id: 'expenses', label: 'Expenses' },
-    { id: 'revenue', label: 'Revenue' },
-    { id: 'payroll', label: 'Payroll' },
-    { id: 'reports', label: 'Reports' },
-    { id: 'history', label: 'History' },
-  ]
-
-  return (
-    <nav className="finance-subnav" aria-label="Finance Subsystems">
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          className={`finance-subnav-btn ${activeTab === item.id ? 'active' : ''}`}
-          onClick={() => onSelectTab(item.id)}
-        >
-          {item.label}
-        </button>
-      ))}
-    </nav>
-  )
-}
-
 export default function FinanceDashboard({ onOpenFrontOffice, onOpenAdmin, onSignOut }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [toastMessage, setToastMessage] = useState('')
@@ -204,7 +176,16 @@ export default function FinanceDashboard({ onOpenFrontOffice, onOpenAdmin, onSig
     }, 3500)
   }
 
-  const subnavBar = <FinanceSubnav activeTab={activeTab} onSelectTab={setActiveTab} />
+  const subNavItems = [
+    { id: 'overview', label: '← Overview' },
+    { id: 'invoices', label: 'Invoices' },
+    { id: 'payments', label: 'Payments' },
+    { id: 'expenses', label: 'Expenses' },
+    { id: 'revenue', label: 'Revenue' },
+    { id: 'payroll', label: 'Payroll' },
+    { id: 'reports', label: 'Reports' },
+    { id: 'history', label: 'History' },
+  ]
 
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', onClick: onOpenFrontOffice },
@@ -289,6 +270,20 @@ export default function FinanceDashboard({ onOpenFrontOffice, onOpenAdmin, onSig
 
       {/* Main Panel */}
       <main className="finance-main">
+        {/* Top Sub-Nav Pills */}
+        <nav className="finance-subnav" aria-label="Finance Subsystems">
+          {subNavItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`finance-subnav-btn ${activeTab === item.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
         {/* View Switcher */}
         {activeTab === 'overview' && (
           <OverviewView
@@ -301,20 +296,19 @@ export default function FinanceDashboard({ onOpenFrontOffice, onOpenAdmin, onSig
         )}
 
         {activeTab === 'invoices' && (
-          <InvoicesView subnav={subnavBar} showToast={showToast} />
+          <InvoicesView showToast={showToast} />
         )}
 
         {activeTab === 'payments' && (
-          <PaymentsView subnav={subnavBar} showToast={showToast} />
+          <PaymentsView showToast={showToast} />
         )}
 
         {activeTab === 'expenses' && (
-          <ExpensesView subnav={subnavBar} showToast={showToast} />
+          <ExpensesView showToast={showToast} />
         )}
 
         {activeTab === 'revenue' && (
           <RevenueView
-            subnav={subnavBar}
             onOpenReport={() => setActiveTab('reports')}
             onNavigate={(target) => setActiveTab(target)}
             showToast={showToast}
@@ -322,16 +316,15 @@ export default function FinanceDashboard({ onOpenFrontOffice, onOpenAdmin, onSig
         )}
 
         {activeTab === 'payroll' && (
-          <PayrollView subnav={subnavBar} showToast={showToast} />
+          <PayrollView showToast={showToast} />
         )}
 
         {activeTab === 'reports' && (
-          <ReportsView subnav={subnavBar} showToast={showToast} />
+          <ReportsView showToast={showToast} />
         )}
 
         {activeTab === 'history' && (
           <HistoryView
-            subnav={subnavBar}
             onNavigate={(target) => setActiveTab(target)}
             showToast={showToast}
           />

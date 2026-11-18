@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { revenueReconciliation, dailyRevenueBars } from '../financeData'
 
-export default function RevenueView({ subnav, onOpenReport, onNavigate, showToast }) {
+export default function RevenueView({ onOpenReport, onNavigate, showToast }) {
   const [period, setPeriod] = useState('01-15 Oct 2026')
   const [basis, setBasis] = useState('Issued invoices · Excluding VAT')
 
@@ -30,7 +30,6 @@ export default function RevenueView({ subnav, onOpenReport, onNavigate, showToas
           <span>Generate report</span>
         </button>
       </header>
-      {subnav}
 
       {/* Filter / Parameter Bar */}
       <div className="fin-surface" style={{ padding: '12px 18px', marginBottom: '16px' }}>

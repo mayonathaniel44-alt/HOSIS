@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { auditEvents } from '../financeData'
 
-export default function HistoryView({ subnav, onNavigate, showToast }) {
+export default function HistoryView({ onNavigate, showToast }) {
   const [selectedTxn, setSelectedTxn] = useState(
     auditEvents.find((e) => e.id === 'TXN-261011') || auditEvents[8]
   )
@@ -41,7 +41,6 @@ export default function HistoryView({ subnav, onNavigate, showToast }) {
           <span>Export audit log</span>
         </button>
       </header>
-      {subnav}
 
       {/* KPI Cards */}
       <section className="fin-kpi-grid fin-kpi-grid-3">

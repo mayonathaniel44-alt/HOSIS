@@ -129,11 +129,11 @@ SELECT id, 'Airport Transfer · FO-1001', 1, 500.00, 500.00, 'FO-1001' FROM fina
 ON CONFLICT DO NOTHING;
 
 INSERT INTO finance_payments (receipt_code, invoice_id, amount, payment_method, reference, notes, status, paid_at)
-SELECT 'PAY-261001', id, 10000.00, 'BANK_TRANSFER', 'BDO-1012-001', 'Partial deposit via bank transfer', 'POSTED', '2026-10-12 10:15:00+08' FROM finance_invoices WHERE invoice_code = 'INV-261001'
+SELECT 'PAY-261001', id, 10000.00, 'BANK_TRANSFER', 'BDO-1012-001', 'Partial deposit via bank transfer', 'POSTED', '2026-10-12 10:15:00+08'::TIMESTAMPTZ FROM finance_invoices WHERE invoice_code = 'INV-261001'
 UNION ALL
-SELECT 'PAY-261002', id, 12320.00, 'CARD', 'CRD-9921', 'Full checkout payment via Credit Card', 'POSTED', '2026-10-13 11:25:00+08' FROM finance_invoices WHERE invoice_code = 'INV-261002'
+SELECT 'PAY-261002', id, 12320.00, 'CARD', 'CRD-9921', 'Full checkout payment via Credit Card', 'POSTED', '2026-10-13 11:25:00+08'::TIMESTAMPTZ FROM finance_invoices WHERE invoice_code = 'INV-261002'
 UNION ALL
-SELECT 'PAY-261003', id, 8960.00, 'CASH', 'OR-261003', 'Official cash receipt at Front Desk', 'POSTED', '2026-10-14 15:40:00+08' FROM finance_invoices WHERE invoice_code = 'INV-261003'
+SELECT 'PAY-261003', id, 8960.00, 'CASH', 'OR-261003', 'Official cash receipt at Front Desk', 'POSTED', '2026-10-14 15:40:00+08'::TIMESTAMPTZ FROM finance_invoices WHERE invoice_code = 'INV-261003'
 ON CONFLICT (receipt_code) DO NOTHING;
 
 INSERT INTO finance_expenses (voucher_code, department, category, amount, status, approved_by, expense_date)
