@@ -38,8 +38,8 @@ function range(start, end) {
 
 // A staff member cannot be on two shifts at the same time. Shifts on the day
 // before are checked too, because a night shift can run into this day.
-async function assertNoOverlap({ staffId, shiftDate, startTime, endTime, ignoreId = null }) {
-  const { rows } = await db.query(
+async function assertNoOverlap({ staffId, shiftDate, startTime, endTime, ignoreId = null }, client = db) {
+  const { rows } = await client.query(
     `SELECT schedule_id, shift, TO_CHAR(shift_date, 'YYYY-MM-DD') AS shift_date,
             TO_CHAR(start_time, 'HH24:MI') AS start_time, TO_CHAR(end_time, 'HH24:MI') AS end_time,
             (shift_date - $2::date) AS day_offset
@@ -132,33 +132,39 @@ router.post('/', requirePosition('SUPERVISOR'), async (req, res) => {
   checkSchedule(body);
   assertNotPast(body.shiftDate);
   const staffId = v.id(body.staffId, 'staff');
-  const { rows: staff } = await db.query(
+  const schedule=await db.withTransaction(async(client)=>{
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`hk-schedule:${staffId}`]);
+  const { rows: staff } = await client.query(
     `SELECT user_id FROM users WHERE user_id = $1 AND role = 'HOUSEKEEPING' AND employment_status = 'ACTIVE'`,
     [staffId]
   );
   if (!staff[0]) {
     throw new HttpError(400, 'Schedules can only be created for active housekeeping staff.');
   }
-  await assertNoOverlap({ staffId, shiftDate: body.shiftDate, startTime: body.startTime, endTime: body.endTime });
-  const { rows } = await db.query(
+  await assertNoOverlap({ staffId, shiftDate: body.shiftDate, startTime: body.startTime, endTime: body.endTime },client);
+  const { rows } = await client.query(
     `INSERT INTO hk_schedules (staff_id, shift_date, shift, start_time, end_time, assigned_area, notes)
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
     [staffId, body.shiftDate, body.shift, body.startTime, body.endTime, body.assignedArea, body.notes || null]
   );
-  res.status(201).json({ schedule: rows[0] });
+  return rows[0];
+  });
+  res.status(201).json({ schedule });
 });
 
 // HK-009: update a schedule entry.
 router.patch('/:id', requirePosition('SUPERVISOR'), async (req, res) => {
   const scheduleId = v.id(req.params.id, 'schedule id');
-  const { rows: found } = await db.query(
-    `SELECT *, TO_CHAR(shift_date, 'YYYY-MM-DD') AS shift_date_text FROM hk_schedules WHERE schedule_id = $1`,
+  const schedule=await db.withTransaction(async(client)=>{
+  const { rows: found } = await client.query(
+    `SELECT *, TO_CHAR(shift_date, 'YYYY-MM-DD') AS shift_date_text FROM hk_schedules WHERE schedule_id = $1 FOR UPDATE`,
     [scheduleId]
   );
   const current = found[0];
   if (!current) {
     throw new HttpError(404, 'Schedule not found.');
   }
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`hk-schedule:${current.staff_id}`]);
   const merged = {
     shift: req.body.shift || current.shift,
     shiftDate: req.body.shiftDate,
@@ -177,8 +183,8 @@ router.patch('/:id', requirePosition('SUPERVISOR'), async (req, res) => {
     startTime: merged.startTime,
     endTime: merged.endTime,
     ignoreId: scheduleId,
-  });
-  const { rows } = await db.query(
+  },client);
+  const { rows } = await client.query(
     `UPDATE hk_schedules
         SET shift_date = COALESCE($1, shift_date), shift = $2, start_time = $3, end_time = $4,
             assigned_area = COALESCE($5, assigned_area), notes = $6
@@ -187,7 +193,9 @@ router.patch('/:id', requirePosition('SUPERVISOR'), async (req, res) => {
       req.body.assignedArea || null, req.body.notes !== undefined ? req.body.notes || null : current.notes,
       scheduleId]
   );
-  res.json({ schedule: rows[0] });
+  return rows[0];
+  });
+  res.json({ schedule });
 });
 
 router.delete('/:id', requirePosition('SUPERVISOR'), async (req, res) => {

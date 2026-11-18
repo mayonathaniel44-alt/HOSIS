@@ -20,7 +20,7 @@ async function authenticate(req, res, next) {
   }
   let payload;
   try {
-    payload = jwt.verify(token, process.env.JWT_SECRET);
+    payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
   } catch {
     return next(new HttpError(401, 'Your session has expired. Please log in again.'));
   }
@@ -36,7 +36,7 @@ async function authenticate(req, res, next) {
     if (!account || account.employment_status !== 'ACTIVE') {
       return next(new HttpError(401, 'This account is no longer active. Please contact your supervisor.'));
     }
-    if (payload.pwv && payload.pwv !== passwordVersion(account.password_hash)) {
+    if (typeof payload.pwv !== 'string' || payload.pwv !== passwordVersion(account.password_hash)) {
       return next(new HttpError(401, 'Your password was changed. Please log in again.'));
     }
     req.user = {

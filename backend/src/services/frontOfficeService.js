@@ -1,7 +1,7 @@
 const model = require('../models/frontOfficeModel')
 const money = require('../lib/money')
+const { appError } = require('../lib/errors')
 
-const roomStatuses = new Set(['CLEAN', 'INSPECTED', 'AVAILABLE'])
 const requestStatuses = new Set(['NEW', 'IN_PROGRESS', 'COMPLETED'])
 const paymentMethods = new Set(['CASH', 'CARD', 'BANK_TRANSFER', 'OTHER'])
 const invoiceStatuses = new Set(['VOID'])
@@ -35,6 +35,10 @@ async function dashboard() {
   return model.dashboard()
 }
 
+async function stayActivity(day) {
+  return model.stayActivity(day === undefined ? null : date(day, 'date'))
+}
+
 async function listGuests(search) {
   return model.listGuests(search)
 }
@@ -56,8 +60,8 @@ async function createReservation(body, userId) {
     const guest = body.guest || {}
     if (typeof guest.name === 'string') {
       const parts = guest.name.trim().split(/\s+/)
-      firstName = parts.shift()
-      lastName = parts.join(' ')
+      firstName = text(parts.shift(), 'guest.firstName', 100)
+      lastName = text(parts.join(' '), 'guest.lastName', 100)
     } else {
       firstName = text(guest.firstName, 'guest.firstName', 100)
       lastName = text(guest.lastName, 'guest.lastName', 100)
@@ -116,12 +120,11 @@ async function getRoom(id) {
   return model.getRoom(id)
 }
 
-async function updateRoom(id, body, userId) {
-  const status = text(body.status, 'status', 30).toUpperCase()
-  if (!roomStatuses.has(status)) {
-    throw badRequest('INVALID_ROOM_STATUS', `Front Office can set room status to: ${[...roomStatuses].join(', ')}.`)
+async function releaseRoom(id, body, userId) {
+  if (body.status !== 'AVAILABLE') {
+    throw appError(403, 'RELEASE_ONLY', 'Front Office can only release an inspected room.')
   }
-  return model.updateRoomStatus(id, status, userId)
+  return model.releaseRoom(id, userId)
 }
 
 async function listRequests(search) {
@@ -192,6 +195,10 @@ async function listPayments(invoiceId) {
 }
 
 async function createPayment(invoiceId, body, userId) {
+  const requestKey = body.requestKey
+  if (requestKey !== undefined && (typeof requestKey !== 'string' || !/^[a-zA-Z0-9_-]{16,64}$/.test(requestKey))) {
+    throw badRequest('INVALID_PAYMENT_REQUEST_KEY', 'The payment request key is invalid.')
+  }
   const amount = money(body.amount, 'amount')
   if (amount <= 0) throw badRequest('INVALID_AMOUNT', 'Payment amount must be greater than zero.')
   const paymentMethod = text(body.paymentMethod, 'paymentMethod', 30).toUpperCase()
@@ -200,6 +207,7 @@ async function createPayment(invoiceId, body, userId) {
     amount,
     paymentMethod,
     reference: optionalText(body.reference, 'reference', 120),
+    requestKey,
   }, userId)
 }
 
@@ -270,6 +278,7 @@ function badRequest(codeName, message) {
 
 module.exports = {
   dashboard,
+  stayActivity,
   listGuests,
   getGuest,
   createGuest,
@@ -284,7 +293,7 @@ module.exports = {
   checkOut,
   listRooms,
   getRoom,
-  updateRoom,
+  releaseRoom,
   listRequests,
   createRequest,
   updateRequest,

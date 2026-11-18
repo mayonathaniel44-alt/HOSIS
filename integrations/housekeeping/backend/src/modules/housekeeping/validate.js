@@ -3,6 +3,7 @@ const HttpError = require('../../utils/httpError');
 // Small helpers that check request input before it reaches the database (SYS-006).
 
 function required(body, fields) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400,'Request body must be a JSON object.');
   const missing = fields.filter(
     (f) => body[f] === undefined || body[f] === null || (typeof body[f] === 'string' && body[f].trim() === '')
   );
@@ -18,8 +19,9 @@ function oneOf(value, allowed, label) {
 }
 
 function id(value, label = 'id') {
+  const validType = typeof value === 'number' || (typeof value === 'string' && /^[1-9]\d*$/.test(value));
   const n = Number(value);
-  if (!Number.isInteger(n) || n <= 0) {
+  if (!validType || !Number.isSafeInteger(n) || n <= 0) {
     throw new HttpError(400, `Invalid ${label}`);
   }
   return n;
@@ -85,8 +87,9 @@ function optionalPastDateTime(value, label) {
 
 // Whole number in a range (stock quantities and similar).
 function int(value, label, { min = 0, max = 100000 } = {}) {
+  const validType = typeof value === 'number' || (typeof value === 'string' && /^-?\d+$/.test(value));
   const n = Number(value);
-  if (!Number.isInteger(n) || n < min || n > max) {
+  if (!validType || !Number.isSafeInteger(n) || n < min || n > max) {
     throw new HttpError(400, `${label} must be a whole number from ${min} to ${max}.`);
   }
   return n;

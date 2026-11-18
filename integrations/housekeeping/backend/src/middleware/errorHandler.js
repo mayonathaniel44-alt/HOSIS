@@ -22,7 +22,7 @@ function errorHandler(err, req, res, _next) {
       return res.status(400).json({ error: `The selected ${what} does not exist.` });
     }
     case '23514':
-      return res.status(400).json({ error: 'Invalid value: ' + (err.detail || err.message) });
+      return res.status(400).json({ error: 'The supplied value violates a data constraint.' });
     case '22001':
       return res.status(400).json({ error: 'One of the fields is too long.' });
     case '22003':

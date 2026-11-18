@@ -1,7 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { authApi, frontOfficeApi } from './services/api'
 import AdminDashboard from './AdminDashboard'
 import './App.css'
+import useHotelToday from './useHotelToday'
+import useVisibleRefresh from './useVisibleRefresh'
+import {loadWorkspace} from './services/workspace'
+import { housekeepingLandingHash, isHousekeepingHash } from './modules/housekeeping/tabs.js'
+import HousekeepingApp from '@housekeeping/HousekeepingApp.jsx'
+import { exportPdf } from '@housekeeping/exportReport.js'
+
+const ACCESS_LABELS = {
+  FRONT_OFFICE: 'Front Office',
+  HOUSEKEEPING: 'Housekeeping',
+  ENGINEERING: 'Engineering',
+  ADMIN: 'Administrator',
+}
+const EngineeringApp=lazy(()=>import('./EngineeringApp.jsx'))
 
 const statusLabels = {
   CONFIRMED: ['Arriving', 'blue'],
@@ -142,21 +156,57 @@ function Status({ children, tone = 'blue' }) {
   return <span className={`status status-${tone}`}><i />{children}</span>
 }
 
+function replaceWorkspaceHash(hash = '') {
+  const { pathname, search } = window.location
+  window.history.replaceState(window.history.state, '', pathname + search + hash)
+}
+
+class HousekeepingErrorBoundary extends Component {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children
+    return (
+      <main className="surface">
+        <h1>Housekeeping couldn’t load</h1>
+        <p role="alert">Reload the page to try again.</p>
+        <button type="button" className="button" onClick={() => window.location.reload()}>Reload page</button>
+        <button type="button" className="button button-secondary" onClick={this.props.onSignOut}>Sign out</button>
+      </main>
+    )
+  }
+}
+
 function App() {
   const [signedIn, setSignedIn] = useState(false)
   const [user, setUser] = useState(null)
   const [showAdminConsole, setShowAdminConsole] = useState(false)
+  const [workspaceHash, setWorkspaceHash] = useState(() => window.location.hash)
+  const showHousekeeping = user?.role === 'ADMIN' && isHousekeepingHash(workspaceHash)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [accessRole, setAccessRole] = useState('FRONT_OFFICE')
+  const [accessRole, setAccessRole] = useState(() =>
+    isHousekeepingHash(window.location.hash) ? 'HOUSEKEEPING' : 'FRONT_OFFICE',
+  )
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(false)
   const [activePage, setActivePage] = useState('Dashboard')
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
   const [selectedRecord, setSelectedRecord] = useState(null)
+  const [dialogError, setDialogError] = useState('')
+  const [savingDialog, setSavingDialog] = useState(false)
+  const dialogSubmitLock = useRef(false)
+  const paymentAttempt = useRef(null)
+  const workspaceRevision = useRef(0)
+  const fullRefreshes = useRef(0)
   const [toast, setToast] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
+  const [loginError,setLoginError]=useState('')
   const [loadingWorkspace, setLoadingWorkspace] = useState(false)
   const [dataError, setDataError] = useState('')
   const [dashboard, setDashboard] = useState(null)
@@ -166,7 +216,10 @@ function App() {
   const [roomList, setRoomList] = useState([])
   const [invoices, setInvoices] = useState([])
   const [arrivalFilter, setArrivalFilter] = useState('All arrivals')
-  const todayISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
+  const [guestTier, setGuestTier] = useState('')
+  const [notices,setNotices]=useState([])
+  const [noticeError,setNoticeError]=useState('')
+  const todayISO = useHotelToday(user?.timeZone)
 
   const notify = useCallback((message) => {
     setToast(message)
@@ -174,34 +227,75 @@ function App() {
   }, [])
 
   const refreshData = useCallback(async () => {
-    const [dashboardData, guestData, reservationData, roomData, requestData, invoiceData] = await Promise.all([
-      frontOfficeApi.dashboard(),
-      frontOfficeApi.guests(),
-      frontOfficeApi.reservations(),
-      frontOfficeApi.rooms(),
-      frontOfficeApi.requests(),
-      frontOfficeApi.invoices(),
-    ])
-    setDashboard(dashboardData)
-    setGuests(guestData.map(mapGuest))
-    setReservations(reservationData.map(mapReservation))
-    setRoomList(roomData.map(mapRoom))
-    setRequests(requestData.map(mapRequest))
-    setInvoices(invoiceData.map(mapInvoice))
+    const accessToken = authApi.getToken()
+    if (!accessToken) return
+    const revision = ++workspaceRevision.current
+    fullRefreshes.current += 1
+    let data
+    try {
+      data = await loadWorkspace()
+    } finally {
+      fullRefreshes.current -= 1
+    }
+    if (authApi.getToken() !== accessToken || revision !== workspaceRevision.current) return
+    setNotices(data.notices)
+    setNoticeError(data.noticeError || '')
+    setDashboard(data.dashboard)
+    setGuests(data.guests.map(mapGuest))
+    setReservations(data.reservations.map(mapReservation))
+    setRoomList(data.rooms.map(mapRoom))
+    setRequests(data.requests.map(mapRequest))
+    setInvoices(data.invoices.map(mapInvoice))
     setDataError('')
   }, [])
 
+  const refreshRoomOperations = useCallback(async (isActive) => {
+    const token = authApi.getToken()
+    if (!token || fullRefreshes.current) return
+    const revision = workspaceRevision.current
+    const [rooms, bookings, summary, guestRequests, notifications] = await Promise.all([
+      frontOfficeApi.rooms(),
+      frontOfficeApi.reservations(),
+      frontOfficeApi.dashboard(),
+      frontOfficeApi.requests(),
+      frontOfficeApi.notifications().catch(() => null),
+    ])
+    if (!isActive() || authApi.getToken() !== token || workspaceRevision.current !== revision) return
+    setRoomList(rooms.map(mapRoom))
+    setReservations(bookings.map(mapReservation))
+    setDashboard(summary)
+    setRequests(guestRequests.map(mapRequest))
+    if (notifications) {
+      setNotices(notifications.notifications || [])
+      setNoticeError('')
+    }
+  }, [])
+
+  useVisibleRefresh(
+    signedIn && ['ADMIN', 'FRONT_OFFICE'].includes(user?.role) && !user?.mustChangePassword &&
+      !showHousekeeping && !showAdminConsole && ['Dashboard', 'Rooms', 'Reservations', 'Guest requests'].includes(activePage),
+    refreshRoomOperations,
+  )
+
   useEffect(() => {
     let active = true
-    if (!authApi.getToken()) return () => { active = false }
+    const restoreToken=authApi.getToken()
+    if (!restoreToken) return () => { active = false }
     authApi.me().then((result) => {
-      if (!active) return
+      if (!active || authApi.getToken() !== restoreToken) return
+      const { role } = result.user
+      const hash = window.location.hash
+      const landingHash = housekeepingLandingHash(role)
+      if (role !== 'ADMIN' && landingHash && !isHousekeepingHash(hash)) {
+        replaceWorkspaceHash(landingHash)
+        setWorkspaceHash(landingHash)
+      }
       setUser(result.user)
       setSignedIn(true)
       setShowAdminConsole(result.user.role === 'ADMIN')
     }).catch((error) => {
-      if (!active) return
-      authApi.clearSession()
+      if (!active || authApi.getToken() !== restoreToken) return
+      if (error.status === 401) authApi.clearSession()
       setToast(error.message)
     })
     return () => { active = false }
@@ -210,24 +304,36 @@ function App() {
   useEffect(() => {
     function handleUnauthorized() {
       setSignedIn(false)
+      replaceWorkspaceHash()
+      setWorkspaceHash('')
+      setShowAdminConsole(false)
       setUser(null)
       setToast('Your session expired. Please sign in again.')
     }
+    function handleStorage(event) {
+      if (event.storageArea === window.localStorage && (event.key === null || event.key === 'hosis.accessToken')) window.location.reload()
+    }
     window.addEventListener('hosis:unauthorized', handleUnauthorized)
-    return () => window.removeEventListener('hosis:unauthorized', handleUnauthorized)
+    window.addEventListener('storage', handleStorage)
+    const handleHashChange = () => setWorkspaceHash(window.location.hash)
+    window.addEventListener('hashchange', handleHashChange)
+    return () => {
+      window.removeEventListener('hosis:unauthorized', handleUnauthorized)
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener('hashchange', handleHashChange)
+    }
   }, [])
 
   useEffect(() => {
-    if (!signedIn) return
+    if (!signedIn || user?.mustChangePassword || !['ADMIN','FRONT_OFFICE'].includes(user?.role) || showHousekeeping || showAdminConsole) return
     let active = true
-    setLoadingWorkspace(true)
-    refreshData().catch((error) => {
+    Promise.resolve().then(()=>{ if(active) setLoadingWorkspace(true); return refreshData() }).catch((error) => {
       if (active) setDataError(error.message)
     }).finally(() => {
       if (active) setLoadingWorkspace(false)
     })
     return () => { active = false }
-  }, [refreshData, signedIn])
+  }, [refreshData, signedIn, user?.role, user?.mustChangePassword, showHousekeeping, showAdminConsole])
 
   const filteredReservations = useMemo(() => reservations.filter((item) =>
     `${item.code} ${item.guest} ${item.room} ${item.type} ${item.statusLabel}`.toLowerCase().includes(search.toLowerCase())
@@ -235,8 +341,9 @@ function App() {
   ), [reservations, search, arrivalFilter, todayISO])
 
   const filteredGuests = useMemo(() => guests.filter((item) =>
+    (!guestTier || item.tier === guestTier) &&
     `${item.name} ${item.email || ''} ${item.phone || ''}`.toLowerCase().includes(search.toLowerCase())
-  ), [guests, search])
+  ), [guests, search, guestTier])
 
   const filteredRequests = useMemo(() => requests.filter((item) =>
     `${item.code} ${item.guest} ${item.room} ${item.request} ${item.statusLabel}`.toLowerCase().includes(search.toLowerCase())
@@ -253,20 +360,23 @@ function App() {
   async function signIn(event) {
     event.preventDefault()
     if (!username.trim() || !password) {
-      notify('Enter your username and password to continue.')
+      setLoginError('Enter your username and password to continue.')
       return
     }
+    setLoginError('')
     setLoginLoading(true)
     try {
-      const session = await authApi.login(username.trim(), password, accessRole)
+      const session = await authApi.login(username.trim(), password, accessRole, remember)
       authApi.saveSession(session, remember)
       setUser(session.user)
       setSignedIn(true)
+      replaceWorkspaceHash(session.user.role === 'ADMIN' ? '' : housekeepingLandingHash(session.user.role))
+      setWorkspaceHash(window.location.hash)
       setShowAdminConsole(session.user.role === 'ADMIN')
       setPassword('')
       setActivePage('Dashboard')
     } catch (error) {
-      notify(error.message)
+      setLoginError(error.message)
     } finally {
       setLoginLoading(false)
     }
@@ -300,8 +410,35 @@ function App() {
     await performAction(() => frontOfficeApi.checkOut(id), 'Guest checked out. The room was marked dirty for housekeeping.')
   }
 
-  async function updateRoomStatus(id, status) {
-    await performAction(() => frontOfficeApi.updateRoomStatus(id, status.toUpperCase().replaceAll(' ', '_')), 'Room status updated.')
+  async function downloadReport(title, fileName, headings, loadRows) {
+    try {
+      const rows = await loadRows()
+      await exportPdf({
+        title, fileName, department: 'Front Office',
+        columns: headings.map((heading, index) => ({ title: heading, value: (row) => row[index] })),
+        rows,
+      })
+    } catch (error) {
+      notify(error.message)
+    }
+  }
+
+  function downloadStayActivity() {
+    return downloadReport(`Check-ins and checkouts · ${todayISO}`, `stay-activity-${todayISO}`,
+      ['Hotel time', 'Action', 'Reservation record', 'Staff'], async () =>
+        (await frontOfficeApi.stayActivity(todayISO)).map((row) => [
+          row.time, row.action === 'RESERVATION_CHECKED_IN' ? 'Check-in' : 'Checkout', row.description, row.staff,
+        ]))
+  }
+
+  function downloadReceipt(invoice) {
+    return downloadReport(`Payment receipt · ${invoice.code}`, `receipt-${invoice.code}`,
+      ['Guest', 'Recorded payment', 'Method', 'Reference', 'Amount'], async () =>
+        (await frontOfficeApi.payments(invoice.id)).map((payment) => [
+          invoice.guest,
+          new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: user.timeZone }).format(new Date(payment.paidAt)),
+          payment.paymentMethod.replaceAll('_', ' '), payment.reference, formatMoney(payment.amount),
+        ]))
   }
 
   async function updateGuestRequest(id, status) {
@@ -321,6 +458,8 @@ function App() {
     } finally {
       authApi.clearSession()
       setSignedIn(false)
+      replaceWorkspaceHash()
+      setWorkspaceHash('')
       setShowAdminConsole(false)
       setUser(null)
       setDashboard(null)
@@ -333,8 +472,26 @@ function App() {
     }
   }
 
+  function openModal(nextModal, record = null) {
+    paymentAttempt.current = null
+    setSelectedRecord(record)
+    setDialogError('')
+    setModal(nextModal)
+  }
+
+  function closeModal() {
+    if (dialogSubmitLock.current) return
+    setModal(null)
+    setSelectedRecord(null)
+    setDialogError('')
+  }
+
   async function submitModal(event) {
     event.preventDefault()
+    if (dialogSubmitLock.current) return
+    dialogSubmitLock.current = true
+    setSavingDialog(true)
+    setDialogError('')
     const formData = new FormData(event.currentTarget)
     const name = formData.get('guest')?.toString().trim()
     let successMessage = ''
@@ -393,11 +550,18 @@ function App() {
         })
         successMessage = 'Reservation updated.'
       } else if (modal === 'payment') {
-        await frontOfficeApi.createPayment(selectedRecord.id, {
+        const payment = {
           amount: formData.get('amount'),
           paymentMethod: formData.get('paymentMethod'),
           reference: formData.get('reference') || undefined,
-        })
+        }
+        const draft = JSON.stringify(payment)
+        if (paymentAttempt.current?.draft !== draft) {
+          const bytes = window.crypto.getRandomValues(new Uint8Array(16))
+          const key = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+          paymentAttempt.current = { draft, key }
+        }
+        await frontOfficeApi.createPayment(selectedRecord.id, { ...payment, requestKey: paymentAttempt.current.key })
         successMessage = 'Payment recorded.'
       } else if (modal === 'invoice') {
         await frontOfficeApi.createInvoice({
@@ -411,8 +575,11 @@ function App() {
       setModal(null)
       setSelectedRecord(null)
     } catch (error) {
-      notify(error.message)
+      setDialogError(error.message)
       return
+    } finally {
+      dialogSubmitLock.current = false
+      setSavingDialog(false)
     }
     try {
       await refreshData()
@@ -430,10 +597,24 @@ function App() {
   const displayName = user?.username
     ? user.username.replace(/[._-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
     : 'Front Office'
-  const accessLabel = user?.role === 'ADMIN' ? 'Administrator' : 'Front Office'
+  const accessLabel = user?.role === 'ADMIN' ? 'Administrator' : user?.role === 'HOUSEKEEPING' ? 'Housekeeping' : 'Front Office'
 
+  function replaceSession(next) { authApi.saveSession(next, authApi.isRemembered()); setUser(next.user) }
+  if (signedIn && (['HOUSEKEEPING', 'HOUSEKEEPING_VIEWER'].includes(user?.role) || user?.mustChangePassword || showHousekeeping)) {
+    return <HousekeepingErrorBoundary onSignOut={signOut}>
+      {user?.role==='ADMIN' && <button className="button button-secondary" onClick={() => {
+        replaceWorkspaceHash()
+        setWorkspaceHash('')
+        setShowAdminConsole(true)
+      }}>Administrator console</button>}
+      <HousekeepingApp session={{token:authApi.getToken(),user}} onLogout={signOut} onSessionChange={replaceSession} />
+    </HousekeepingErrorBoundary>
+  }
+  if (signedIn && user?.role === 'ENGINEERING') return <Suspense fallback={<p>Loading repairs…</p>}><EngineeringApp onSignOut={signOut} /></Suspense>
   if (signedIn && user?.role === 'ADMIN' && showAdminConsole) {
-    return <AdminDashboard username={user.username} onOpenFrontOffice={() => setShowAdminConsole(false)} onSignOut={signOut} />
+    return <AdminDashboard username={user.username} onOpenFrontOffice={() => setShowAdminConsole(false)} onOpenHousekeeping={() => {
+      window.location.hash = housekeepingLandingHash('ADMIN')
+    }} onSignOut={signOut} />
   }
 
   if (!signedIn) {
@@ -460,22 +641,23 @@ function App() {
                 <span className="login-icon"><Icon name="lock" size={18} /></span>
                 <span className="eyebrow">TEAM PORTAL</span>
                 <h2>Welcome back</h2>
-                <p>{accessRole === 'ADMIN' ? 'Sign in with your administrator account.' : 'Sign in to your front office workspace.'}</p>
+                <p>Sign in to your {ACCESS_LABELS[accessRole]} workspace.</p>
               </div>
-              <form className="login-form" onSubmit={signIn}>
+              <form className="login-form" onSubmit={signIn} aria-busy={loginLoading}>
+                {loginError && <p className="login-error" role="alert">{loginError}</p>}
                 <label htmlFor="username">Username</label>
-                <div className="input-wrap"><Icon name="users" size={17} /><input id="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter your username" autoComplete="username" /></div>
+                <div className="input-wrap"><Icon name="users" size={17} /><input id="username" required disabled={loginLoading} value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter your username" autoComplete="username" /></div>
                 <label htmlFor="password">Password</label>
-                <div className="input-wrap"><Icon name="lock" size={17} /><input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" autoComplete="current-password" /><button className="input-action" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword((value) => !value)}><Icon name="eye" size={17} /></button></div>
+                <div className="input-wrap"><Icon name="lock" size={17} /><input id="password" required disabled={loginLoading} type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" autoComplete="current-password" /><button className="input-action" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword((value) => !value)}><Icon name="eye" size={17} /></button></div>
                 <label htmlFor="accessRole">Access type</label>
-                <div className="select-wrap"><select id="accessRole" value={accessRole} onChange={(event) => setAccessRole(event.target.value)}><option value="FRONT_OFFICE">Front Office</option><option value="ADMIN">Administrator</option></select><Icon name="chevron" size={15} /></div>
+                <div className="select-wrap"><select id="accessRole" disabled={loginLoading} value={accessRole} onChange={(event) => setAccessRole(event.target.value)}><option value="FRONT_OFFICE">Front Office</option><option value="HOUSEKEEPING">Housekeeping</option><option value="ENGINEERING">Engineering</option><option value="ADMIN">Administrator</option></select><Icon name="chevron" size={15} /></div>
                 <div className="form-options"><label className="remember-label"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Remember me</label><button type="button" className="text-button" onClick={() => notify('Please contact your system administrator to reset your password.')}>Forgot password?</button></div>
                 <button className="login-submit" type="submit" disabled={loginLoading}>{loginLoading ? 'Signing in…' : 'Sign in'} <Icon name="arrow" size={16} /></button>
               </form>
-              <div className="login-footer"><span>{accessRole === 'ADMIN' ? 'ADMINISTRATOR ACCESS' : 'FRONT OFFICE ACCESS'}</span><span><i /> SECURE API SIGN-IN</span></div>
+              <div className="login-footer"><span>{ACCESS_LABELS[accessRole].toUpperCase()} ACCESS</span><span><i /> SECURE API SIGN-IN</span></div>
             </section>
           </div>
-          <footer className="login-bottom"><span>© {today.getFullYear()} Grand Horizon Hotel</span><span>Secure staff access · {accessRole === 'ADMIN' ? 'Administrator' : 'Front Office'}</span></footer>
+          <footer className="login-bottom"><span>© {today.getFullYear()} Grand Horizon Hotel</span><span>Secure staff access · {ACCESS_LABELS[accessRole]}</span></footer>
         </div>
         {toast && <div className="toast"><Icon name="message" size={17} />{toast}</div>}
       </main>
@@ -487,7 +669,7 @@ function App() {
       <>
         <div className="page-heading">
           <div><span className="eyebrow">{dayCaption}</span><h1>{greeting}, {displayName.split(' ')[0]} <span className="wave">✦</span></h1><p>Here’s what’s happening at the front desk today.</p></div>
-          <button className="button button-primary" onClick={() => setModal('reservation')}><Icon name="plus" size={17} /> New reservation</button>
+          <button className="button button-primary" onClick={() => openModal('reservation')}><Icon name="plus" size={17} /> New reservation</button>
         </div>
         <div className="stats-grid">
           <StatCard label="Arrivals today" value={dashboard?.arrivals.total ?? '—'} note={`${dashboard?.arrivals.ready ?? 0} rooms ready now`} icon="arrow" color="gold" />
@@ -502,7 +684,7 @@ function App() {
             <div className="table-scroll"><table><thead><tr><th>GUEST</th><th>ROOM</th><th>STAY</th><th>STATUS</th></tr></thead><tbody>{reservations.filter((item) => item.status !== 'CANCELLED' && (item.checkIn === todayISO || item.checkOut === todayISO)).slice(0, 4).map((item) => <tr key={item.id}><td><div className="guest-cell"><Avatar initials={item.guestInitials} small /><span><strong>{item.guest}</strong><small>{item.code}</small></span></div></td><td>{item.room}</td><td>{item.dates}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td></tr>)}</tbody></table>{!loadingWorkspace && reservations.filter((item) => item.status !== 'CANCELLED' && (item.checkIn === todayISO || item.checkOut === todayISO)).length === 0 && <EmptyState text="No arrivals or departures are scheduled for today." />}</div>
           </section>
           <div className="dashboard-side">
-            <section className="surface quick-actions"><div className="section-heading"><div><h2>Quick actions</h2><p>Common front desk tasks</p></div></div><button onClick={() => setModal('reservation')}><span className="action-icon action-gold"><Icon name="calendar" size={17} /></span><span><strong>New reservation</strong><small>Book a stay for a guest</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => { setSearch(''); setActivePage('Reservations'); setArrivalFilter('Arriving') }}><span className="action-icon action-lilac"><Icon name="check" size={17} /></span><span><strong>Check in a guest</strong><small>Welcome your next arrival</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => setActivePage('Rooms')}><span className="action-icon action-blue"><Icon name="bed" size={17} /></span><span><strong>Room availability</strong><small>See rooms ready to assign</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => setModal('request')}><span className="action-icon action-peach"><Icon name="message" size={17} /></span><span><strong>Log a guest request</strong><small>Capture a guest’s needs</small></span><Icon name="arrow" size={16} className="action-arrow" /></button></section>
+            <section className="surface quick-actions"><div className="section-heading"><div><h2>Quick actions</h2><p>Common front desk tasks</p></div></div><button onClick={() => openModal('reservation')}><span className="action-icon action-gold"><Icon name="calendar" size={17} /></span><span><strong>New reservation</strong><small>Book a stay for a guest</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => { setSearch(''); setActivePage('Reservations'); setArrivalFilter('Arriving') }}><span className="action-icon action-lilac"><Icon name="check" size={17} /></span><span><strong>Check in a guest</strong><small>Welcome your next arrival</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => setActivePage('Rooms')}><span className="action-icon action-blue"><Icon name="bed" size={17} /></span><span><strong>Room availability</strong><small>See rooms ready to assign</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => openModal('request')}><span className="action-icon action-peach"><Icon name="message" size={17} /></span><span><strong>Log a guest request</strong><small>Capture a guest’s needs</small></span><Icon name="arrow" size={16} className="action-arrow" /></button></section>
             <section className="occupancy-card"><div className="occupancy-top"><div><span className="eyebrow">ROOM OCCUPANCY</span><h2>Looking good today</h2></div><span className="occupancy-sun"><Icon name="sun" size={20} /></span></div><div className="occupancy-meter"><span style={{ width: `${dashboard?.rooms.total ? Math.round((dashboard.rooms.occupied / dashboard.rooms.total) * 100) : 0}%` }} /></div><div className="occupancy-bottom"><strong>{dashboard?.rooms.occupied ?? 0} of {dashboard?.rooms.total ?? 0} rooms occupied</strong><span>{dashboard?.rooms.total ? Math.round((dashboard.rooms.occupied / dashboard.rooms.total) * 100) : 0}%</span></div><p>{dashboard?.rooms.available ?? 0} rooms available to welcome your guests.</p></section>
           </div>
         </div>
@@ -514,9 +696,9 @@ function App() {
   function renderReservations() {
     return (
       <>
-        <PageIntro eyebrow="GUEST STAYS" title="Reservations" description="Manage bookings, arrivals, and departures." action={<button className="button button-primary" onClick={() => setModal('reservation')}><Icon name="plus" size={17} /> New reservation</button>} />
-        <section className="surface data-surface"><div className="data-toolbar"><div className="filter-tabs">{['All arrivals', 'Arriving', 'Checked in'].map((filter) => <button key={filter} className={arrivalFilter === filter ? 'tab-active' : ''} onClick={() => setArrivalFilter(filter)}>{filter}</button>)}</div>        <div className="toolbar-note"><Icon name="calendar" size={16} /> Today, {dateLabel} <Icon name="chevron" size={14} /></div></div>
-          <div className="table-scroll"><table className="full-table"><thead><tr><th>GUEST</th><th>RESERVATION</th><th>ROOM</th><th>STAY DATES</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{filteredReservations.map((item) => <tr key={item.id}><td><div className="guest-cell"><Avatar initials={item.guestInitials} small /><span><strong>{item.guest}</strong><small>{item.code}</small></span></div></td><td>{item.type}</td><td>{item.room}</td><td>{item.dates}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.status === 'CONFIRMED' ? <><button className="small-action" onClick={() => checkIn(item.id)}>Check in</button><button className="small-action small-action-quiet" onClick={() => { setSelectedRecord(item); setModal('edit-reservation') }}>Edit</button><button className="small-action small-action-quiet" onClick={() => performAction(() => frontOfficeApi.cancelReservation(item.id), 'Reservation cancelled.')}>Cancel</button></> : item.status === 'CHECKED_IN' ? <button className="small-action small-action-quiet" onClick={() => checkOut(item.id)}>Check out</button> : <span>—</span>}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredReservations.length === 0 && <EmptyState text="No reservations match your search." />}</div>
+        <PageIntro eyebrow="GUEST STAYS" title="Reservations" description="Manage bookings, arrivals, and departures." action={<button className="button button-primary" onClick={() => openModal('reservation')}><Icon name="plus" size={17} /> New reservation</button>} />
+        <section className="surface data-surface"><div className="data-toolbar"><div className="filter-tabs">{['All arrivals', 'Arriving', 'Checked in'].map((filter) => <button key={filter} className={arrivalFilter === filter ? 'tab-active' : ''} onClick={() => setArrivalFilter(filter)}>{filter}</button>)}</div>        <button type="button" className="button button-secondary" onClick={downloadStayActivity}>Download today’s stay report</button></div>
+          <div className="table-scroll"><table className="full-table"><thead><tr><th>GUEST</th><th>RESERVATION</th><th>ROOM</th><th>STAY DATES</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{filteredReservations.map((item) => <tr key={item.id}><td><div className="guest-cell"><Avatar initials={item.guestInitials} small /><span><strong>{item.guest}</strong><small>{item.code}</small></span></div></td><td>{item.type}</td><td>{item.room}</td><td>{item.dates}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.status === 'CONFIRMED' ? <><button className="small-action" onClick={() => checkIn(item.id)}>Check in</button><button className="small-action small-action-quiet" onClick={() => { openModal('edit-reservation', item) }}>Edit</button><button className="small-action small-action-quiet" onClick={() => performAction(() => frontOfficeApi.cancelReservation(item.id), 'Reservation cancelled.')}>Cancel</button></> : item.status === 'CHECKED_IN' ? <button className="small-action small-action-quiet" onClick={() => checkOut(item.id)}>Check out</button> : <span>—</span>}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredReservations.length === 0 && <EmptyState text="No reservations match your search." />}</div>
         </section>
         <div className="info-banner"><span className="info-icon"><Icon name="sparkle" size={18} /></span><p><strong>A smooth arrival starts here.</strong> Check room availability before assigning rooms to avoid overlapping bookings.</p><button className="link-button" onClick={() => setActivePage('Rooms')}>View rooms <Icon name="arrow" size={15} /></button></div>
       </>
@@ -524,26 +706,28 @@ function App() {
   }
 
   function renderGuests() {
+    const tiers = [...new Set(guests.map((guest) => guest.tier).filter(Boolean))].sort()
     return (
       <>
-        <PageIntro eyebrow="PEOPLE & PROFILES" title="Guests" description="Guest profiles and stay history, all in one place." action={<button className="button button-primary" onClick={() => setModal('guest')}><Icon name="plus" size={17} /> Add guest</button>} />
-        <section className="surface data-surface"><div className="list-heading"><div><h2>Guest directory</h2><p>{filteredGuests.length} guest profiles</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Guest directory refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>GUEST</th><th>CONTACT</th><th>PAST STAYS</th><th>LAST STAY</th><th>LOYALTY</th><th></th></tr></thead><tbody>{filteredGuests.map((guest) => <tr key={guest.id}><td><div className="guest-cell"><Avatar initials={guest.initials} small /><span><strong>{guest.name}</strong><small>Guest #{guest.id}</small></span></div></td><td><span className="contact-lines">{guest.email || '—'}<small>{guest.phone || '—'}</small></span></td><td>{guest.visits} stays</td><td>{guest.lastStay}</td><td><span className={`tier tier-${(guest.tier || 'member').toLowerCase()}`}>{guest.tier}</span></td><td><button className="icon-button" aria-label={`Edit ${guest.name} profile`} onClick={() => { setSelectedRecord(guest); setModal('edit-guest') }}><Icon name="arrow" size={16} /></button><button className="small-action small-action-quiet" onClick={() => deleteGuest(guest)}>Delete</button></td></tr>)}</tbody></table>{!loadingWorkspace && filteredGuests.length === 0 && <EmptyState text="No guest profiles match your search." />}</div></section>
+        <PageIntro eyebrow="PEOPLE & PROFILES" title="Guests" description="Guest profiles and stay history, all in one place." action={<button className="button button-primary" onClick={() => openModal('guest')}><Icon name="plus" size={17} /> Add guest</button>} />
+        <section className="surface data-surface"><div className="list-heading"><div><h2>Guest directory</h2><p>{filteredGuests.length} guest profiles</p><label> Loyalty tier <select value={guestTier} onChange={(event) => setGuestTier(event.target.value)}><option value="">All tiers</option>{tiers.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select></label></div><div className="filter-tabs"><button type="button" className="button button-secondary" onClick={() => downloadReport('Guest list', `guests-${todayISO}`, ['Guest', 'Loyalty tier', 'Past stays'], () => filteredGuests.map((guest) => [guest.name, guest.tier, guest.visits]))}>Download guest list</button><button className="button button-secondary" onClick={() => performAction(refreshData, 'Guest directory refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div></div><div className="table-scroll"><table className="full-table"><thead><tr><th>GUEST</th><th>CONTACT</th><th>PAST STAYS</th><th>LAST STAY</th><th>LOYALTY</th><th></th></tr></thead><tbody>{filteredGuests.map((guest) => <tr key={guest.id}><td><div className="guest-cell"><Avatar initials={guest.initials} small /><span><strong>{guest.name}</strong><small>Guest #{guest.id}</small></span></div></td><td><span className="contact-lines">{guest.email || '—'}<small>{guest.phone || '—'}</small></span></td><td>{guest.visits} stays</td><td>{guest.lastStay}</td><td><span className={`tier tier-${(guest.tier || 'member').toLowerCase()}`}>{guest.tier}</span></td><td><button className="icon-button" aria-label={`Edit ${guest.name} profile`} onClick={() => { openModal('edit-guest', guest) }}><Icon name="arrow" size={16} /></button><button className="small-action small-action-quiet" onClick={() => deleteGuest(guest)}>Delete</button></td></tr>)}</tbody></table>{!loadingWorkspace && filteredGuests.length === 0 && <EmptyState text="No guest profiles match your search." />}</div></section>
       </>
     )
   }
 
   function renderRooms() {
     const roomCounts = {
-      available: roomList.filter((room) => ['Available', 'Clean', 'Inspected'].includes(room.status)).length,
+      available: roomList.filter((room) => room.status === 'Available' && room.readyForAssignment).length,
       occupied: roomList.filter((room) => room.status === 'Occupied').length,
       reserved: roomList.filter((room) => room.status === 'Reserved').length,
-      attention: roomList.filter((room) => ['Dirty', 'Out Of Order'].includes(room.status)).length,
+      attention: roomList.filter((room) => ['Clean', 'Inspected', 'Dirty', 'Out Of Order'].includes(room.status)
+        || (room.status === 'Available' && !room.readyForAssignment)).length,
     }
     return (
       <>
         <PageIntro eyebrow="ROOMS & AVAILABILITY" title="Room overview" description="A clear view of room status across the hotel." action={<button className="button button-secondary" onClick={() => performAction(refreshData, 'Room availability refreshed.')}><Icon name="filter" size={16} /> Refresh rooms</button>} />
         <div className="room-summary">{[['Available', roomCounts.available, 'green'], ['Occupied', roomCounts.occupied, 'blue'], ['Reserved', roomCounts.reserved, 'lavender'], ['Needs attention', roomCounts.attention, 'amber']].map(([label, count, tone]) => <div key={label} className="surface room-summary-card"><span className={`room-summary-dot dot-${tone}`} /><span><small>{label}</small><strong>{count}</strong></span></div>)}</div>
-        <section className="surface rooms-surface"><div className="list-heading"><div><h2>All rooms</h2><p>Room status updates as your guests move through their stay.</p></div><span className="toolbar-note">{roomList.length} rooms</span></div><div className="room-grid">{filteredRooms.map((room) => { const nextStatus = { Dirty: 'Clean', Clean: 'Inspected', Inspected: 'Available' }[room.status]; return <article key={room.number} className="room-tile"><div className="room-tile-top"><span className={`room-tile-icon room-${room.status.toLowerCase().replaceAll(' ', '-')}`}><Icon name="bed" size={18} /></span><span className="room-number-label">Room</span></div><div><h3>{room.number}</h3><p>{room.type}</p></div><div className="room-tile-bottom"><small>{room.floor}</small>{nextStatus ? <select className="room-status-select" aria-label={`Update room ${room.number} to ${nextStatus}`} value="" onChange={(event) => updateRoomStatus(room.id, event.target.value)}><option value="" disabled>{room.status}</option><option value={nextStatus}>{nextStatus}</option></select> : <small>{room.status}</small>}</div></article>})}</div>{!loadingWorkspace && filteredRooms.length === 0 && <EmptyState text="No rooms match your search." />}</section>
+        <section className="surface rooms-surface"><div className="list-heading"><div><h2>All rooms</h2><p>Release inspected rooms here. Assign guests from Reservations.</p></div><button type="button" className="button button-secondary" onClick={() => downloadReport('Room occupancy', `room-occupancy-${todayISO}`, ['Room', 'Type', 'Floor', 'Status'], () => roomList.map((room) => [room.number, room.type, room.floor, room.status]))}>Download room occupancy</button></div>{noticeError && <p className="dialog-note" role="status">Room notices could not be loaded. Other records are available; refresh rooms to retry.</p>}<div className="activity-list">{notices.map(n=><div key={n.notification_id}><span>{n.message}</span><button className="small-action" onClick={()=>performAction(()=>frontOfficeApi.acknowledge(n.notification_id),'Notice acknowledged.')}>Acknowledge</button></div>)}</div><div className="room-grid">{filteredRooms.map((room) => <article key={room.number} className="room-tile"><div className="room-tile-top"><span className={`room-tile-icon room-${room.status.toLowerCase().replaceAll(' ', '-')}`}><Icon name="bed" size={18} /></span><span className="room-number-label">Room</span></div><div><h3>{room.number}</h3><p>{room.type}</p></div><div className="room-tile-bottom"><small>{room.floor}</small><small>{room.manualHold ? room.status + ' · manual hold' : ['Available', 'Reserved'].includes(room.status) && !room.readyForAssignment ? 'Cleaning pending' : room.status}</small></div>{room.status === 'Inspected' && <button type="button" className="small-action" onClick={() => performAction(() => frontOfficeApi.releaseRoom(room.id), 'Room released for assignment.')}>Release room</button>}</article>)}</div>{!loadingWorkspace && filteredRooms.length === 0 && <EmptyState text="No rooms match your search." />}</section>
       </>
     )
   }
@@ -551,9 +735,9 @@ function App() {
   function renderRequests() {
     return (
       <>
-        <PageIntro eyebrow="GUEST EXPERIENCE" title="Guest requests" description="Keep every guest request visible and moving." action={<button className="button button-primary" onClick={() => setModal('request')}><Icon name="plus" size={17} /> New request</button>} />
+        <PageIntro eyebrow="GUEST EXPERIENCE" title="Guest requests" description="Keep every guest request visible and moving." action={<button className="button button-primary" onClick={() => openModal('request')}><Icon name="plus" size={17} /> New request</button>} />
         <div className="request-counters"><span><i className="counter-amber" />{requests.filter((item) => item.status === 'NEW').length} new</span><span><i className="counter-blue" />{requests.filter((item) => item.status === 'IN_PROGRESS').length} in progress</span><span><i className="counter-green" />{requests.filter((item) => item.status === 'COMPLETED').length} completed</span></div>
-        <section className="surface data-surface"><div className="list-heading"><div><h2>Request log</h2><p>Updates from guests staying with us today.</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Guest requests refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>REQUEST</th><th>GUEST</th><th>ROOM</th><th>RECEIVED</th><th>STATUS</th><th></th></tr></thead><tbody>{filteredRequests.map((item) => <tr key={item.id}><td><div className="request-title"><span>{item.request}</span><small>{item.code}</small></div></td><td>{item.guest}</td><td>{item.room}</td><td>{item.time}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.status === 'NEW' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'IN_PROGRESS')}>Start</button> : item.status === 'IN_PROGRESS' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'COMPLETED')}>Mark done</button> : <Icon name="check" size={18} className="done-check" />}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredRequests.length === 0 && <EmptyState text="No guest requests match your search." />}</div></section>
+        <section className="surface data-surface"><div className="list-heading"><div><h2>Request log</h2><p>Updates from guests staying with us today.</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Guest requests refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>REQUEST</th><th>GUEST</th><th>ROOM</th><th>RECEIVED</th><th>STATUS</th><th></th></tr></thead><tbody>{filteredRequests.map((item) => <tr key={item.id}><td><div className="request-title"><span>{item.request}</span><small>{item.code}</small></div></td><td>{item.guest}</td><td>{item.room}</td><td>{item.time}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.roomId && item.status !== 'COMPLETED' ? <span>Managed by Housekeeping</span> : item.status === 'NEW' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'IN_PROGRESS')}>Start</button> : item.status === 'IN_PROGRESS' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'COMPLETED')}>Mark done</button> : <Icon name="check" size={18} className="done-check" />}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredRequests.length === 0 && <EmptyState text="No guest requests match your search." />}</div></section>
       </>
     )
   }
@@ -564,9 +748,9 @@ function App() {
     const totalDue = invoices.reduce((sum, invoice) => sum + Math.max(0, invoice.rawAmount - invoice.paidAmount), 0)
     return (
       <>
-        <PageIntro eyebrow="GUEST ACCOUNTS" title="Billing" description="A helpful overview of guest invoices and payments." action={<button className="button button-primary" onClick={() => setModal('invoice')}><Icon name="plus" size={16} /> New invoice</button>} />
+        <PageIntro eyebrow="GUEST ACCOUNTS" title="Billing" description="A helpful overview of guest invoices and payments." action={<button className="button button-primary" onClick={() => openModal('invoice')}><Icon name="plus" size={16} /> New invoice</button>} />
         <div className="billing-summary"><div className="surface bill-stat"><span className="bill-stat-icon bill-icon-gold"><Icon name="receipt" size={17} /></span><span><small>Invoiced</small><strong>{formatMoney(totalCharges)}</strong><em>{invoices.length} guest invoices</em></span></div><div className="surface bill-stat"><span className="bill-stat-icon bill-icon-green"><Icon name="check" size={17} /></span><span><small>Payments received</small><strong>{formatMoney(totalPaid)}</strong><em>Payments recorded against invoices</em></span></div><div className="surface bill-stat"><span className="bill-stat-icon bill-icon-lilac"><Icon name="clock" size={17} /></span><span><small>Balance due</small><strong>{formatMoney(totalDue)}</strong><em>Outstanding guest balances</em></span></div></div>
-        <section className="surface data-surface"><div className="list-heading"><div><h2>Recent invoices</h2><p>Guest charges and payment status.</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Billing records refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>INVOICE</th><th>GUEST</th><th>ROOM</th><th>ISSUED</th><th>AMOUNT</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{filteredInvoices.map((item) => <tr key={item.id}><td><strong className="invoice-id">{item.code}</strong></td><td>{item.guest}</td><td>{item.room || '—'}</td><td>{item.date}</td><td><strong>{item.amount}</strong></td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.rawAmount > item.paidAmount && item.status !== 'VOID' ? <button className="small-action" onClick={() => { setSelectedRecord(item); setModal('payment') }}>Record payment</button> : <Icon name="check" size={18} className="done-check" />}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredInvoices.length === 0 && <EmptyState text="No invoices match your search." />}</div></section>
+        <section className="surface data-surface"><div className="list-heading"><div><h2>Recent invoices</h2><p>Guest charges and payment status.</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Billing records refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>INVOICE</th><th>GUEST</th><th>ROOM</th><th>ISSUED</th><th>AMOUNT</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{filteredInvoices.map((item) => <tr key={item.id}><td><strong className="invoice-id">{item.code}</strong></td><td>{item.guest}</td><td>{item.room || '—'}</td><td>{item.date}</td><td><strong>{item.amount}</strong></td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.paidAmount > 0 && <button type="button" className="small-action" onClick={() => downloadReceipt(item)}>Download receipt</button>}{item.rawAmount > item.paidAmount && item.status !== 'VOID' ? <button className="small-action" onClick={() => { openModal('payment', item) }}>Record payment</button> : <Icon name="check" size={18} className="done-check" />}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredInvoices.length === 0 && <EmptyState text="No invoices match your search." />}</div></section>
         <div className="info-banner"><span className="info-icon"><Icon name="lock" size={17} /></span><p>Front Office can view and update guest invoices and record payments. Financial reporting is managed by the Finance team.</p></div>
       </>
     )
@@ -596,11 +780,13 @@ function App() {
       </main>
       {modal && <Modal
         modal={modal}
-        selectedRecord={selectedRecord}
+        selectedRecord={selectedRecord} timeZone={user?.timeZone}
         guests={guests}
         rooms={roomList}
         reservations={reservations}
-        onClose={() => setModal(null)}
+        onClose={closeModal}
+        error={dialogError}
+        saving={savingDialog}
         onSubmit={submitModal}
       />}
       {toast && <div className="toast"><Icon name="check" size={17} />{toast}</div>}
@@ -612,11 +798,12 @@ function StatCard({ label, value, suffix, note, icon, color }) {
   return <article className="surface stat-card"><div className="stat-top"><span>{label}</span><span className={`stat-icon stat-${color}`}><Icon name={icon} size={18} /></span></div><div className="stat-value">{value}<small>{suffix}</small></div><span className="stat-note">{note}</span></article>
 }
 
-function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, onSubmit }) {
+export function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, onSubmit, timeZone, error = '', saving = false }) {
   const roomTypes = [...new Set(rooms.map((room) => room.type))]
   const [selectedRoomType, setSelectedRoomType] = useState(roomTypes[0] || '')
   const [selectedGuestId, setSelectedGuestId] = useState('')
-  const localToday = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
+  const [invoiceReservationId,setInvoiceReservationId]=useState('')
+  const localToday = useHotelToday(timeZone)
   const nextDay = new Date(`${localToday}T00:00:00`)
   nextDay.setDate(nextDay.getDate() + 1)
   const localTomorrow = new Date(nextDay.getTime() - nextDay.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
@@ -624,21 +811,26 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
   const [checkOutDate, setCheckOutDate] = useState(localTomorrow)
   const [editCheckInDate, setEditCheckInDate] = useState(selectedRecord?.checkIn || localToday)
   const [editCheckOutDate, setEditCheckOutDate] = useState(selectedRecord?.checkOut || localTomorrow)
+  if (['edit-guest', 'edit-reservation', 'payment'].includes(modal) && !selectedRecord) {
+    return <div className="modal-backdrop"><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h2 id="modal-title">Record unavailable</h2><p role="alert">Close this dialog and select the record again.</p><button type="button" className="button button-secondary" onClick={onClose}>Close</button></section></div>
+  }
   const titles = {
     reservation: ['GUEST STAYS', 'Create a reservation', 'Add the details for an upcoming guest stay.'],
     request: ['GUEST EXPERIENCE', 'Log a guest request', 'Let the team know what your guest needs.'],
     guest: ['PEOPLE & PROFILES', 'Add a guest', 'Create a guest profile for your hotel records.'],
     'edit-guest': ['PEOPLE & PROFILES', 'Edit guest profile', 'Update the guest’s contact details.'],
     'edit-reservation': ['GUEST STAYS', 'Edit reservation', 'Update the dates or room assignment.'],
-    payment: ['GUEST ACCOUNTS', 'Record a payment', `Outstanding balance: ${formatMoney(selectedRecord.rawAmount - selectedRecord.paidAmount)}.`],
+    payment: ['GUEST ACCOUNTS', 'Record a payment', modal === 'payment' ? `Outstanding balance: ${formatMoney(selectedRecord.rawAmount - selectedRecord.paidAmount)}.` : ''],
     invoice: ['GUEST ACCOUNTS', 'Create an invoice', 'Record an invoice against a guest account.'],
   }
   const [eyebrow, title, description] = titles[modal]
   const name = selectedRecord?.name || ''
+  const canAssignRoom = (room, arrival) => !room.manualHold && (arrival > localToday
+    ? room.status !== 'Out Of Order'
+    : room.readyForAssignment ?? ['Available', 'Reserved'].includes(room.status))
   const roomsForStay = rooms.filter((room) =>
     room.type === selectedRoomType
-    && (['Available', 'Clean', 'Inspected', 'Reserved'].includes(room.status)
-      || (checkInDate > localToday && ['Occupied', 'Dirty'].includes(room.status)))
+    && canAssignRoom(room, checkInDate)
     && !reservations.some((reservation) =>
       Number(reservation.roomId) === Number(room.id)
       && ['CONFIRMED', 'CHECKED_IN'].includes(reservation.status)
@@ -648,9 +840,7 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
   )
   const roomsForEditedStay = rooms.filter((room) =>
     (room.type === selectedRecord?.roomType || Number(room.id) === Number(selectedRecord?.roomId))
-    && (['Available', 'Clean', 'Inspected', 'Reserved'].includes(room.status)
-      || (editCheckInDate > localToday && ['Occupied', 'Dirty'].includes(room.status))
-      || Number(room.id) === Number(selectedRecord?.roomId))
+    && canAssignRoom(room, editCheckInDate)
     && !reservations.some((reservation) =>
       Number(reservation.id) !== Number(selectedRecord?.id)
       && Number(reservation.roomId) === Number(room.id)
@@ -661,14 +851,16 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
   )
 
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="modal-backdrop" onMouseDown={(event) => { if (!saving && event.target === event.currentTarget) onClose() }}>
       <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div className="modal-heading">
           <div><span className="eyebrow">{eyebrow}</span><h2 id="modal-title">{title}</h2><p>{description}</p></div>
-          <button className="icon-button" aria-label="Close dialog" onClick={onClose}><Icon name="close" /></button>
+          <button className="icon-button" type="button" aria-label="Close dialog" onClick={onClose} disabled={saving}><Icon name="close" /></button>
         </div>
-        <form className="modal-form" onSubmit={onSubmit}>
+        <form className="modal-form" onSubmit={onSubmit} aria-busy={saving} inert={saving}>
+          {error && <p className="dialog-error" role="alert">{error}</p>}
           {modal === 'reservation' && <>
+            {rooms.length === 0 && <p className="dialog-note" role="status">No rooms have been configured yet. Enter the room type to create an unassigned reservation; a room must be added and assigned before check-in.</p>}
             <label htmlFor="reservation-guest-id">Guest profile</label>
             <select id="reservation-guest-id" name="guestId" value={selectedGuestId} onChange={(event) => setSelectedGuestId(event.target.value)}>
               <option value="">Create a new guest profile</option>
@@ -728,9 +920,9 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
 
           {modal === 'invoice' && <>
             <label htmlFor="invoice-guest">Guest account</label>
-            <select id="invoice-guest" name="guestId" required defaultValue=""><option value="" disabled>Select a guest</option>{guests.map((guest) => <option key={guest.id} value={guest.id}>{guest.name}</option>)}</select>
+            <select id="invoice-guest" name="guestId" required value={selectedGuestId} onChange={event=>{setSelectedGuestId(event.target.value);setInvoiceReservationId('')}}><option value="" disabled>Select a guest</option>{guests.map((guest) => <option key={guest.id} value={guest.id}>{guest.name}</option>)}</select>
             <label htmlFor="invoice-reservation">Reservation (optional)</label>
-            <select id="invoice-reservation" name="reservationId" defaultValue=""><option value="">No reservation linked</option>{reservations.map((reservation) => <option key={reservation.id} value={reservation.id}>{reservation.code} · {reservation.guest}</option>)}</select>
+            <select id="invoice-reservation" name="reservationId" value={invoiceReservationId} disabled={!selectedGuestId} onChange={event=>setInvoiceReservationId(event.target.value)}><option value="">No reservation linked</option>{reservations.filter(reservation=>String(reservation.guestId)===selectedGuestId).map((reservation) => <option key={reservation.id} value={reservation.id}>{reservation.code} · {reservation.guest}</option>)}</select>
             <label htmlFor="invoice-amount">Invoice amount</label>
             <input id="invoice-amount" name="amount" type="number" min="0.01" step="0.01" required />
             <label htmlFor="invoice-notes">Notes (optional)</label>
@@ -746,7 +938,7 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
             </div>
           </>}
 
-          <div className="modal-actions"><button className="button button-secondary" type="button" onClick={onClose}>Cancel</button><button className="button button-primary" type="submit"><Icon name="check" size={16} />{modal === 'reservation' ? 'Create reservation' : modal === 'request' ? 'Log request' : modal === 'guest' ? 'Create guest' : modal === 'edit-guest' ? 'Save changes' : modal === 'invoice' ? 'Create invoice' : 'Record payment'}</button></div>
+          <div className="modal-actions"><button className="button button-secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button><button className="button button-primary" type="submit" disabled={saving}><Icon name="check" size={16} />{saving ? 'Saving…' : modal === 'reservation' ? 'Create reservation' : modal === 'request' ? 'Log request' : modal === 'guest' ? 'Create guest' : ['edit-guest', 'edit-reservation'].includes(modal) ? 'Save changes' : modal === 'invoice' ? 'Create invoice' : 'Record payment'}</button></div>
         </form>
       </section>
     </div>

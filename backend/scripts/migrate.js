@@ -1,5 +1,11 @@
 const fs = require('node:fs/promises')
 const path = require('node:path')
+if (!process.env.DATABASE_URL && !process.env.MIGRATION_DATABASE_URL) {
+  require('dotenv').config({ path: path.resolve(__dirname, '../.env.local'), quiet: true })
+}
+if (process.env.MIGRATION_DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.MIGRATION_DATABASE_URL
+}
 const pool = require('../src/config/database')
 
 async function main() {

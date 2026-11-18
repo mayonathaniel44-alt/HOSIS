@@ -101,7 +101,8 @@ router.patch('/:id', async (req, res) => {
   v.oneOf(body.requestType, REQUEST_TYPES, 'requestType');
   v.oneOf(body.priority, v.PRIORITIES, 'priority');
   v.maxLengths(body, { details: [255, 'Details'] });
-  const { rows: found } = await db.query('SELECT * FROM hk_guest_requests WHERE request_id = $1', [requestId]);
+  const request = await db.withTransaction(async (client) => {
+  const { rows: found } = await client.query('SELECT * FROM hk_guest_requests WHERE request_id = $1 FOR UPDATE', [requestId]);
   const current = found[0];
   if (!current) {
     throw new HttpError(404, 'Guest request not found.');
@@ -119,7 +120,7 @@ router.patch('/:id', async (req, res) => {
     }
   }
   if (staffId && staffId !== current.staff_id) {
-    await assertHousekeepingStaff(db, staffId, 'Guest requests can only be assigned to active housekeeping staff.');
+    await assertHousekeepingStaff(client, staffId, 'Guest requests can only be assigned to active housekeeping staff.');
   }
   if (current.stock_approved_at && (body.invItemId !== undefined || body.quantity !== undefined)) {
     const same = Number(body.invItemId ?? current.inv_item_id) === current.inv_item_id
@@ -128,8 +129,8 @@ router.patch('/:id', async (req, res) => {
       throw new HttpError(409, 'The stock for this request was already approved and taken out of inventory.');
     }
   }
-  const stock = await readStock(db, body, current);
-  const { rows } = await db.query(
+  const stock = await readStock(client, body, current);
+  const { rows } = await client.query(
     `UPDATE hk_guest_requests
         SET staff_id = $1, request_type = $2, priority = $3, request_details = $4, request_status = $5,
             inv_item_id = $6, quantity_requested = $7
@@ -138,7 +139,9 @@ router.patch('/:id', async (req, res) => {
       body.details || current.request_details, staffId ? 'IN_PROGRESS' : 'OPEN',
       stock.itemId, stock.quantity, requestId]
   );
-  res.json({ request: rows[0] });
+  return rows[0];
+  });
+  res.json({ request });
 });
 
 // Approve request: take the requested stock out of inventory for the room.
@@ -202,11 +205,13 @@ router.post('/:id/approve-stock', async (req, res) => {
 router.post('/:id/complete', async (req, res) => {
   const requestId = v.id(req.params.id, 'request id');
   v.maxLengths(req.body || {}, { completionNotes: [255, 'Completion notes'] });
-  const { rows: found } = await db.query('SELECT staff_id FROM hk_guest_requests WHERE request_id = $1', [requestId]);
+  const request = await db.withTransaction(async (client) => {
+  const { rows: found } = await client.query('SELECT * FROM hk_guest_requests WHERE request_id = $1 FOR UPDATE', [requestId]);
   if (found[0] && found[0].staff_id && found[0].staff_id !== req.user.userId && !canManage(req.user)) {
     throw new HttpError(403, 'Only the assigned staff member or a supervisor can complete this request.');
   }
-  const { rows } = await db.query(
+  if (found[0]?.inv_item_id && !found[0].stock_approved_at) throw new HttpError(409,'Approve the requested stock before completing this request.');
+  const { rows } = await client.query(
     `UPDATE hk_guest_requests
         SET request_status = 'COMPLETED', completed_at = NOW(), completion_notes = $1,
             staff_id = COALESCE(staff_id, $2)
@@ -216,7 +221,9 @@ router.post('/:id/complete', async (req, res) => {
   if (!rows[0]) {
     throw new HttpError(409, 'Request not found or already completed.');
   }
-  res.json({ request: rows[0] });
+  return rows[0];
+  });
+  res.json({ request });
 });
 
 module.exports = router;

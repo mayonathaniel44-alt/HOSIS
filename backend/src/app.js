@@ -1,5 +1,6 @@
 const express = require('express')
 const cors = require('cors')
+const path = require('node:path')
 const env = require('./config/env')
 const pool = require('./config/database')
 const authRoutes = require('./routes/authRoutes')
@@ -8,8 +9,17 @@ const adminRoutes = require('./routes/adminRoutes')
 
 const app = express()
 const api = express.Router()
+const tlsEnabled = Boolean(process.env.HOSIS_TLS_CERT && process.env.HOSIS_TLS_KEY)
 
 app.disable('x-powered-by')
+app.set('trust proxy', 'loopback')
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff')
+  res.set('X-Frame-Options', 'DENY')
+  res.set('Referrer-Policy', 'no-referrer')
+  if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000')
+  next()
+})
 app.use(cors({
   origin(origin, callback) {
     if (!origin || env.frontendOrigins.includes(origin)) return callback(null, true)
@@ -19,7 +29,14 @@ app.use(cors({
     return callback(error)
   },
 }))
-app.use(express.json({ limit: '1mb' }))
+app.use(express.json({ limit: '3mb' }))
+app.use((req,res,next) => {
+ if (['POST','PATCH','PUT'].includes(req.method)) {
+  if (req.body === undefined) req.body = {}
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return res.status(400).json({error:{code:'INVALID_BODY',message:'Request body must be a JSON object.'}})
+ }
+ next()
+})
 
 api.get('/health', async (req, res, next) => {
   try {
@@ -32,10 +49,24 @@ api.get('/health', async (req, res, next) => {
     next(unavailable)
   }
 })
+api.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store')
+  next()
+})
 api.use('/auth', authRoutes)
 api.use('/front-office', frontOfficeRoutes)
 api.use('/admin', adminRoutes)
+api.use('/housekeeping', require('./modules/housekeeping'))
 app.use('/api/v1', api)
+
+if (tlsEnabled) {
+  const frontendDirectory = path.resolve(__dirname, '../../frontend/dist')
+  app.use(express.static(frontendDirectory, {
+    setHeaders(res) {
+      res.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
+    },
+  }))
+}
 
 app.use((req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: 'The requested endpoint was not found.' } })

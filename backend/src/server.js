@@ -1,8 +1,18 @@
 const env = require('./config/env')
 const app = require('./app')
 const pool = require('./config/database')
+const { readFileSync } = require('node:fs')
+const https = require('node:https')
 
-const server = app.listen(env.port, () => {
+const { HOSIS_TLS_CERT, HOSIS_TLS_KEY } = process.env
+if (Boolean(HOSIS_TLS_CERT) !== Boolean(HOSIS_TLS_KEY)) {
+  throw new Error('Configure both HOSIS_TLS_CERT and HOSIS_TLS_KEY to enable HTTPS.')
+}
+const listener = HOSIS_TLS_CERT ? https.createServer({
+  cert: readFileSync(HOSIS_TLS_CERT),
+  key: readFileSync(HOSIS_TLS_KEY),
+}, app) : app
+const server = listener.listen(env.port, process.env.API_HOST || '127.0.0.1', () => {
   console.log(`HOSIS API listening on port ${env.port}`)
 })
 

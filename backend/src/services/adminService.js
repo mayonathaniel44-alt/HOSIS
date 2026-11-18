@@ -16,7 +16,7 @@ async function createStaff(body, userId) {
   const password = validation.staffPassword(body.password)
   const role = validation.staffRole(body.role)
   const passwordHash = await bcrypt.hash(password, env.bcryptRounds)
-  return model.createStaff({ username, passwordHash, role }, userId)
+  return model.createStaff({ username, passwordHash, role, ...validation.staffProfile(body) }, userId)
 }
 
 async function updateStaff(id, body, userId) {
@@ -31,11 +31,13 @@ async function listActivity(rawLimit) {
 }
 
 async function getSettings() {
-  return model.getSettings()
+  return {...await model.getSettings(), timeZone:env.timeZone}
 }
 
 async function updateSettings(body, userId) {
-  return model.updateSettings(validation.hotelSettings(body), userId)
+  const settings=validation.hotelSettings(body)
+  if(settings.timeZone !== env.timeZone) throw require('../lib/errors').appError(400,'SERVER_TIME_ZONE','Set DB_TIME_ZONE on the backend and restart to change the hotel time zone.')
+  return model.updateSettings(settings, userId)
 }
 
 module.exports = {

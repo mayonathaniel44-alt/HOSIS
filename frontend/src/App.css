@@ -2571,3 +2571,8 @@ tbody tr:last-child td {
     transition-duration: 0.01ms !important;
   }
 }
+
+.dialog-error { margin: 0; padding: 12px; color: #862424; background: #fff1f1; border: 1px solid #edcccc; border-radius: 6px; }
+.dialog-note { margin: 0; color: #62566f; line-height: 1.5; }
+
+.login-error { margin: 0 0 12px; padding: 10px 12px; color: #862424; background: #fff1f1; border: 1px solid #edcccc; border-radius: 6px; line-height: 1.5; }

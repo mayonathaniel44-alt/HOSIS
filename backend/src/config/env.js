@@ -21,7 +21,10 @@ if (!Number.isInteger(bcryptRounds) || bcryptRounds < 10 || bcryptRounds > 15) {
   throw new Error('BCRYPT_ROUNDS must be an integer between 10 and 15.')
 }
 
+const timeZone = process.env.DB_TIME_ZONE || 'Asia/Manila'
+new Intl.DateTimeFormat('en', { timeZone })
 module.exports = {
+  timeZone,
   port,
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret,

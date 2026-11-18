@@ -8,7 +8,8 @@
     "dev": "nodemon src/server.js",
     "db:migrate": "node scripts/migrate.js",
     "user:create": "node scripts/createFrontOfficeUser.js",
-    "test": "node --test"
+    "test": "node --test",
+    "user:sync-front-office": "node scripts/syncFrontOfficeUser.js"
   },
   "keywords": [],
   "author": "",
@@ -24,5 +25,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
+  },
+  "overrides": {
+    "minimatch": "^11.0.1"
   }
 }

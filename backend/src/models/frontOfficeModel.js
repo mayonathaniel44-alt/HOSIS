@@ -1,6 +1,7 @@
 const crypto = require('node:crypto')
 const pool = require('../config/database')
 const { appError } = require('../lib/errors')
+const { lockRoom, changeRoomStatus } = require('../modules/housekeeping/roomStatus')
 
 function notFound(entity) {
   return appError(404, 'NOT_FOUND', `${entity} was not found.`)
@@ -155,7 +156,7 @@ async function lockRooms(client, ids) {
   const uniqueIds = [...new Set(ids.filter(Boolean).map(Number))].sort((a, b) => a - b)
   if (uniqueIds.length === 0) return []
   const { rows } = await client.query(
-    'SELECT id, status FROM rooms WHERE id = ANY($1::bigint[]) ORDER BY id FOR UPDATE',
+    'SELECT id, status, room_number FROM rooms WHERE id = ANY($1::bigint[]) ORDER BY id FOR UPDATE',
     [uniqueIds],
   )
   if (rows.length !== uniqueIds.length) throw notFound('Room')
@@ -164,7 +165,13 @@ async function lockRooms(client, ids) {
 
 async function ensureRoomAvailable(client, roomId, roomType, checkIn, checkOut, excludeReservationId = null) {
   if (!roomId) return
-  const { rows: rooms } = await client.query('SELECT id, status, room_type FROM rooms WHERE id = $1', [roomId])
+  const { rows: rooms } = await client.query(
+    `SELECT status, room_type, CURRENT_DATE::text AS today,
+            EXISTS (SELECT FROM hk_cleaning_tasks WHERE room_id = $1 AND task_status <> 'INSPECTED') AS cleaning,
+            ${manualRoomHold} AS "manualHold"
+       FROM rooms WHERE id = $1`,
+    [roomId],
+  )
   if (!rooms[0]) throw notFound('Room')
   if (rooms[0].room_type !== roomType) {
     throw appError(400, 'ROOM_TYPE_MISMATCH', 'The selected room does not match the requested room type.')
@@ -172,11 +179,11 @@ async function ensureRoomAvailable(client, roomId, roomType, checkIn, checkOut, 
   if (rooms[0].status === 'OUT_OF_ORDER') {
     throw appError(409, 'ROOM_UNAVAILABLE', 'The selected room is out of service.')
   }
-  if (['OCCUPIED', 'DIRTY'].includes(rooms[0].status)) {
-    const { rows: dateRows } = await client.query('SELECT CURRENT_DATE::text AS today')
-    if (checkIn <= dateRows[0].today) {
-      throw appError(409, 'ROOM_UNAVAILABLE', 'The selected room is not ready for a same-day arrival.')
-    }
+  if (rooms[0].manualHold) {
+    throw appError(409, 'ROOM_UNAVAILABLE', 'Housekeeping placed this room on a manual hold.')
+  }
+  if (checkIn <= rooms[0].today && (!['AVAILABLE', 'RESERVED'].includes(rooms[0].status) || rooms[0].cleaning)) {
+    throw appError(409, 'ROOM_UNAVAILABLE', 'Housekeeping must release this room before it can be assigned to a same-day arrival.')
   }
   const { rowCount } = await client.query(
     `SELECT id FROM reservations
@@ -202,7 +209,7 @@ async function syncReservedStatus(client, roomId) {
   await client.query(
     `UPDATE rooms
      SET status = CASE
-       WHEN $2 AND status IN ('AVAILABLE', 'CLEAN', 'INSPECTED') THEN 'RESERVED'
+       WHEN $2 AND status = 'AVAILABLE' THEN 'RESERVED'
        WHEN NOT $2 AND status = 'RESERVED' THEN 'AVAILABLE'
        ELSE status
      END,
@@ -214,7 +221,7 @@ async function syncReservedStatus(client, roomId) {
 
 async function createReservation(reservation, userId) {
   const reservationId = await transaction(async (client) => {
-    await lockRooms(client, [reservation.roomId])
+    const [assignedRoom] = await lockRooms(client, [reservation.roomId])
     await ensureRoomAvailable(client, reservation.roomId, reservation.roomType, reservation.checkIn, reservation.checkOut)
 
     let guestId = reservation.guestId
@@ -239,7 +246,8 @@ async function createReservation(reservation, userId) {
       [code, guestId, reservation.roomId, reservation.roomType, reservation.checkIn, reservation.checkOut, userId],
     )
     await syncReservedStatus(client, reservation.roomId)
-    await recordActivity(client, userId, 'RESERVATION_CREATED', `Created reservation ${code}.`)
+    const assignment = assignedRoom ? ` Assigned room ${assignedRoom.room_number}.` : ''
+    await recordActivity(client, userId, 'RESERVATION_CREATED', `Created reservation ${code}.${assignment}`)
     return rows[0].id
   })
   return getReservation(reservationId)
@@ -276,7 +284,7 @@ async function updateReservation(id, fields, userId) {
     if (next.checkOut <= next.checkIn) {
       throw appError(400, 'INVALID_STAY', 'Check-out must be later than check-in.')
     }
-    await lockRooms(client, [current.room_id, next.roomId])
+    const lockedRooms = await lockRooms(client, [current.room_id, next.roomId])
     await ensureRoomAvailable(client, next.roomId, next.roomType, next.checkIn, next.checkOut, Number(id))
 
     const assignments = entries.map(([key], index) => `${allowed[key]} = $${index + 1}`)
@@ -289,7 +297,11 @@ async function updateReservation(id, fields, userId) {
     )
     if (current.room_id !== next.roomId) await syncReservedStatus(client, current.room_id)
     await syncReservedStatus(client, next.roomId)
-    await recordActivity(client, userId, 'RESERVATION_UPDATED', `Updated reservation #${id}.`)
+    const roomLabel = (roomId) => lockedRooms.find((room) => room.id === roomId)?.room_number || 'unassigned'
+    const assignment = current.room_id !== next.roomId
+      ? ` Room assignment changed from ${roomLabel(current.room_id)} to ${roomLabel(next.roomId)}.`
+      : ''
+    await recordActivity(client, userId, 'RESERVATION_UPDATED', `Updated reservation #${id}.${assignment}`)
   })
   return getReservation(id)
 }
@@ -318,7 +330,7 @@ async function cancelReservation(id, userId) {
 async function checkIn(id, userId) {
   await transaction(async (client) => {
     const { rows } = await client.query(
-      'SELECT id, room_id, status FROM reservations WHERE id = $1 FOR UPDATE',
+      'SELECT id, room_id, status, check_in::text AS check_in, check_out::text AS check_out, CURRENT_DATE::text AS today FROM reservations WHERE id = $1 FOR UPDATE',
       [id],
     )
     const reservation = rows[0]
@@ -326,12 +338,16 @@ async function checkIn(id, userId) {
     if (reservation.status !== 'CONFIRMED') {
       throw appError(409, 'INVALID_RESERVATION_STATUS', 'Only confirmed reservations can be checked in.')
     }
+    if (!reservation.room_id) throw appError(409,'ROOM_REQUIRED','Assign a room before check-in.')
+    if (reservation.check_in !== reservation.today || reservation.check_out <= reservation.today) throw appError(409,'INVALID_ARRIVAL_DATE','Check-in is allowed on the scheduled arrival date. Update the reservation first for an early or late arrival.')
     if (reservation.room_id) {
       await lockRooms(client, [reservation.room_id])
       const { rows: roomRows } = await client.query('SELECT status FROM rooms WHERE id = $1', [reservation.room_id])
-      if (!roomRows[0] || ['DIRTY', 'OUT_OF_ORDER', 'OCCUPIED'].includes(roomRows[0].status)) {
+      if (!roomRows[0] || !['AVAILABLE', 'RESERVED'].includes(roomRows[0].status)) {
         throw appError(409, 'ROOM_UNAVAILABLE', 'The assigned room is not ready for check-in.')
       }
+      const activeTasks = await client.query("SELECT 1 FROM hk_cleaning_tasks WHERE room_id=$1 AND task_status <> 'INSPECTED' LIMIT 1",[reservation.room_id])
+      if(activeTasks.rowCount) throw appError(409,'CLEANING_NOT_CLOSED','Finish and inspect the room cleaning task before check-in.')
       await client.query(`UPDATE rooms SET status = 'OCCUPIED', updated_at = NOW() WHERE id = $1`, [reservation.room_id])
     }
     await client.query(
@@ -368,15 +384,34 @@ async function checkOut(id, userId) {
       `UPDATE reservations SET status = 'CHECKED_OUT', updated_at = NOW() WHERE id = $1`,
       [id],
     )
+    if (reservation.room_id) {
+      const { rows: room }=await client.query('SELECT status FROM rooms WHERE id=$1',[reservation.room_id])
+      if(room[0].status==='DIRTY') {
+       await client.query(`INSERT INTO hk_cleaning_tasks(room_id,task_type,priority,notes) VALUES($1,'CHECKOUT','NORMAL','Guest checked out')
+        ON CONFLICT(room_id) WHERE task_status <> 'INSPECTED' DO UPDATE SET task_type='CHECKOUT',
+         task_status=CASE WHEN hk_cleaning_tasks.staff_id IS NULL THEN 'PENDING' ELSE 'ASSIGNED' END, start_time=NULL,completion_time=NULL`,[reservation.room_id])
+      }
+    }
     await recordActivity(client, userId, 'RESERVATION_CHECKED_OUT', `Checked out reservation #${id}.`)
   })
   return getReservation(id)
 }
 
+const manualRoomHold = `(
+  (rooms.status = 'OCCUPIED' AND NOT EXISTS (
+    SELECT FROM reservations WHERE room_id = rooms.id AND status = 'CHECKED_IN'
+  )) OR (rooms.status = 'RESERVED' AND NOT EXISTS (
+    SELECT FROM reservations WHERE room_id = rooms.id AND status = 'CONFIRMED'
+  )))`
+
 async function listRooms(search = '') {
   const term = `%${search.trim()}%`
   const { rows } = await pool.query(
-    `SELECT id, room_number AS "roomNumber", room_type AS "roomType", floor, status
+    `SELECT id, room_number AS "roomNumber", room_type AS "roomType", floor, status,
+            status IN ('AVAILABLE', 'RESERVED') AND NOT EXISTS (
+              SELECT FROM hk_cleaning_tasks WHERE room_id = rooms.id AND task_status <> 'INSPECTED'
+            ) AND NOT ${manualRoomHold} AS "readyForAssignment",
+            ${manualRoomHold} AS "manualHold"
      FROM rooms
      WHERE ($1 = '' OR room_number ILIKE $2 OR room_type ILIKE $2 OR floor ILIKE $2)
      ORDER BY room_number`,
@@ -395,22 +430,29 @@ async function getRoom(id) {
   return rows[0]
 }
 
-async function updateRoomStatus(id, status, userId) {
-  const transitions = {
-    DIRTY: 'CLEAN',
-    CLEAN: 'INSPECTED',
-    INSPECTED: 'AVAILABLE',
-  }
+async function releaseRoom(id, userId) {
   await transaction(async (client) => {
-    await lockRooms(client, [id])
-    const { rows } = await client.query('SELECT status FROM rooms WHERE id = $1', [id])
-    if (!rows[0]) throw notFound('Room')
-    if (transitions[rows[0].status] !== status) {
-      throw appError(409, 'INVALID_ROOM_TRANSITION', `Room status cannot change from ${rows[0].status} to ${status}.`)
+    const room = await lockRoom(client, id)
+    if (room.room_status !== 'INSPECTED') {
+      throw appError(409, 'ROOM_NOT_INSPECTED', 'Only inspected rooms can be released.')
     }
-    await client.query('UPDATE rooms SET status = $2, updated_at = NOW() WHERE id = $1', [id, status])
-    await syncReservedStatus(client, id)
-    await recordActivity(client, userId, 'ROOM_STATUS_UPDATED', `Changed room #${id} status to ${status}.`)
+    const { rows: [readiness] } = await client.query(
+      `SELECT EXISTS (SELECT FROM hk_cleaning_tasks WHERE room_id = $1 AND task_status <> 'INSPECTED') AS cleaning,
+              EXISTS (SELECT FROM reservations WHERE room_id = $1 AND status = 'CONFIRMED') AS reserved`,
+      [id],
+    )
+    if (readiness.cleaning) {
+      throw appError(409, 'CLEANING_NOT_CLOSED', 'Finish the active cleaning task before releasing this room.')
+    }
+    await changeRoomStatus(client, {
+      roomId: id, newStatus: readiness.reserved ? 'RESERVED' : 'AVAILABLE',
+      staffId: userId, remarks: 'Released by Front Office after inspection', manual: false,
+      activityAction: 'ROOM_RELEASED',
+    })
+    await client.query(
+      "UPDATE hk_front_office_notifications SET read_at = NOW() WHERE room_id = $1 AND notice_type = 'ROOM_READY' AND read_at IS NULL",
+      [id],
+    )
   })
   return getRoom(id)
 }
@@ -435,6 +477,7 @@ async function listRequests(search = '') {
 
 async function createRequest(request, userId) {
   return transaction(async (client) => {
+    await client.query('SELECT pg_advisory_xact_lock(742915)')
     const { rows } = await client.query(
       `INSERT INTO guest_requests
          (guest_id, guest_name, room_id, request_text, priority, created_by)
@@ -457,6 +500,9 @@ async function updateRequest(id, fields, userId) {
   const values = entries.map(([, value]) => value)
   values.push(id)
   return transaction(async (client) => {
+    await client.query('SELECT pg_advisory_xact_lock(742915)')
+    const linked=await client.query('SELECT 1 FROM hk_guest_requests WHERE front_office_request_id=$1',[id])
+    if(linked.rowCount) throw appError(409,'HOUSEKEEPING_OWNS_REQUEST','Update room-linked requests in Housekeeping so assignment and stock remain consistent.')
     const { rows } = await client.query(
       `UPDATE guest_requests SET ${assignments.join(', ')}, updated_at = NOW()
        WHERE id = $${values.length}
@@ -592,6 +638,22 @@ async function createPayment(invoiceId, payment, userId) {
     )
     const invoice = invoiceRows[0]
     if (!invoice) throw notFound('Invoice')
+    if (payment.requestKey) {
+      const { rows: [existing] } = await client.query(
+        `SELECT id, invoice_id AS "invoiceId", amount, payment_method AS "paymentMethod",
+                reference, paid_at AS "paidAt", recorded_by AS "recordedBy"
+           FROM payments WHERE invoice_id = $1 AND request_key = $2`,
+        [invoiceId, payment.requestKey],
+      )
+      if (existing) {
+        const { recordedBy, ...record } = existing
+        if (recordedBy !== userId || cents(record.amount) !== cents(payment.amount) ||
+            record.paymentMethod !== payment.paymentMethod || record.reference !== payment.reference) {
+          throw appError(409, 'PAYMENT_REQUEST_CONFLICT', 'This payment request key is already in use.')
+        }
+        return record
+      }
+    }
     if (invoice.status === 'VOID') throw appError(409, 'INVOICE_VOID', 'Payments cannot be recorded on a void invoice.')
 
     const { rows: paidRows } = await client.query(
@@ -606,11 +668,11 @@ async function createPayment(invoiceId, payment, userId) {
     }
 
     const { rows } = await client.query(
-      `INSERT INTO payments (invoice_id, amount, payment_method, reference, recorded_by)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO payments (invoice_id, amount, payment_method, reference, recorded_by, request_key)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, invoice_id AS "invoiceId", amount,
                  payment_method AS "paymentMethod", reference, paid_at AS "paidAt"`,
-      [invoiceId, payment.amount, payment.paymentMethod, payment.reference, userId],
+      [invoiceId, payment.amount, payment.paymentMethod, payment.reference, userId, payment.requestKey],
     )
     const nextPaid = paid + amount
     const nextStatus = nextPaid === total ? 'PAID' : 'PARTIALLY_PAID'
@@ -654,13 +716,28 @@ async function updatePayment(id, fields, userId) {
   return getPayment(id)
 }
 
+async function stayActivity(day) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE($1::date, CURRENT_DATE)::text AS date,
+            TO_CHAR(a.created_at, 'HH24:MI') AS time, a.action, a.description, u.username AS staff
+       FROM front_office_activity a LEFT JOIN users u ON u.id = a.user_id
+      WHERE a.action IN ('RESERVATION_CHECKED_IN', 'RESERVATION_CHECKED_OUT')
+        AND a.created_at >= COALESCE($1::date, CURRENT_DATE)
+        AND a.created_at < COALESCE($1::date, CURRENT_DATE) + 1
+      ORDER BY a.created_at, a.id`,
+    [day],
+  )
+  return rows
+}
+
 async function dashboard() {
   const [arrivals, departures, roomCounts, requestCounts, activity] = await Promise.all([
     pool.query(
       `SELECT COUNT(*)::integer AS total,
               COUNT(*) FILTER (
                 WHERE r.status = 'CONFIRMED'
-                  AND rm.status IN ('AVAILABLE', 'CLEAN', 'INSPECTED', 'RESERVED')
+                  AND rm.status IN ('AVAILABLE', 'RESERVED')
+                  AND NOT EXISTS (SELECT 1 FROM hk_cleaning_tasks ct WHERE ct.room_id=rm.id AND ct.task_status <> 'INSPECTED')
               )::integer AS ready
        FROM reservations r LEFT JOIN rooms rm ON rm.id = r.room_id
        WHERE r.check_in = CURRENT_DATE AND r.status IN ('CONFIRMED', 'CHECKED_IN')`,
@@ -674,7 +751,7 @@ async function dashboard() {
     pool.query(
       `SELECT COUNT(*)::integer AS total,
               COUNT(*) FILTER (WHERE status = 'OCCUPIED')::integer AS occupied,
-              COUNT(*) FILTER (WHERE status IN ('AVAILABLE', 'CLEAN', 'INSPECTED'))::integer AS available
+              COUNT(*) FILTER (WHERE status = 'AVAILABLE' AND NOT EXISTS (SELECT 1 FROM hk_cleaning_tasks ct WHERE ct.room_id=rooms.id AND ct.task_status <> 'INSPECTED'))::integer AS available
        FROM rooms`,
     ),
     pool.query(
@@ -698,6 +775,7 @@ async function dashboard() {
 
 module.exports = {
   dashboard,
+  stayActivity,
   listGuests,
   getGuest,
   createGuest,
@@ -712,7 +790,7 @@ module.exports = {
   checkOut,
   listRooms,
   getRoom,
-  updateRoomStatus,
+  releaseRoom,
   listRequests,
   createRequest,
   updateRequest,

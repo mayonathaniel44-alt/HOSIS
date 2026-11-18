@@ -1,113 +1,93 @@
-# HOSIS — Hotel Operations & Services Integrated System
+# HOSIS — integrated hotel operations
 
-HOSIS is a hotel operations application. This repository currently implements the **Front Office** workflow: staff sign-in, reservations, guest profiles, room status, guest requests, invoices, and payments. The React interface uses a REST API backed by PostgreSQL; it does not use demo records as a fallback.
+Front Office, Housekeeping, and Engineering repair handoffs now run in one React application and one Express API backed by one PostgreSQL database. Housekeeping uses updatable views of the existing user, room, and guest tables; it does not keep a second room inventory or send status-changing HTTP requests to another service.
 
-## Requirements
+## Install and upgrade
 
-- Node.js 20.19+ or 22.12+ (npm included; required by the Vite version in this repository)
-- PostgreSQL 14 or newer
-- A PostgreSQL database for HOSIS
-
-## Configure the database and backend
-
-Create a PostgreSQL database named `hosis` (or choose another name and use it in `DATABASE_URL`). Copy the backend environment template and edit `backend/.env`:
-
-```powershell
-Copy-Item backend\.env.example backend\.env
-```
-
-Set `DATABASE_URL` to your PostgreSQL connection string, for example:
-
-```text
-postgresql://postgres:your-password@localhost:5432/hosis
-```
-
-Replace `JWT_SECRET` with a randomly generated secret of at least 32 characters. Keep `.env` files and credentials out of version control. The default development CORS origin is `http://localhost:5173`; change `FRONTEND_ORIGINS` if your frontend uses another origin.
-
-Install the backend dependencies, apply the Front Office schema, and create a staff account:
+Requirements: Node.js 22.12+ and PostgreSQL 14+. From the main repository:
 
 ```powershell
 cd backend
-npm install
+npm ci
+# For a new installation only:
+Copy-Item .env.example .env
+```
+
+Set `DATABASE_URL` to the existing Front Office database, `JWT_SECRET` to a unique random secret of at least 32 characters, and `DB_TIME_ZONE` to the hotel's IANA time zone (default `Asia/Manila`). Set `FRONTEND_ORIGINS` for the frontend origin. Keep real secrets out of version control.
+
+Back up the database before upgrading. Then run:
+
+```powershell
 npm run db:migrate
 ```
 
-Before creating the account, add these values to `backend/.env`:
+Migrations 14 and 15 add staff profiles, Housekeeping tables, shared views, request synchronization, login-attempt tracking, and password-change session revocation. Existing Front Office IDs and tables are preserved. The migration does not seed demo users or inventory. Run it before starting the updated backend.
 
-```dotenv
-BOOTSTRAP_USERNAME=frontdesk
-BOOTSTRAP_PASSWORD=replace-with-a-unique-password-of-at-least-12-characters-and-72-utf8-bytes
-BOOTSTRAP_ROLE=FRONT_OFFICE
-```
+For a new installation, create the first administrator by setting `BOOTSTRAP_USERNAME`, `BOOTSTRAP_PASSWORD` (at least 12 characters, at most 72 UTF-8 bytes), and `BOOTSTRAP_ROLE=ADMIN` in the backend environment, then run `npm run user:create`. Remove bootstrap credentials after setup. On an existing installation, sign in with your administrator account.
 
-Then run:
+In **Administrator → Staff & access**, create Housekeeping accounts with position `SUPERVISOR`, `INSPECTOR`, or `HOUSEKEEPER`, and create `ENGINEERING` accounts for repairs. Existing Housekeeping-role accounts default to HOUSEKEEPER; administrators can change their position. Administrator and Front Office bootstrap roles remain supported.
+
+## Run
 
 ```powershell
-npm run user:create
-```
-
-The bootstrap command creates or updates the named account. Remove the `BOOTSTRAP_*` values from `.env` after account setup. `BOOTSTRAP_ROLE` may be `FRONT_OFFICE` or `ADMIN`; choose `ADMIN` to create an administrator account, then select **Administrator** on the login page to sign in with it.
-
-The migration creates the Front Office tables but does not insert room inventory. Add your hotel's real room records to the `rooms` table before assigning rooms to reservations. Do not use sample hotel or account data in a production database.
-
-## Run the application
-
-Use two terminals from the repository root.
-
-Terminal 1 — backend API:
-
-```powershell
+# Terminal 1, main repository
 cd backend
 npm run dev
-```
 
-Terminal 2 — frontend:
-
-```powershell
+# Terminal 2, main repository
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite (normally `http://localhost:5173`) and sign in with the account created above. The frontend proxies `/api` requests to `http://localhost:3000` by default. To use another API origin, set `VITE_API_BASE_URL` in `frontend/.env` (for example `http://localhost:3000/api/v1`).
+Open the Vite URL (normally http://localhost:5173). Choose Front Office, Housekeeping, Engineering, or Administrator on the shared sign-in screen. Administrators can open Housekeeping or Front Office from the console. The frontend proxies `/api` to port 3000; `VITE_API_PROXY_TARGET` changes the development target. `VITE_API_BASE_URL` can specify another deployed `/api/v1` base URL.
 
-## API
+Select **Housekeeping** on the shared sign-in screen and use your existing HOSIS credentials. Administrator accounts receive Housekeeping supervisor access in that session. Front Office accounts see read-only room status. Select **Front Office** to release inspected rooms, assign rooms, and manage reservations, or **Administrator** to manage accounts and settings.
 
-The API is versioned under `/api/v1`. `GET /api/v1/health` checks that the API and PostgreSQL are available. Authentication endpoints are under `/api/v1/auth`; operational endpoints are under `/api/v1/front-office` and require a bearer token for an active `FRONT_OFFICE` or `ADMIN` account. The Administrator console is available to active `ADMIN` accounts and provides staff/access management, hotel settings, an activity log, an operations overview, and an integration status page. Its endpoints are under `/api/v1/admin` and are protected by an administrator role check.
+All operational endpoints are under `/api/v1`: `/front-office`, `/housekeeping`, `/admin`, and `/auth`. Main responses use `{data: ...}`; Housekeeping resources retain their named response fields for the imported UI. Both clients understand the main error envelope.
 
-The Front Office is the only operational department currently integrated. Housekeeping, Engineering, Accounting, and HR roles can be assigned, but their database schemas and operational workflows are not implemented yet; they are marked as not integrated in the Administrator console. Admin role changes, account deactivation, and password resets revoke that staff member's existing sessions; the affected user must sign in again. Applying the session-hardening migration invalidates tokens issued before session-version support, so existing users will need to sign in again once after upgrading.
+## Connected workflows
 
-Front Office REST resources include:
+- A Front Office checkout marks the room DIRTY and creates or reopens its CHECKOUT cleaning task in the same transaction.
+- A supervisor assigns the task; its housekeeper starts and completes it. Completion makes a vacant room CLEAN. Occupied stayover rooms keep their occupied status.
+- A different inspector or supervisor records the inspection. Failure returns the task for recleaning. Success makes the room INSPECTED. Front Office releases it from the Rooms screen, making it AVAILABLE or RESERVED if a confirmed reservation already holds it. Front Office assigns ready rooms and check-in or checkout updates occupancy automatically.
+- Room-linked Front Office guest requests appear in Housekeeping. Housekeeping owns assignment, stock approval, and completion; changes return to Front Office in the same transaction. Roomless requests remain Front Office work.
+- Room-condition reports and readiness notices appear on the Front Office Rooms page and can be acknowledged.
+- Supervisors can take an unoccupied/unreserved room out of service through maintenance. Engineering records the repair. A supervisor releases a repaired room to DIRTY and a post-repair cleaning task; another outstanding blocking repair prevents release.
 
-- `GET /dashboard`
-- `GET`, `POST`, `GET /:id`, `PATCH /:id`, and `DELETE /:id` on `/guests`
-- `GET`, `POST`, `GET /:id`, `PATCH /:id`, and `DELETE /:id` on `/reservations`, plus `/reservations/:id/check-in` and `/reservations/:id/check-out`
-- `GET /rooms`, `GET /rooms/:id`, and `PATCH /rooms/:id/status`
-- `GET`, `POST`, and `PATCH /:id` on `/guest-requests`
-- `GET`, `POST`, `GET /:id`, and `PATCH /:id` on `/invoices`
-- `GET`, `POST` on `/invoices/:id/payments`, and `GET`, `PATCH /:id` on `/payments`
+Check-in requires an assigned, released room and the scheduled arrival date. For an early/late arrival, update the reservation dates before check-in. Password resets and logout revoke existing tokens; logout currently signs that account out on all devices. Temporary Housekeeping passwords must be changed before operational access.
 
-Administrator REST resources include `GET /admin/dashboard`, `GET` and `POST /admin/staff`, `PATCH /admin/staff/:id`, `GET /admin/activity`, and `GET`/`PUT /admin/settings`.
+`DB_TIME_ZONE` is the authoritative server time zone. The administration settings display it read-only; change the server environment and restart to change it. Front Office date inputs use the server time zone returned with the session.
 
-## Useful commands
+## Secure Wi-Fi setup
 
-Run these in the relevant project directory:
+The development server on port 5173 serves HTTP. Use synthetic data when testing it over Wi-Fi. For real staff and guest data, build the frontend and configure `HOSIS_TLS_CERT` and `HOSIS_TLS_KEY` in the backend environment with paths to a certificate and private key trusted by the connecting devices. Set `API_HOST` to the host's Wi-Fi address, `PORT` to the desired HTTPS port, and `FRONTEND_ORIGINS` to the exact HTTPS origin including the port if applicable. Start the backend with `npm start`. It serves the built app and API together over HTTPS and keeps the session token in an HttpOnly cookie. Stop the development server when using this setup.
 
-```sh
-# frontend/
+The backend binds to loopback by default. Give its `DATABASE_URL` a restricted PostgreSQL login with the necessary table, view, and sequence privileges. Provide the migration account separately through `MIGRATION_DATABASE_URL` or the ignored backend `.env.local` file. The runtime reads `.env`. An explicitly supplied `DATABASE_URL` can still be used to migrate an isolated test database.
+
+## Validate
+
+```powershell
+# frontend
 npm run build
 npm run lint
-npm run preview
+npm audit
 
-# backend/
+# backend: pure tests (database integration test is skipped without TEST_DATABASE_URL)
 npm test
+npm audit
 ```
 
-## Project layout
+For the full database-backed suite, provision a **separate local database named `hosis_test`**, apply the main migrations to it using an explicitly scoped `DATABASE_URL`, then set `TEST_DATABASE_URL` to that test database and run `npm test`. The suite inserts synthetic test records and never reads the normal application database URL. It checks the full room cycle, requests/stock, concurrent claims and schedules, repairs, role denial, password replacement, logout revocation, and throttling.
 
-```text
-backend/          Express REST API, authentication, PostgreSQL models and services
-database/schema/  PostgreSQL schema migration
-docs/             Requirements, database, and project documentation
-frontend/         React and Vite Front Office interface
-```
+## Existing standalone Housekeeping project
+
+The sibling `HOSIS-Housekeeping/hosis-housekeeping` is retained as a standalone project and has also received session, concurrency, validation, password-policy, and dependency fixes. Its test suite now refuses to run without an explicit local `TEST_DATABASE_URL` whose database name begins with `hosis_test`. Its demo credential is `password12345` for synthetic development data only.
+
+Historical records from that separate database are **not automatically copied** into the canonical HOSIS database. Importing real standalone staff, room, and guest data needs explicit ID mapping and duplicate review. Do not load its standalone shared-table SQL or demo seed into the main database.
+
+The old `integrations/housekeeping/backend` server/app/migration entry points delegate to the main backend. Its separate bootstrap/demo commands are disabled. The old HTTP connector helpers remain as reference-only code and isolated tests; `HOSIS_API_BASE_URL` and `HOSIS_INTEGRATION_TOKEN` are no longer used by the running app.
+
+## Administrator credentials at Front Office sign-in
+
+An administrator may select Front Office at sign-in using the same configured username and password. This creates a Front Office-scoped session; administrator endpoints remain forbidden for that session, including after refresh or password replacement. Select Administrator to open the administrator console. Department-only accounts cannot elevate their role.

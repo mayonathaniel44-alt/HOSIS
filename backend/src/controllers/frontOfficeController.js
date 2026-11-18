@@ -14,6 +14,7 @@ const search = (req) => typeof req.query.search === 'string' ? req.query.search.
 
 module.exports = {
   dashboard: controller(() => service.dashboard()),
+  stayActivity: controller((req) => service.stayActivity(req.query.date)),
   listGuests: controller((req) => service.listGuests(search(req))),
   getGuest: controller((req) => service.getGuest(id(req))),
   createGuest: controller((req) => service.createGuest(req.body, userId(req)), 201),
@@ -28,7 +29,7 @@ module.exports = {
   checkOut: controller((req) => service.checkOut(id(req), userId(req))),
   listRooms: controller((req) => service.listRooms(search(req))),
   getRoom: controller((req) => service.getRoom(id(req))),
-  updateRoom: controller((req) => service.updateRoom(id(req), req.body, userId(req))),
+  releaseRoom: controller((req) => service.releaseRoom(id(req), req.body, userId(req))),
   listRequests: controller((req) => service.listRequests(search(req))),
   createRequest: controller((req) => service.createRequest(req.body, userId(req)), 201),
   updateRequest: controller((req) => service.updateRequest(id(req), req.body, userId(req))),

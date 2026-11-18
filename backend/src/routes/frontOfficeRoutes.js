@@ -8,6 +8,7 @@ const router = express.Router()
 router.use(authenticate, authorize('FRONT_OFFICE', 'ADMIN'))
 
 router.get('/dashboard', controller.dashboard)
+router.get('/reports/stay-activity', controller.stayActivity)
 
 router.route('/guests')
   .get(controller.listGuests)
@@ -31,7 +32,7 @@ router.post('/reservations/:id/check-out', requireId, controller.checkOut)
 
 router.get('/rooms', controller.listRooms)
 router.get('/rooms/:id', requireId, controller.getRoom)
-router.patch('/rooms/:id/status', requireId, requireBody, controller.updateRoom)
+router.patch('/rooms/:id/status', requireId, requireBody, controller.releaseRoom)
 
 router.route('/guest-requests')
   .get(controller.listRequests)

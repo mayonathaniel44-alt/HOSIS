@@ -55,7 +55,7 @@ async function dashboard() {
 
 async function listStaff() {
   const { rows } = await pool.query(
-    `SELECT id, username, role, is_active AS "isActive",
+    `SELECT id, username, role, position, first_name AS "firstName", last_name AS "lastName", email, is_active AS "isActive",
             created_at AS "createdAt", updated_at AS "updatedAt"
      FROM users
      ORDER BY is_active DESC, role, username`,
@@ -66,11 +66,11 @@ async function listStaff() {
 async function createStaff(staff, userId) {
   return transaction(async (client) => {
     const { rows } = await client.query(
-      `INSERT INTO users (username, password_hash, role)
-       VALUES ($1, $2, $3)
+      `INSERT INTO users (username, password_hash, role,first_name,last_name,email,position)
+       VALUES ($1, $2, $3,$4,$5,$6,$7)
        RETURNING id, username, role, is_active AS "isActive",
                  created_at AS "createdAt", updated_at AS "updatedAt"`,
-      [staff.username.toLowerCase(), staff.passwordHash, staff.role],
+      [staff.username.toLowerCase(), staff.passwordHash, staff.role,staff.firstName || staff.username,staff.lastName || '',staff.email || null,staff.position || 'HOUSEKEEPER'],
     )
     await recordActivity(client, userId, 'ADMIN_STAFF_CREATED', `Created ${staff.role} account "${rows[0].username}".`)
     return rows[0]
@@ -123,6 +123,9 @@ async function updateStaff(id, fields, userId) {
       assignments.push(`password_hash = $${values.length}`)
       changedFields.push('password')
     }
+    for (const [key,column] of Object.entries({firstName:'first_name',lastName:'last_name',email:'email',position:'position'})) {
+      if (Object.hasOwn(fields,key)) { values.push(fields[key] || (key==='email'?null:'')); assignments.push(`${column} = $${values.length}`); changedFields.push(key) }
+    }
     values.push(id)
     const { rows } = await client.query(
       `UPDATE users SET ${assignments.join(', ')},
@@ -146,7 +149,7 @@ async function updateStaff(id, fields, userId) {
 async function listActivity(limit) {
   const { rows } = await pool.query(
     `SELECT a.id, a.action, a.description,
-            CASE WHEN a.action LIKE 'ADMIN_%' THEN 'Administration' ELSE 'Front Office' END AS module,
+            CASE WHEN a.action LIKE 'ADMIN_%' THEN 'Administration' WHEN a.action LIKE 'HOUSEKEEPING_%' THEN 'Housekeeping' ELSE 'Front Office' END AS module,
             a.created_at AS "createdAt", u.username AS "actor"
      FROM front_office_activity a
      LEFT JOIN users u ON u.id = a.user_id

@@ -17,7 +17,7 @@ router.post('/login', async (req, res) => {
   if (!username || !password) {
     throw new HttpError(400, 'Email and password are required.');
   }
-  if (typeof username !== 'string' || typeof password !== 'string' || username.length > 100 || password.length > 72) {
+  if (typeof username !== 'string' || typeof password !== 'string' || username.length > 100 || Buffer.byteLength(password, 'utf8') > 72) {
     throw new HttpError(401, 'Incorrect email or password.');
   }
   await checkLoginAllowed(req);
@@ -108,18 +108,18 @@ router.get('/account', authenticate, async (req, res) => {
   res.json({ account: rows[0] });
 });
 
-const MIN_PASSWORD = 8;
+const MIN_PASSWORD = 12;
 
 // POST /api/auth/password  { currentPassword, newPassword }
 // Staff change their own password. The current password must be given, and
 // wrong attempts count toward the same lockout as the login page.
 router.post('/password', authenticate, async (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
-  if (!currentPassword || !newPassword) {
+  if (typeof currentPassword !== 'string' || Buffer.byteLength(currentPassword,'utf8') > 72 || !currentPassword || !newPassword) {
     throw new HttpError(400, 'Current and new password are required.');
   }
-  if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD || newPassword.length > 72) {
-    throw new HttpError(400, `The new password must be ${MIN_PASSWORD} to 72 characters long.`);
+  if (typeof newPassword !== 'string' || newPassword.length < 12 || Buffer.byteLength(newPassword,'utf8') > 72) {
+    throw new HttpError(400, `The new password must be ${MIN_PASSWORD} characters and at most 72 UTF-8 bytes.`);
   }
   // Same lockout key as the login page: this address plus this account.
   const attempt = { ip: req.ip, body: { username: req.user.username } };

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { adminApi } from './services/api'
+import { useCallback, useEffect, useState } from 'react'
+import { adminApi, authApi } from './services/api'
+import useVisibleRefresh from './useVisibleRefresh'
 import './AdminDashboard.css'
 
 const staffRoles = [
@@ -14,8 +15,8 @@ const staffRoles = [
 
 const departments = [
   { name: 'Front Office', status: 'Operational', detail: 'Reservations, guests, rooms, requests, and billing are connected.' },
-  { name: 'Housekeeping', status: 'Not integrated', detail: 'Staff access can be assigned now; operational workflows are not connected yet.' },
-  { name: 'Engineering', status: 'Not integrated', detail: 'Staff access can be assigned now; operational workflows are not connected yet.' },
+  { name: 'Housekeeping', status: 'Operational', detail: 'Shared rooms, cleaning, inspection, requests, notifications and staff sessions.' },
+  { name: 'Engineering', status: 'Operational', detail: 'Repair requests and repair completion are connected to Housekeeping.' },
   { name: 'Accounting & Finance', status: 'Not integrated', detail: 'Finance staff roles are available; reporting workflows are not connected yet.' },
   { name: 'Human Resources', status: 'Not integrated', detail: 'HR staff roles are available; employee workflows are not connected yet.' },
 ]
@@ -32,7 +33,7 @@ function StatusTag({ tone, children }) {
   return <span className={`status status-${tone}`}><i />{children}</span>
 }
 
-export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut }) {
+export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHousekeeping, onSignOut }) {
   const [section, setSection] = useState('Overview')
   const [overview, setOverview] = useState(null)
   const [staff, setStaff] = useState([])
@@ -44,12 +45,21 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [showNewStaff, setShowNewStaff] = useState(false)
-  const [newStaff, setNewStaff] = useState({ username: '', password: '', role: 'FRONT_OFFICE' })
+  const [newStaff, setNewStaff] = useState({ username: '', password: '', role: 'FRONT_OFFICE', position:'HOUSEKEEPER', firstName:'',lastName:'',email:'' })
   const [staffSearch, setStaffSearch] = useState('')
   const [staffRoleFilter, setStaffRoleFilter] = useState('ALL')
   const [staffStatusFilter, setStaffStatusFilter] = useState('ALL')
   const [passwordResetId, setPasswordResetId] = useState(null)
   const [newPassword, setNewPassword] = useState('')
+
+  const refreshOverview = useCallback(async (isActive) => {
+    const token = authApi.getToken()
+    if (!token) return
+    const summary = await adminApi.dashboard()
+    if (isActive() && authApi.getToken() === token) setOverview(summary)
+  }, [])
+
+  useVisibleRefresh(section === 'Overview' && !loading, refreshOverview)
 
   useEffect(() => {
     let active = true
@@ -82,12 +92,10 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
       }
     }
     if (!load) {
-      setLoading(false)
+      queueMicrotask(()=>{if(active) setLoading(false)})
       return () => { active = false }
     }
-    setLoading(true)
-    setError('')
-    load().catch((requestError) => {
+    Promise.resolve().then(()=>{if(active) {setLoading(true);setError('')} return load()}).catch((requestError) => {
       if (active) setError(requestError.message)
     }).finally(() => {
       if (active) setLoading(false)
@@ -116,7 +124,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
     event.preventDefault()
     const succeeded = await runAction(() => adminApi.createStaff(newStaff), 'Staff account created.')
     if (succeeded) {
-      setNewStaff({ username: '', password: '', role: 'FRONT_OFFICE' })
+      setNewStaff({ username: '', password: '', role: 'FRONT_OFFICE', position:'HOUSEKEEPER', firstName:'',lastName:'',email:'' })
       setShowNewStaff(false)
     }
   }
@@ -164,7 +172,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
           <div className="admin-brand-caption">ADMIN CONSOLE</div>
         </div>
         <div className="sidebar-label">ADMINISTRATION</div>
-        <nav className="side-nav admin-nav" aria-label="Administrator navigation">
+        <nav className="side-nav admin-nav" aria-label="Administrator navigation"><button className="nav-item" onClick={onOpenHousekeeping}>Housekeeping</button>
           {['Overview', 'Staff & access', 'Audit log', 'Hotel settings', 'Integrations'].map((item) => (
             <button key={item} className={`nav-item ${section === item ? 'nav-active' : ''}`} aria-current={section === item ? 'page' : undefined} onClick={() => { setSection(item); setError(''); setNotice('') }}>
               <i className="admin-nav-mark" aria-hidden="true">{item === 'Overview' ? '⌂' : item === 'Staff & access' ? '♙' : item === 'Audit log' ? '≡' : item === 'Hotel settings' ? '⚙' : '◇'}</i>
@@ -207,7 +215,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
               <div className="stats-grid admin-stat-grid">
                 <article className="surface stat-card"><div className="stat-top"><span>ACTIVE STAFF</span><span className="stat-icon stat-lavender">♙</span></div><div className="stat-value">{activeStaff}</div><span className="stat-note">{overview?.staff?.total ?? '—'} total accounts</span></article>
                 <article className="surface stat-card"><div className="stat-top"><span>ARRIVALS TODAY</span><span className="stat-icon stat-gold">↗</span></div><div className="stat-value">{frontOffice?.arrivals?.total ?? '—'}</div><span className="stat-note">{frontOffice?.arrivals?.ready ?? 0} rooms ready</span></article>
-                <article className="surface stat-card"><div className="stat-top"><span>ROOM OCCUPANCY</span><span className="stat-icon stat-mint">⌂</span></div><div className="stat-value">{occupancy}</div><span className="stat-note">{roomOccupied} of {roomTotal} rooms</span></article>
+                <article className="surface stat-card"><div className="stat-top"><span>ROOM OCCUPANCY</span><span className="stat-icon stat-mint">⌂</span></div><div className="stat-value">{occupancy}</div><span className="stat-note">{roomOccupied} of {roomTotal} occupied · {frontOffice?.rooms?.available ?? '—'} available</span></article>
                 <article className="surface stat-card"><div className="stat-top"><span>ACTIVITY · 24 HOURS</span><span className="stat-icon stat-peach">≡</span></div><div className="stat-value">{overview?.activity?.last24Hours ?? '—'}</div><span className="stat-note">{overview?.staff?.admins ?? '—'} active administrators</span></article>
               </div>
               <div className="dashboard-grid admin-overview-grid">
@@ -233,7 +241,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
                   </div>
                 </section>
               </div>
-              <div className="info-banner admin-info-strip"><span className="info-icon">✦</span><p><strong>Future integrations.</strong> Housekeeping, Engineering, Accounting, and HR access can be assigned now. Their operational services will appear here after those modules are integrated.</p></div>
+              <div className="info-banner admin-info-strip"><span className="info-icon">✦</span><p><strong>Connected operations.</strong> Front Office and Housekeeping share rooms and requests. Engineering can record repairs. Accounting and HR workflows are planned.</p></div>
             </>
           )}
 
@@ -249,6 +257,10 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
                   <div className="admin-form-grid">
                     <label>Username<input required maxLength={80} autoComplete="off" value={newStaff.username} onChange={(event) => setNewStaff({ ...newStaff, username: event.target.value })} /></label>
                     <label>Initial password<input required minLength={12} maxLength={72} type="password" autoComplete="new-password" value={newStaff.password} onChange={(event) => setNewStaff({ ...newStaff, password: event.target.value })} /></label>
+                    <label>First name<input value={newStaff.firstName} onChange={e=>setNewStaff({...newStaff,firstName:e.target.value})} /></label>
+                    <label>Last name<input value={newStaff.lastName} onChange={e=>setNewStaff({...newStaff,lastName:e.target.value})} /></label>
+                    <label>Email<input type="email" value={newStaff.email} onChange={e=>setNewStaff({...newStaff,email:e.target.value})} /></label>
+                    {newStaff.role==='HOUSEKEEPING' && <label>Position<select value={newStaff.position} onChange={e=>setNewStaff({...newStaff,position:e.target.value})}>{['HOUSEKEEPER','INSPECTOR','SUPERVISOR'].map(p=><option key={p}>{p}</option>)}</select></label>}
                     <label>Department role<select value={newStaff.role} onChange={(event) => setNewStaff({ ...newStaff, role: event.target.value })}>{staffRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                   </div>
                   <div className="admin-form-footer"><span>Use at least 12 characters (max 72 UTF-8 bytes). Accounts are active; password resets revoke existing sessions.</span><button className="button button-primary" disabled={busy}>Create account</button></div>
@@ -268,7 +280,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
                     const isSelf = String(member.username).toLowerCase() === username.toLowerCase()
                     return (
                       <tr key={member.id}>
-                        <td><strong>{member.username}</strong>{isSelf && <small className="admin-self-label">You</small>}</td>
+                        <td><strong>{member.username}</strong>{member.role==='HOUSEKEEPING' && <select aria-label={`Position for ${member.username}`} value={member.position} disabled={busy} onChange={e=>runAction(()=>adminApi.updateStaff(member.id,{position:e.target.value}),'Position updated.')}>{['HOUSEKEEPER','INSPECTOR','SUPERVISOR'].map(p=><option key={p}>{p}</option>)}</select>}{isSelf && <small className="admin-self-label">You</small>}</td>
                         <td><select aria-label={`Role for ${member.username}`} value={member.role} disabled={busy || isSelf} onChange={(event) => runAction(() => adminApi.updateStaff(member.id, { role: event.target.value }), 'Staff role updated.')}>{staffRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
                         <td><span className={member.isActive ? 'admin-account-active' : 'admin-account-inactive'}>{member.isActive ? 'Active' : 'Inactive'}</span></td>
                         <td>{dateTime(member.createdAt, settings?.timeZone)}</td>
@@ -305,7 +317,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onSignOut 
               <div className="page-heading admin-page-heading"><div><span className="eyebrow">PROPERTY CONFIGURATION</span><h1>Hotel settings</h1><p>Maintain basic property details used by the management console.</p></div></div>
               {settings && <form className="surface admin-panel admin-settings-form" onSubmit={saveSettings}>
                 <label>Hotel name<input required maxLength={120} value={settings.hotelName} onChange={(event) => setSettings({ ...settings, hotelName: event.target.value })} /></label>
-                <label>Time zone<input required maxLength={80} placeholder="Asia/Manila" value={settings.timeZone} onChange={(event) => setSettings({ ...settings, timeZone: event.target.value })} /><small>Use an IANA time zone, for example Asia/Manila.</small></label>
+                <label>Time zone<input readOnly value={settings.timeZone} /><small>Configured by the server for all hotel operations.</small></label>
                 <label>Support email<input type="email" maxLength={254} value={settings.supportEmail || ''} onChange={(event) => setSettings({ ...settings, supportEmail: event.target.value })} /></label>
                 <label>Support phone<input type="tel" maxLength={40} value={settings.supportPhone || ''} onChange={(event) => setSettings({ ...settings, supportPhone: event.target.value })} /></label>
                 <div className="admin-form-footer"><span>Last updated {dateTime(settings.updatedAt, settings.timeZone)}</span><button className="button button-primary" disabled={busy}>Save settings</button></div>

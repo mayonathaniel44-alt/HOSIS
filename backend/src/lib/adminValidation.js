@@ -43,8 +43,16 @@ function staffRole(role) {
   return role
 }
 
+function staffProfile(body) {
+ const profile = {}
+ for (const key of ['firstName','lastName','email']) if (Object.hasOwn(body,key)) profile[key]=optionalText(body[key],key,key==='email'?254:100) || ''
+ if (profile.email && !emailPattern.test(profile.email)) throw appError(400,'INVALID_EMAIL','Enter a valid staff email.')
+ if (Object.hasOwn(body,'position')) { if (!['HOUSEKEEPER','INSPECTOR','SUPERVISOR'].includes(body.position)) throw appError(400,'INVALID_POSITION','Choose a supported housekeeping position.'); profile.position=body.position }
+ return profile
+}
+
 function staffUpdate(body) {
-  const fields = {}
+  const fields = staffProfile(body)
   if (Object.hasOwn(body, 'role')) fields.role = staffRole(body.role)
   if (Object.hasOwn(body, 'isActive')) {
     if (typeof body.isActive !== 'boolean') {
@@ -87,6 +95,7 @@ function hotelSettings(body) {
 }
 
 module.exports = {
+  staffProfile,
   staffUsername,
   staffPassword,
   staffRole,

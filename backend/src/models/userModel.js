@@ -2,7 +2,8 @@ const pool = require('../config/database')
 
 async function findByUsername(username) {
   const { rows } = await pool.query(
-    `SELECT id, username, password_hash, role, is_active,
+    `SELECT id, username, password_hash, role, is_active, first_name AS "firstName", last_name AS "lastName", email, position,
+            EXISTS(SELECT 1 FROM hk_password_must_change m WHERE m.user_id=users.id) AS "mustChangePassword",
             session_version AS "sessionVersion"
      FROM users
      WHERE LOWER(username) = LOWER($1)`,
@@ -13,7 +14,8 @@ async function findByUsername(username) {
 
 async function findById(id) {
   const { rows } = await pool.query(
-    `SELECT id, username, role, is_active,
+    `SELECT id, username, role, is_active, first_name AS "firstName", last_name AS "lastName", email, position,
+            EXISTS(SELECT 1 FROM hk_password_must_change m WHERE m.user_id=users.id) AS "mustChangePassword",
             session_version AS "sessionVersion"
      FROM users WHERE id = $1`,
     [id],

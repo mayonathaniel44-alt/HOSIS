@@ -1,24 +1,18 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const TOKEN_KEY = 'hosis.accessToken'
 const USER_KEY = 'hosis.user'
-let token = null
-
 function storedToken() {
-  if (token) return token
-  token = window.localStorage.getItem(TOKEN_KEY) || window.sessionStorage.getItem(TOKEN_KEY)
-  return token
+  return window.localStorage.getItem(TOKEN_KEY) || window.sessionStorage.getItem(TOKEN_KEY)
 }
 
 function saveSession(session, remember) {
   clearSession()
-  token = session.token
   const storage = remember ? window.localStorage : window.sessionStorage
   storage.setItem(TOKEN_KEY, session.token)
   storage.setItem(USER_KEY, JSON.stringify(session.user))
 }
 
 function clearSession() {
-  token = null
   window.localStorage.removeItem(TOKEN_KEY)
   window.localStorage.removeItem(USER_KEY)
   window.sessionStorage.removeItem(TOKEN_KEY)
@@ -36,11 +30,15 @@ function savedUser() {
   }
 }
 
+export class ApiError extends Error {
+  constructor(message, status, code) { super(message); this.name='ApiError'; this.status=status; this.code=code }
+}
+
 async function request(path, options = {}) {
   const headers = new Headers(options.headers || {})
   if (options.body !== undefined) headers.set('Content-Type', 'application/json')
   const accessToken = storedToken()
-  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+  if (accessToken && path !== '/auth/login') headers.set('Authorization', `Bearer ${accessToken}`)
 
   let response
   try {
@@ -49,7 +47,7 @@ async function request(path, options = {}) {
     throw new Error('Can’t reach the HOSIS API. Check that the backend is running and try again.')
   }
 
-  if (response.status === 401 && path !== '/auth/login') {
+  if (response.status === 401 && path !== '/auth/login' && accessToken && storedToken() === accessToken) {
     clearSession()
     window.dispatchEvent(new Event('hosis:unauthorized'))
   }
@@ -63,9 +61,10 @@ async function request(path, options = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(body.error?.message || `Request failed (${response.status}).`)
+    throw new ApiError(body?.error?.message || `Request failed (${response.status}).`,response.status,body?.error?.code)
   }
-  return body.data
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ApiError('The API returned an invalid response.', response.status, 'INVALID_RESPONSE')
+  return Object.hasOwn(body, 'data') ? body.data : body
 }
 
 function json(method, value) {
@@ -73,17 +72,21 @@ function json(method, value) {
 }
 
 export const authApi = {
-  login: (username, password, role) => request('/auth/login', json('POST', { username, password, role })),
+  login: (username, password, role, remember) => request('/auth/login', json('POST', { username, password, role, remember })),
   me: () => request('/auth/me'),
   logout: () => request('/auth/logout', { method: 'POST' }),
   saveSession,
   clearSession,
   getToken: storedToken,
+  isRemembered: () => !!window.localStorage.getItem(TOKEN_KEY),
   getSavedUser: savedUser,
 }
 
 export const frontOfficeApi = {
+  notifications: () => request('/housekeeping/notifications?unread=1'),
+  acknowledge: (id) => request(`/housekeeping/notifications/${id}/read`,{method:'PATCH'}),
   dashboard: () => request('/front-office/dashboard'),
+  stayActivity: (date) => request(`/front-office/reports/stay-activity?date=${encodeURIComponent(date)}`),
   guests: (search = '') => request(`/front-office/guests${search ? `?search=${encodeURIComponent(search)}` : ''}`),
   createGuest: (guest) => request('/front-office/guests', json('POST', guest)),
   updateGuest: (id, fields) => request(`/front-office/guests/${id}`, json('PATCH', fields)),
@@ -96,7 +99,7 @@ export const frontOfficeApi = {
   checkOut: (id) => request(`/front-office/reservations/${id}/check-out`, { method: 'POST' }),
   rooms: (search = '') => request(`/front-office/rooms${search ? `?search=${encodeURIComponent(search)}` : ''}`),
   room: (id) => request(`/front-office/rooms/${id}`),
-  updateRoomStatus: (id, status) => request(`/front-office/rooms/${id}/status`, json('PATCH', { status })),
+  releaseRoom: (id) => request(`/front-office/rooms/${id}/status`, json('PATCH', { status: 'AVAILABLE' })),
   requests: (search = '') => request(`/front-office/guest-requests${search ? `?search=${encodeURIComponent(search)}` : ''}`),
   createRequest: (guestRequest) => request('/front-office/guest-requests', json('POST', guestRequest)),
   updateRequest: (id, fields) => request(`/front-office/guest-requests/${id}`, json('PATCH', fields)),
