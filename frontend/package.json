@@ -6,16 +6,20 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
+    "lint": "cd .. && eslint --config frontend/eslint.config.js frontend \"departments/*/frontend/**/*.{js,jsx}\" departments/engineering/public",
     "preview": "vite preview",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "dompurify": "3.4.18",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
+    "lucide-react": "1.74.0",
     "qrcode": "1.5.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-is": "19.3.1",
+    "recharts": "3.10.1",
     "write-excel-file": "^4.1.1"
   },
   "devDependencies": {

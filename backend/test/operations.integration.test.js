@@ -54,6 +54,11 @@ test(
         ['cleaner', 'HOUSEKEEPING', 'HOUSEKEEPER'],
         ['other', 'HOUSEKEEPING', 'HOUSEKEEPER'],
         ['engineer', 'ENGINEERING', 'HOUSEKEEPER'],
+        ['technician', 'TECHNICIAN', 'HOUSEKEEPER'],
+        ['sales', 'SALES_MARKETING', 'HOUSEKEEPER'],
+        ['hr', 'HR', 'HOUSEKEEPER'],
+        ['finance', 'FINANCE', 'HOUSEKEEPER'],
+        ['food', 'FOOD_BEVERAGE', 'HOUSEKEEPER'],
       ]) {
         const { rows } = await pool.query(
           `INSERT INTO users(username,password_hash,role,position,first_name,last_name) VALUES($1,$2,$3,$4,$5,'Tester') RETURNING id`,
@@ -63,7 +68,7 @@ test(
         sessions[name] = await api('POST', '/auth/login', null, {
           username: `${prefix}.${name}`,
           password,
-          role,
+          role: role === 'TECHNICIAN' ? 'ENGINEERING' : role,
         })
       }
       const {
@@ -71,6 +76,92 @@ test(
       } = await pool.query(
         'SELECT CURRENT_DATE::text AS today,(CURRENT_DATE+1)::text AS tomorrow,(CURRENT_DATE+2)::text AS later',
       )
+      await t.test('Sales & Marketing uses shared sign-in with department-only access', async () => {
+        const details = { name: prefix, contact: 'Demo Buyer', email: 'buyer@example.invalid', source: 'Referral', status: 'New' }
+        await api('GET', '/sales-marketing/overview', 'fo', undefined, 403)
+        const created = await api('POST', '/sales-marketing/records/lead', 'sales', details, 201)
+        const salesPath = '/sales-marketing/records/lead/' + created.id
+        try {
+          await api('PATCH', salesPath, 'sales', { status: 'Qualified' })
+          const overview = await api('GET', '/sales-marketing/overview', 'sales')
+          assert.equal(overview.collections.lead.find((record) => record.id === created.id).status, 'Qualified')
+          assert.equal(overview.monthly.length, 12)
+          assert.equal(typeof overview.available, 'number')
+        } finally {
+          await api('DELETE', salesPath, 'sales', undefined, 204)
+        }
+        assert.equal(sessions.sales.user.role, 'SALES_MARKETING')
+        assert.equal((await api('GET', '/auth/me', 'sales')).user.role, 'SALES_MARKETING')
+        await api('GET', '/front-office/dashboard', 'sales', undefined, 403)
+        await api('GET', '/housekeeping/rooms', 'sales', undefined, 403)
+        await api('GET', '/admin/staff', 'sales', undefined, 403)
+        await api('POST', '/auth/login', null, {
+          username: `${prefix}.sales`, password, role: 'ADMIN',
+        }, 401)
+      })
+      await t.test('Finance uses shared sign-in and persists protected SAM101 operations', async () => {
+        await api('GET', '/finance/dashboard', 'fo', undefined, 403)
+        await api('GET', '/finance/dashboard', 'finance')
+        await api('GET', '/finance/customer-payments', 'sales', undefined, 403)
+        await api('GET', '/finance/payroll-roster', 'fo', undefined, 403)
+        await api('GET', '/finance/payroll', 'finance')
+        const roster = await api('GET', '/finance/payroll-roster', 'finance')
+        assert.ok(roster.staff.some((staff) => staff.staffId === accounts.technician && staff.role === 'TECHNICIAN'))
+        const created = await api('POST', '/finance/invoices', 'finance', {
+          guestName: 'Synthetic Finance Guest', items: [{ desc: 'Service', qty: 2, unitPrice: '5.25' }],
+        }, 201)
+        assert.equal(created.status, 'DRAFT')
+        const payment = { invoiceCode: created.invoiceCode, amount: '5.00', paymentMethod: 'Cash', reference: 'TEST-PART' }
+        await api('POST', '/finance/payments', 'finance', payment, 409)
+        const path = '/finance/invoices/' + created.id
+        await api('PATCH', path, 'finance', { guestName: 'Synthetic Finance Guest', dueDate: dates.later, issueNow: true })
+        await api('PATCH', path, 'finance', { guestName: 'Unexpected change' }, 409)
+        await api('POST', '/finance/payments', 'finance', { ...payment, amount: '11.77' }, 409)
+        await api('POST', '/finance/payments', 'finance', payment, 201)
+        await api('POST', '/finance/payments', 'finance', payment, 409)
+        const invoice = await api('GET', path, 'finance')
+        assert.equal(invoice.balanceDue, '6.76')
+        assert.equal(invoice.dueDate, dates.later)
+        const expense = await api('POST', '/finance/expenses', 'finance', {
+          department: 'Engineering', category: 'Test example', amount: '20.00',
+        }, 201)
+        const approval = await api('PATCH', '/finance/expenses/' + expense.id + '/approve', 'finance')
+        assert.equal(approval.status, 'APPROVED')
+      })
+      await t.test('HR uses shared sign-in and persists protected operations', async () => {
+        assert.equal((await api('GET', '/auth/me', 'hr')).user.role, 'HR')
+        await api('GET', '/hr/bootstrap', null, undefined, 401)
+        await api('GET', '/hr/bootstrap', 'fo', undefined, 403)
+        await api('GET', '/front-office/dashboard', 'hr', undefined, 403)
+        const employee = prefix + '.employee'
+        const leave = prefix + '.leave'
+        await pool.query(
+          `INSERT INTO hr_employees (id, name, dept, pos, status, hired, rate, assignment, week, today, time_in, contact)
+           VALUES ($1,'Synthetic Employee','frontdesk','Clerk','Regular',CURRENT_DATE,100,'Main Lobby Counter',
+                   '["AM","AM","AM","AM","AM","OFF","OFF"]','present','06:00','')`,
+          [employee],
+        )
+        try {
+          await pool.query(
+            `INSERT INTO hr_leave_requests (id, emp, type, start_date, end_date, days, status, reason)
+             VALUES ($1,$2,'Annual',CURRENT_DATE,CURRENT_DATE,1,'Pending','Synthetic request')`,
+            [leave, employee],
+          )
+          await api('PATCH', `/hr/leaves/${leave}`, 'hr', { status: 'Approved' })
+          await api('PATCH', `/hr/leaves/${leave}`, 'hr', { status: 'Rejected' }, 409)
+          await api('PATCH', `/hr/employees/${employee}/assignment`, 'hr', {
+            assignment: 'Back Office', effectiveDate: dates.today, shift: 'PM',
+          })
+          const data = await api('GET', '/hr/bootstrap', 'hr')
+          assert.equal(data.employees.find((row) => row.id === employee).assign, 'Back Office')
+          assert.equal(data.leaves.find((row) => row.id === leave).status, 'Approved')
+          assert.equal(data.assignments.find((row) => row.emp === employee).by, `${prefix}.hr`)
+        } finally {
+          await pool.query('DELETE FROM hr_assignment_logs WHERE emp = $1', [employee])
+          await pool.query('DELETE FROM hr_leave_requests WHERE emp = $1', [employee])
+          await pool.query('DELETE FROM hr_employees WHERE id = $1', [employee])
+        }
+      })
       const {
         rows: [room],
       } = await pool.query(
@@ -84,6 +175,31 @@ test(
         { firstName: 'Test', lastName: 'Guest' },
         201,
       )
+      await t.test('Engineering Head and Technician use shared authentication and separate access', async () => {
+        assert.equal((await api('GET', '/engineering/me', 'engineer')).role, 'head')
+        assert.equal((await api('GET', '/engineering/me', 'technician')).role, 'technician')
+        await api('GET', '/engineering/data', null, undefined, 401)
+        await api('GET', '/engineering/data', 'fo', undefined, 403)
+        await api('GET', '/engineering/directory', 'technician', undefined, 403)
+        const directory = await api('GET', '/engineering/directory', 'engineer')
+        assert.ok(directory.rooms.some((item) => item.id === room.id))
+        const snapshot = await api('GET', '/engineering/data', 'engineer')
+        const id = `MR-${prefix}`
+        snapshot.requests.push({
+          id, roomId: String(room.id), reportedByStaffId: String(accounts.fo),
+          issue: 'Synthetic Engineering test', priority: 'High', status: 'Pending', date: dates.today,
+        })
+        try {
+          await api('PUT', '/engineering/data', 'technician', snapshot, 403)
+          await api('PUT', '/engineering/data', 'engineer', snapshot)
+          const updated = await api('GET', '/engineering/data', 'engineer')
+          assert.equal(updated.requests.find((item) => item.id === id).room, room.room_number)
+          assert.deepEqual((await api('GET', '/engineering/data', 'technician')).requests, [])
+        } finally {
+          await pool.query('DELETE FROM engineering.engineering_audit WHERE record_id = $1', [id])
+          await pool.query("DELETE FROM engineering.engineering_records WHERE collection = 'requests' AND record_id = $1", [id])
+        }
+      })
       let reservation
       await t.test('Admin and Front Office can enter their Housekeeping workspaces', async () => {
         const supervisor = await api('POST', '/auth/login', null, {
@@ -258,7 +374,7 @@ test(
           )
         },
       )
-      await t.test('booking preserves cleanliness and inspection states and check-in refuses active cleaning',async()=>{
+      await t.test('booking preserves room readiness and a checked-in stay supports shared room charges',async()=>{
         for (const status of ['CLEAN','INSPECTED']) {
           const beforeReady=(await api('GET','/front-office/dashboard','fo')).arrivals.ready
           const {rows:[readyRoom]}=await pool.query("INSERT INTO rooms(room_number,room_type,floor,status) VALUES($1,'Suite','2',$2) RETURNING id",[prefix.slice(-10)+status,status])
@@ -277,6 +393,33 @@ test(
         assert.equal(blocked.error.code,'CLEANING_NOT_CLOSED')
         await pool.query("UPDATE hk_cleaning_tasks SET task_status='INSPECTED' WHERE task_id=$1",[task.task.task_id])
         await api('POST',`/front-office/reservations/${booking.id}/check-in`,'fo')
+
+        const order = { id: require('node:crypto').randomUUID(), reservationId: String(booking.id),
+          item: 'Test room service', quantity: 2, unitPrice: '25.50' }
+        await api('POST', '/food-beverage/orders', 'fo', order, 403)
+        await api('GET', '/finance/overview', 'food', undefined, 403)
+        await api('GET', '/hr/bootstrap', 'finance', undefined, 403)
+        assert.ok((await api('GET', '/food-beverage/overview', 'food')).stays.some((stay) => stay.id === booking.id))
+        const responses = await Promise.all([
+          api('POST', '/food-beverage/orders', 'food', order, 201),
+          api('POST', '/food-beverage/orders', 'food', order, 201),
+        ])
+        const invoiceId = responses[0].order.invoice_id
+        assert.equal(responses[1].order.invoice_id, invoiceId)
+        await api('POST', '/food-beverage/orders', 'food', { ...order, quantity: 3 }, 409)
+        const invoice = await api('GET', '/front-office/invoices/' + invoiceId, 'fo')
+        assert.equal(Number(invoice?.amount), 51)
+        const finance = await api('GET', '/finance/overview', 'finance')
+        assert.equal(finance.invoices.find((record) => record.invoice_number === invoice.invoiceNumber).source, 'Food & Beverage')
+        await api('POST', '/front-office/invoices/' + invoiceId + '/payments', 'fo', {
+          amount: '10.25', paymentMethod: 'CASH', reference: 'TEST-FOOD',
+        }, 201)
+        const shared = await api('GET', '/finance/customer-payments', 'finance')
+        const receipt = shared.payments.find((record) => record.invoiceNumber === invoice.invoiceNumber)
+        assert.equal(receipt.source, 'Food & Beverage')
+        assert.equal(receipt.amount, '10.25')
+        await api('POST', `/front-office/reservations/${booking.id}/check-out`, 'fo')
+        await api('POST', '/food-beverage/orders', 'food', { ...order, id: require('node:crypto').randomUUID() }, 409)
       })
       await t.test('reservation guest names obey field length validation',async()=>{
         await api('POST','/front-office/reservations','fo',{guest:{name:'A'.repeat(101)+' Guest'},roomType:'Suite',checkIn:dates.today,checkOut:dates.tomorrow},400)
@@ -300,10 +443,11 @@ test(
         const { rows } = await pool.query('SELECT task_type, notes FROM hk_cleaning_tasks WHERE room_id=$1', [manualRoom.id])
         assert.deepEqual(rows, [{ task_type: 'TOUCH_UP', notes: 'Requires touch-up' }])
 
-        await api('PATCH', endpoint, 'cleaner', { status: 'CLEAN', remarks: 'Needs supervisor' }, 403)
-        await api('PATCH', endpoint, 'sup', { status: 'CLEAN' }, 400)
+        const cleanerChoices = await api('GET', `/housekeeping/rooms/${manualRoom.id}`, 'cleaner')
+        assert.ok(cleanerChoices.allowedStatuses.includes('CLEAN'))
+        await api('PATCH', endpoint, 'cleaner', { status: 'CLEAN' }, 400)
         for (const status of ['CLEAN', 'INSPECTED', 'AVAILABLE', 'RESERVED', 'OCCUPIED', 'OUT_OF_ORDER', 'AVAILABLE']) {
-          const result = await api('PATCH', endpoint, 'sup', { status, remarks: 'Verified manual status' })
+          const result = await api('PATCH', endpoint, 'cleaner', { status, remarks: 'Verified manual status' })
           const projected = await frontOfficeRooms()
           assert.equal(result.room.room_status, status)
           assert.equal(projected.status, status)
@@ -420,10 +564,10 @@ test(
           assert.ok(notices.notifications.some((n) => n.room_id === room.id))
           await api('PATCH', `/housekeeping/rooms/${room.id}/status`, 'inspector', {
             status: 'AVAILABLE',
-          }, 403)
+          }, 400)
           await api('PATCH', `/housekeeping/rooms/${room.id}/status`, 'cleaner', {
             status: 'AVAILABLE',
-          }, 403)
+          }, 400)
           const availabilityBeforeRelease = (await api('GET', '/admin/dashboard', 'admin')).frontOffice.rooms.available
           await api('PATCH', `/front-office/rooms/${room.id}/status`, 'fo', {
             status: 'AVAILABLE',

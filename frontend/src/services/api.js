@@ -34,7 +34,7 @@ export class ApiError extends Error {
   constructor(message, status, code) { super(message); this.name='ApiError'; this.status=status; this.code=code }
 }
 
-async function request(path, options = {}) {
+export async function request(path, options = {}) {
   const headers = new Headers(options.headers || {})
   if (options.body !== undefined) headers.set('Content-Type', 'application/json')
   const accessToken = storedToken()
@@ -82,6 +82,10 @@ export const authApi = {
   getSavedUser: savedUser,
 }
 
+export const hrApi = {
+  request: (path, options) => request(`/hr${path}`, options),
+}
+
 export const frontOfficeApi = {
   notifications: () => request('/housekeeping/notifications?unread=1'),
   acknowledge: (id) => request(`/housekeeping/notifications/${id}/read`,{method:'PATCH'}),
@@ -121,4 +125,14 @@ export const adminApi = {
   activity: (limit = 50) => request(`/admin/activity?limit=${limit}`),
   settings: () => request('/admin/settings'),
   updateSettings: (settings) => request('/admin/settings', json('PUT', settings)),
+}
+
+export const departmentApi = {
+  sales: () => request('/sales-marketing/overview'),
+  addSalesRecord: (kind, details) => request('/sales-marketing/records/' + kind, json('POST', details)),
+  updateSalesStatus: (kind, id, status) => request('/sales-marketing/records/' + kind + '/' + encodeURIComponent(id), json('PATCH', { status })),
+  deleteSalesRecord: (kind, id) => request('/sales-marketing/records/' + kind + '/' + encodeURIComponent(id), { method: 'DELETE' }),
+  finance: () => request('/finance/overview'),
+  food: () => request('/food-beverage/overview'),
+  postFoodOrder: (order) => request('/food-beverage/orders', json('POST', order)),
 }

@@ -28,7 +28,7 @@ module.exports = {
   port,
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret,
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '4h',
   bcryptRounds,
   frontendOrigins: (process.env.FRONTEND_ORIGINS || 'http://localhost:5173')
     .split(',')

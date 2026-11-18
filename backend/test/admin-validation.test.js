@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
-const validation = require('../src/lib/adminValidation')
+const validation = require('../../departments/admin/backend/adminValidation.js')
 
 test('staff usernames are normalized and restricted to safe characters', () => {
   assert.equal(validation.staffUsername('  Admin.User_1  '), 'admin.user_1')

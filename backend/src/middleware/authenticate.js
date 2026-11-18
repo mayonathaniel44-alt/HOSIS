@@ -19,7 +19,7 @@ async function authenticate(req, res, next) {
   }
   let claims
   try {
-    claims = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] })
+    claims = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'], maxAge: env.jwtExpiresIn })
   } catch {
     return next(appError(401, 'UNAUTHENTICATED', 'The session is invalid or has expired.'))
   }

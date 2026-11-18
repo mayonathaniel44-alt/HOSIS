@@ -7,7 +7,7 @@ async function login(req, res) {
   if (typeof username !== 'string' || !username.trim() || username.length > 100 || typeof password !== 'string' || !password || Buffer.byteLength(password,'utf8') > 72) {
     throw appError(400, 'INVALID_CREDENTIALS', 'Username and password are required.')
   }
-  if (role !== undefined && !['FRONT_OFFICE', 'ADMIN', 'HOUSEKEEPING', 'ENGINEERING'].includes(role)) {
+  if (role !== undefined && !['FRONT_OFFICE', 'ADMIN', 'HOUSEKEEPING', 'ENGINEERING', 'TECHNICIAN', 'SALES_MARKETING', 'HR', 'FINANCE', 'FOOD_BEVERAGE'].includes(role)) {
     throw appError(400, 'INVALID_ROLE', 'Choose a supported department access type.')
   }
   const session = await authService.login(username.trim(), password, role)

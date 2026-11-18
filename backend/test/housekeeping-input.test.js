@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const v = require('../src/modules/housekeeping/validate')
+const v = require('../../departments/housekeeping/backend/validate.js')
 test('IDs accept only safe positive integer values', () => {
   assert.equal(v.id('12'), 12)
   assert.equal(v.id(12), 12)

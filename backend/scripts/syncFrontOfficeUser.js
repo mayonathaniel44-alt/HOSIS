@@ -1,7 +1,7 @@
 const pool = require('../src/config/database')
 const env = require('../src/config/env')
 const bcrypt = require('bcrypt')
-const { staffUsername, staffPassword } = require('../src/lib/adminValidation')
+const { staffUsername, staffPassword } = require('../../departments/admin/backend/adminValidation.js')
 
 async function main() {
   const username = staffUsername(process.env.FRONT_OFFICE_USERNAME)

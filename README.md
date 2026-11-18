@@ -2,6 +2,10 @@
 
 Front Office, Housekeeping, and Engineering repair handoffs now run in one React application and one Express API backed by one PostgreSQL database. Housekeeping uses updatable views of the existing user, room, and guest tables; it does not keep a second room inventory or send status-changing HTTP requests to another service.
 
+## Department development
+
+Open [departments](departments/README.md) to find the source files, database migrations, and tests for your team. Start the app from the shared `frontend` and `backend` folders.
+
 ## Install and upgrade
 
 Requirements: Node.js 22.12+ and PostgreSQL 14+. From the main repository:
@@ -91,3 +95,9 @@ The old `integrations/housekeeping/backend` server/app/migration entry points de
 ## Administrator credentials at Front Office sign-in
 
 An administrator may select Front Office at sign-in using the same configured username and password. This creates a Front Office-scoped session; administrator endpoints remain forbidden for that session, including after refresh or password replacement. Select Administrator to open the administrator console. Department-only accounts cannot elevate their role.
+
+## Local demo data
+
+From the `backend` folder, run `npm run db:migrate` and then `npm run db:seed-demo`. The seed only runs against a local HOSIS development database. It adds rooms, a checked-in guest, cleaning and repair work, sales records, HR records, and linked invoices and charges. Run it again to check setup without duplicating or resetting data.
+
+The seed creates a `demo_` account for each workspace. Open the ignored `backend/.env.demo` file for the generated passwords and use the matching department on the HOSIS login page. The demo technician uses Engineering & Maintenance.
