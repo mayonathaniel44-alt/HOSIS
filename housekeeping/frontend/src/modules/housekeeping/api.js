@@ -58,19 +58,32 @@ export function setUnauthorizedHandler(fn) {
 
 export async function request(method, path, body) {
   const session = getSession()
-  const res = await fetch(`/api${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  let res
+  try {
+    res = await fetch(`/api${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    // No network, or the server is not running: fetch itself fails.
+    throw new ApiError(0, 'Cannot reach the server. Check your connection and try again.')
+  }
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    // e.g. an HTML error page from a proxy when the backend is down; the
+    // status-based message below is shown instead.
+  }
   if (!res.ok) {
     if (res.status === 401 && session) onUnauthorized()
-    throw new ApiError(res.status, data?.error || 'Request failed')
+    const fallback = res.status >= 500 ? 'The server had a problem. Please try again.' : 'Request failed'
+    throw new ApiError(res.status, data?.error || fallback)
   }
   return data
 }
@@ -98,14 +111,12 @@ export const api = {
   resetStaffPassword: (userId) => request('POST', `${HK}/password-resets/staff/${userId}`),
   dismissReset: (id) => request('POST', `${HK}/password-resets/${id}/dismiss`),
 
-
   inventory: (q = '') => request('GET', `${HK}/inventory${q}`),
   approveRequestStock: (id) => request('POST', `${HK}/guest-requests/${id}/approve-stock`),
 
   dashboard: () => request('GET', `${HK}/dashboard`),
   staff: () => request('GET', `${HK}/staff`),
   guests: () => request('GET', `${HK}/guests`),
-  notifications: () => request('GET', `${HK}/notifications`),
   alerts: () => request('GET', `${HK}/alerts`),
   activity: () => request('GET', `${HK}/activity`),
 
@@ -129,6 +140,7 @@ export const api = {
   scheduleDays: (month) => request('GET', `${HK}/schedules/days?month=${month}`),
   createSchedule: (body) => request('POST', `${HK}/schedules`, body),
   updateSchedule: (id, body) => request('PATCH', `${HK}/schedules/${id}`, body),
+  deleteSchedule: (id) => request('DELETE', `${HK}/schedules/${id}`),
 
   guestRequests: (q = '') => request('GET', `${HK}/guest-requests${q}`),
   createGuestRequest: (body) => request('POST', `${HK}/guest-requests`, body),

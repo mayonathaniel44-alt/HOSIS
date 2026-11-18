@@ -3,11 +3,15 @@ import { api } from '../api.js'
 import { formatDateTime } from '../format.js'
 import Icon from './Icon.jsx'
 
+function alertKey(a) {
+  return `${a.type}|${a.message}|${a.at}`
+}
+
 // Bell in the top bar listing what needs the user's attention.
 export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [alerts, setAlerts] = useState([])
-  const [seen, setSeen] = useState(0)
+  const [seen, setSeen] = useState(() => new Set())
   const ref = useRef(null)
 
   useEffect(() => {
@@ -36,7 +40,9 @@ export default function NotificationBell() {
     }
   }, [open])
 
-  const unread = Math.max(alerts.length - seen, 0)
+  // Counted by which alerts were seen, not how many: when one alert goes away
+  // and a new one arrives, the new one still shows as new.
+  const unread = alerts.filter((a) => !seen.has(alertKey(a))).length
 
   return (
     <div className="hk-bell" ref={ref}>
@@ -47,7 +53,7 @@ export default function NotificationBell() {
         aria-expanded={open}
         onClick={() => {
           setOpen(!open)
-          setSeen(alerts.length)
+          setSeen(new Set(alerts.map(alertKey)))
         }}
       >
         <Icon d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9zM10 20a2 2 0 0 0 4 0" size={22} />
@@ -59,7 +65,7 @@ export default function NotificationBell() {
           {alerts.length === 0 && <p className="hk-muted">You're all caught up.</p>}
           <ul>
             {alerts.map((a, i) => (
-              <li key={`${a.type}-${i}`}>
+              <li key={`${alertKey(a)}-${i}`}>
                 <a
                   href={`#/housekeeping/${a.page}`}
                   onClick={() => setOpen(false)}

@@ -11,10 +11,12 @@ const GROUPS = {
   progress: ['IN_PROGRESS'],
   complete: ['COMPLETED', 'INSPECTED'],
 }
+// Rooms Front Office holds for a guest stay OCCUPIED / RESERVED when cleaned.
+const guestHeld = (task) => ['OCCUPIED', 'RESERVED'].includes(task.room_status)
 const PROGRESS = { PENDING: 0, ASSIGNED: 15, RETURNED: 15, IN_PROGRESS: 55, COMPLETED: 85, INSPECTED: 100 }
 
 // HK-004 Create/Update Task, HK-005 Assign Housekeeper, HK-006 Perform Cleaning.
-export default function CleaningTasksPage({ user, search: topSearch }) {
+export default function CleaningTasksPage({ user }) {
   const [search, setSearch] = useState('')
   const [mine, setMine] = useState(user.position === 'HOUSEKEEPER')
   const [group, setGroup] = useState('')
@@ -26,7 +28,7 @@ export default function CleaningTasksPage({ user, search: topSearch }) {
   const lookups = useLoad(() => Promise.all([api.rooms(), api.staff()]), [], { refresh: false })
   const isSupervisor = user.position === 'SUPERVISOR' || user.role === 'ADMIN'
 
-  const query = (search || topSearch).toLowerCase()
+  const query = search.trim().toLowerCase()
   const all = tasks.data?.tasks || []
   const count = (g) => all.filter((t) => GROUPS[g].includes(t.task_status)).length
   const done = count('complete')
@@ -190,7 +192,7 @@ function TaskForm({ task, rooms, staff, user, isSupervisor, onNew, onSaved }) {
           </select>
         </Field>
         <Field label="Notes" wide>
-          <input value={form.notes} onChange={set('notes')} disabled={!isSupervisor || closed} placeholder="Special instructions" />
+          <input value={form.notes} onChange={set('notes')} disabled={!isSupervisor || closed} placeholder="Special instructions" maxLength={255} />
         </Field>
       </div>
 
@@ -236,7 +238,7 @@ function TaskForm({ task, rooms, staff, user, isSupervisor, onNew, onSaved }) {
           </button>
         )}
         {canWork && task.task_status === 'IN_PROGRESS' && (
-          <button type="button" className="hk-btn hk-btn--secondary" disabled={busy} onClick={() => run(() => api.completeTask(task.task_id), 'Marked complete. Room is now CLEAN and waiting for inspection.')}>
+          <button type="button" className="hk-btn hk-btn--secondary" disabled={busy} onClick={() => run(() => api.completeTask(task.task_id), guestHeld(task) ? 'Marked complete. The guest room keeps its status and waits for inspection.' : 'Marked complete. Room is now CLEAN and waiting for inspection.')}>
             Mark complete
           </button>
         )}

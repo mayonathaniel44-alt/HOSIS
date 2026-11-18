@@ -100,18 +100,22 @@ function ReportForm({ rooms, issues, onSaved }) {
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value })
   const report = { title: 'Maintenance Report', fileName: 'maintenance-report', columns: REPORT_COLUMNS, rows: issues }
   const room = rooms.find((r) => String(r.room_id) === String(form.roomId))
+  // Front Office has to move the guest before an occupied or reserved room
+  // can be set OUT OF ORDER (the API refuses it), so the option is turned off.
+  const held = room && ['OCCUPIED', 'RESERVED'].includes(room.room_status)
+  const outOfOrder = form.setOutOfOrder && !held
 
   async function save() {
     setBusy(true)
     setError(null)
     try {
-      const { request } = await api.reportIssue(form)
+      const { request } = await api.reportIssue({ ...form, setOutOfOrder: outOfOrder })
       setForm(empty)
       onSaved(
         {
           tone: 'green',
           title: `Submitted and Engineering notified (request #${request.request_id})`,
-          text: form.setOutOfOrder ? `Room ${room.room_number} is now OUT OF ORDER.` : undefined,
+          text: outOfOrder ? `Room ${room.room_number} is now OUT OF ORDER.` : undefined,
         },
         request.request_id
       )
@@ -142,14 +146,19 @@ function ReportForm({ rooms, issues, onSaved }) {
           </select>
         </Field>
         <Field label="Description" wide>
-          <textarea rows={3} value={form.description} onChange={set('description')} placeholder="What is wrong and where" />
+          <textarea rows={3} maxLength={255} value={form.description} onChange={set('description')} placeholder="What is wrong and where" />
         </Field>
       </div>
       <label className="hk-check">
-        <input type="checkbox" checked={form.setOutOfOrder} onChange={(e) => setForm({ ...form, setOutOfOrder: e.target.checked })} />
+        <input type="checkbox" checked={outOfOrder} disabled={held} onChange={(e) => setForm({ ...form, setOutOfOrder: e.target.checked })} />
         Set room OUT OF ORDER until repaired
       </label>
-      {form.setOutOfOrder && (
+      {held && (
+        <Notice tone="amber" title={`Room ${room.room_number} is ${label(room.room_status).toLowerCase()}`}>
+          The issue is still sent to Engineering. Front Office has to move the guest before the room can be set out of order.
+        </Notice>
+      )}
+      {outOfOrder && (
         <Notice tone="red" title="OUT OF ORDER - do not assign to guests">
           Front Office cannot sell the room until Engineering completes the repair and Housekeeping releases it.
         </Notice>
@@ -166,7 +175,7 @@ function ReportForm({ rooms, issues, onSaved }) {
         </div>
       </div>
       <div className="hk-actions">
-        <button type="button" className="hk-btn hk-btn--primary" disabled={busy || !form.roomId || !form.description} onClick={save}>
+        <button type="button" className="hk-btn hk-btn--primary" disabled={busy || !form.roomId || !form.description.trim()} onClick={save}>
           Submit &amp; notify
         </button>
         <button type="button" className="hk-btn hk-btn--secondary" onClick={() => { setForm(empty); setError(null) }}>

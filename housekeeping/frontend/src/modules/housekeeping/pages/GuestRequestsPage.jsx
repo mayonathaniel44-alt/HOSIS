@@ -21,9 +21,10 @@ const REPORT_COLUMNS = [
 ]
 
 // HK-013 Record Request -> Assign / Process Request -> HK-014 Complete Request.
-export default function GuestRequestsPage({ search: topSearch, headerActions, user }) {
+export default function GuestRequestsPage({ headerActions, user }) {
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('')
+  // Open and in-progress requests by default; completed ones are one choice away.
+  const [status, setStatus] = useState('ACTIVE')
   const [priority, setPriority] = useState('')
   const [selectedId, setSelectedId] = useState(null)
   const [openId, setOpenId] = useState(null)
@@ -32,10 +33,10 @@ export default function GuestRequestsPage({ search: topSearch, headerActions, us
   const requests = useLoad(() => api.guestRequests('?view=all'), [])
   const lookups = useLoad(() => Promise.all([api.rooms(), api.staff(), api.guests(), api.inventory()]), [], { refresh: false })
 
-  const query = (search || topSearch).toLowerCase()
+  const query = search.trim().toLowerCase()
   const list = (requests.data?.requests || []).filter(
     (r) =>
-      (!status || r.request_status === status) &&
+      (!status || (status === 'ACTIVE' ? r.request_status !== 'COMPLETED' : r.request_status === status)) &&
       (!priority || r.priority === priority) &&
       (!query || `${r.room_number} ${r.guest_name || ''} ${r.request_details}`.toLowerCase().includes(query))
   )
@@ -75,12 +76,13 @@ export default function GuestRequestsPage({ search: topSearch, headerActions, us
       {flash && <Notice tone={flash.tone} title={flash.title}>{flash.text}</Notice>}
       <div className="hk-grid">
         <Card
-          title={`Open requests · ${openCount}`}
-          subtitle="Select a request to see its details"
+          title={`Guest requests · ${openCount} open`}
+          subtitle="Select a request to see its details. Completed requests from the last 30 days are kept here."
           actions={
             <div className="hk-actions">
               <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
-                <option value="">Status</option>
+                <option value="ACTIVE">Open and in progress</option>
+                <option value="">All statuses</option>
                 <option value="OPEN">Open</option>
                 <option value="IN_PROGRESS">In progress</option>
                 <option value="COMPLETED">Completed</option>
@@ -124,7 +126,7 @@ export default function GuestRequestsPage({ search: topSearch, headerActions, us
               </dl>
               <StockCard request={selected} user={user} onDone={refresh} />
               {!selected.staff_id && selected.request_status !== 'COMPLETED' && (
-                <Notice tone="amber" title="Awaiting assignment">Assign a staff member before the request can be completed.</Notice>
+                <Notice tone="amber" title="Awaiting assignment">Nobody has taken this request yet. Whoever completes it is recorded as the one who handled it.</Notice>
               )}
               <div className="hk-actions">
                 <button type="button" className="hk-btn hk-btn--primary" onClick={() => setOpenId(selected.request_id)} disabled={!formProps}>
@@ -334,7 +336,7 @@ function RequestForm({ request, rooms, staff: allStaff, guests, items, onSaved, 
         </Field>
         {request && (
           <Field label="Completion note" wide>
-            <input value={completionNotes} onChange={(e) => setCompletionNotes(e.target.value)} placeholder="e.g. Delivered to the guest at the door" />
+            <input value={completionNotes} maxLength={255} onChange={(e) => setCompletionNotes(e.target.value)} placeholder="e.g. Delivered to the guest at the door" />
           </Field>
         )}
       </div>
@@ -353,7 +355,7 @@ function RequestForm({ request, rooms, staff: allStaff, guests, items, onSaved, 
         <button
           type="button"
           className="hk-btn hk-btn--primary"
-          disabled={busy || !form.roomId || !form.details || othersRequest}
+          disabled={busy || !form.roomId || !form.details.trim() || othersRequest}
           onClick={() =>
             request
               ? run(() => api.updateGuestRequest(request.request_id, payload), 'Request updated.')

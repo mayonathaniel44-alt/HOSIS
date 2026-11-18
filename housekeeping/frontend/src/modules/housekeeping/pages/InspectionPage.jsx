@@ -49,7 +49,10 @@ export default function InspectionPage({ user }) {
   const [flash, setFlash] = useState(null)
   const canInspect = ['INSPECTOR', 'SUPERVISOR'].includes(user.position) || user.role === 'ADMIN'
 
-  const rows = (list.data || []).filter((t) => !progress || t.task_status === progress)
+  // Oldest finished first, so rooms are inspected in the order they were cleaned.
+  const rows = (list.data || [])
+    .filter((t) => !progress || t.task_status === progress)
+    .sort((a, b) => String(a.completion_time || '').localeCompare(String(b.completion_time || '')))
   const selected = rows.find((t) => t.task_id === selectedId) || rows[0]
   const waiting = (list.data || []).filter((t) => t.task_status === 'COMPLETED').length
 
@@ -77,7 +80,7 @@ export default function InspectionPage({ user }) {
               { key: 'priority', title: 'Priority', render: (t) => <Badge value={t.priority} /> },
             ]}
           />
-          <p className="hk-footnote">Oldest first; inspections can be prioritized by arrival time.</p>
+          <p className="hk-footnote">Oldest finished first. Passed rooms from the last 30 days are listed.</p>
           <div className="hk-report-bar">
             <button
               type="button"
@@ -180,7 +183,13 @@ function InspectionForm({ task, user, canInspect, ownWork, onDone }) {
       onDone(
         result === 'PASSED'
           ? { tone: 'green', title: `Room ${task.room_number} marked INSPECTED`, text: 'Front Office has been notified.' }
-          : { tone: 'amber', title: `Room ${task.room_number} returned for re-cleaning`, text: 'The task is back with the housekeeper and the room is DIRTY.' }
+          : {
+              tone: 'amber',
+              title: `Room ${task.room_number} returned for re-cleaning`,
+              text: ['OCCUPIED', 'RESERVED'].includes(task.room_status)
+                ? 'The task is back with the housekeeper. The guest room keeps its status.'
+                : 'The task is back with the housekeeper and the room is DIRTY.',
+            }
       )
     } catch (err) {
       setMessage({ tone: 'red', title: 'Inspection not saved', text: err.message })
@@ -217,7 +226,7 @@ function InspectionForm({ task, user, canInspect, ownWork, onDone }) {
         ))}
       </div>
       <Field label="Inspector notes / reason for re-cleaning" wide>
-        <textarea rows={3} value={remarks} onChange={(e) => setRemarks(e.target.value)} disabled={!canInspect} />
+        <textarea rows={3} maxLength={255} value={remarks} onChange={(e) => setRemarks(e.target.value)} disabled={!canInspect} />
       </Field>
 
       {ownWork && <Notice tone="amber" title="You cleaned this room">Another inspector or supervisor must inspect it.</Notice>}
@@ -233,7 +242,7 @@ function InspectionForm({ task, user, canInspect, ownWork, onDone }) {
         <button type="button" className="hk-btn hk-btn--primary" disabled={!canInspect || !allChecked || busy} onClick={() => submit('PASSED')}>
           Pass - Mark INSPECTED
         </button>
-        <button type="button" className="hk-btn hk-btn--secondary" disabled={!canInspect || !remarks || busy} onClick={() => submit('FAILED')}>
+        <button type="button" className="hk-btn hk-btn--secondary" disabled={!canInspect || !remarks.trim() || busy} onClick={() => submit('FAILED')}>
           Fail - Return for re-cleaning
         </button>
       </div>

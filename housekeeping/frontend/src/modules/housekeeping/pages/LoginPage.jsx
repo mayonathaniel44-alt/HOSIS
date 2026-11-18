@@ -63,7 +63,7 @@ export default function LoginPage({ onLogin }) {
           )}
 
           <label className={`hk-field${missing.username ? ' is-invalid' : ''}`}>
-            <span className="hk-field__label">Staff username</span>
+            <span className="hk-field__label">Email or username</span>
             <input
               type="text"
               value={form.username}
@@ -73,7 +73,7 @@ export default function LoginPage({ onLogin }) {
               aria-invalid={missing.username || undefined}
               aria-describedby={missing.username ? 'login-email-error' : undefined}
             />
-            {missing.username && <span className="hk-field__error" id="login-email-error">Staff username is required</span>}
+            {missing.username && <span className="hk-field__error" id="login-email-error">Enter your email or username.</span>}
           </label>
 
           <label className={`hk-field${missing.password ? ' is-invalid' : ''}`}>
@@ -130,8 +130,9 @@ export default function LoginPage({ onLogin }) {
             </span>
             <strong>Access Denied</strong>
           </div>
-          <p className="hk-denied__title">Unauthorized account — session ended</p>
-          <p className="hk-muted">Housekeeping access was not granted. This sign-in attempt has ended.</p>
+          <p className="hk-denied__title">Housekeeping access was not granted</p>
+          {/* The server says why: another department's account, or an account that is no longer active. */}
+          <p className="hk-muted">{error.message}</p>
           <button
             type="button"
             className="hk-btn hk-btn--primary hk-btn--block"

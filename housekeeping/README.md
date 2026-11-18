@@ -147,7 +147,8 @@ npm run frontoffice -- checkout 203     # OCCUPIED -> DIRTY + cleaning task
 ## Business rules
 
 * **Room status lifecycle.** By hand, Housekeeping can only mark a room
-  DIRTY (from AVAILABLE, OCCUPIED, CLEAN or INSPECTED; see
+  DIRTY (from AVAILABLE, CLEAN or INSPECTED; an OCCUPIED room becomes DIRTY
+  only through Front Office's check-out; see
   `MANUAL_TRANSITIONS` in `roomStatus.js`). CLEAN comes only from
   completing a cleaning task, so every cleaned room goes to inspection, INSPECTED only from a passed inspection, and OUT_OF_ORDER
   only from a maintenance request. Front Office owns AVAILABLE, RESERVED and
@@ -160,14 +161,18 @@ npm run frontoffice -- checkout 203     # OCCUPIED -> DIRTY + cleaning task
   task at a time.
 * **Who can do what.** Only supervisors create and assign tasks and
   schedules. Only inspectors and supervisors record inspections, and nobody
-  inspects a room they cleaned themselves. Only the assigned housekeeper (or a
+  inspects a room they cleaned themselves. A room passes inspection only when
+  all five checklist items are ticked (bed, bathroom, amenities, floors,
+  fixtures); the API refuses a pass otherwise. Only the assigned housekeeper (or a
   supervisor) starts and completes a task.
 * **Guest requests.** A housekeeper may take an unassigned request for
   themselves and work on their own requests. Only supervisors and inspectors
   assign a request to someone else or update another person's request.
 * **Schedules.** A staff member cannot have two shifts that overlap (a night
   shift that runs past midnight counts against the next morning), and a shift
-  cannot be created on, or moved to, a date that has passed.
+  cannot be created on, or moved to, a date that has passed. A supervisor can
+  remove a shift that has not happened yet; past shifts stay as the work
+  record.
 * **Lost & found.** An item is released only when the claimant's ID is
   verified and their description matches; otherwise the claim is saved as
   REJECTED and the item stays stored. A verified claim must record the ID type
@@ -187,7 +192,10 @@ npm run frontoffice -- checkout 203     # OCCUPIED -> DIRTY + cleaning task
   appear in the supervisor's notifications.
 * **Sign-in and passwords.** After 5 wrong passwords for the same account from
   the same address, sign-in is locked for 15 minutes; failures are stored in
-  `hk_login_failures`, so a restart does not clear them. Each request re-checks
+  `hk_login_failures`, so a restart does not clear them. "Forgot password?"
+  has its own limit of 5 requests per name in 15 minutes, counted the same way
+  for real and unknown names, and a sign-in with an unknown name takes as long
+  as a wrong password, so neither reveals which accounts exist. Each request re-checks
   the account, so a deactivated account or a changed password ends every
   session at once. "Forgot password?" sends a request to the supervisor (there
   is no email server); the supervisor sets a temporary password on Staff
@@ -198,6 +206,10 @@ npm run frontoffice -- checkout 203     # OCCUPIED -> DIRTY + cleaning task
   (HTTP 400) instead of a server error.
 * **Pages refresh** quietly every 30 seconds while the tab is visible, so two
   people on the same list see each other's changes.
+* **History in long lists.** Inspection shows passed rooms from the last 30
+  days, Guest Requests shows open requests plus those completed in the last 30
+  days, and Maintenance history shows issues from the last 90 days. Older
+  records stay in the database and in My Record / work reports.
 * **Maintenance.** Reporting can set the room OUT_OF_ORDER (not while it is
   OCCUPIED or RESERVED; Front Office moves the guest first). Only Engineering
   marks the repair REPAIRED. Housekeeping then releases it: the room becomes
@@ -233,6 +245,11 @@ npm run frontoffice -- checkout 203     # OCCUPIED -> DIRTY + cleaning task
 | Sign-in | Lockout survives a restart; sessions end when the password changes or the account is deactivated |
 | Front Office demo | Stand-in endpoints and `npm run frontoffice` |
 | Errors | Bad input gets a clear message instead of "Something went wrong" |
+
+## November 18, 2026 audit
+
+A strict, panel-style review of the whole subsystem and what was fixed is in
+`docs/housekeeping/AUDIT-2026-11-18.md` (31 findings with severity ratings).
 
 ## Screenshots
 

@@ -109,13 +109,13 @@ export function Topbar({ user, onLogout, onMenu, menuOpen = false }) {
         </span>
         <span className="hk-user__text">
           <strong>{user.name}</strong>
-          <small>{user.position ? `Housekeeping ${label(user.position)} · Shared session active` : user.role}</small>
+          <small>{user.position ? `Housekeeping ${label(user.position)}` : user.role}</small>
         </span>
         <button type="button" className="hk-btn hk-btn--end" onClick={() => setConfirm(true)}>
           End session
         </button>
       </div>
-      {confirm && <EndSession onCancel={() => setConfirm(false)} onConfirm={onLogout} />}
+      {confirm && <EndSession user={user} onCancel={() => setConfirm(false)} onConfirm={onLogout} />}
     </header>
   )
 }
@@ -147,12 +147,15 @@ export function PageHeader({ title, subtitle, actions }) {
 }
 
 // "End current session?" confirmation from the Figma design.
-function EndSession({ onCancel, onConfirm }) {
+function EndSession({ user, onCancel, onConfirm }) {
   const [stats, setStats] = useState(null)
   useEffect(() => {
     api.dashboard().then((d) => setStats(d.stats)).catch(() => {})
   }, [])
-  const openWork = stats && stats.open_tasks + stats.awaiting_inspection + stats.open_requests > 0
+  // A housekeeper sees their own unfinished rooms; supervisors and inspectors
+  // see the whole department's open work.
+  const own = user?.position === 'HOUSEKEEPER'
+  const openWork = stats && (own ? stats.my_tasks > 0 : stats.open_tasks + stats.awaiting_inspection + stats.open_requests > 0)
 
   return (
     <Modal title="End current session?" onClose={onCancel} variant="confirm">
@@ -161,9 +164,15 @@ function EndSession({ onCancel, onConfirm }) {
         <p>You'll leave this Housekeeping session and return to staff sign-in.</p>
         {openWork && (
           <Notice tone="amber" title="Unfinished work stays open">
-            {stats.open_tasks} cleaning task(s) remaining · {stats.awaiting_inspection} pending inspection(s)
-            <br />
-            {stats.open_requests} open guest request(s)
+            {own ? (
+              <>{stats.my_tasks} of your cleaning task(s) not finished</>
+            ) : (
+              <>
+                {stats.open_tasks} cleaning task(s) remaining · {stats.awaiting_inspection} pending inspection(s)
+                <br />
+                {stats.open_requests} open guest request(s)
+              </>
+            )}
             <br />
             Ending this session does not end your shift, complete or cancel tasks, or release rooms.
           </Notice>

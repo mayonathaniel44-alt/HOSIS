@@ -43,7 +43,7 @@ export function SearchBox({ value, onChange, placeholder }) {
   return (
     <div className="hk-search">
       <SearchIcon />
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+      <input type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} maxLength={100} />
     </div>
   )
 }
@@ -89,7 +89,18 @@ export function DataTable({ columns, rows, rowKey, selectedKey, onSelect, empty 
                 className={key === selectedKey ? 'is-selected' : ''}
                 onClick={onSelect ? () => onSelect(row) : undefined}
                 tabIndex={onSelect ? 0 : undefined}
-                onKeyDown={onSelect ? (e) => e.key === 'Enter' && onSelect(row) : undefined}
+                aria-selected={onSelect ? key === selectedKey : undefined}
+                onKeyDown={
+                  onSelect
+                    ? (e) => {
+                        if (e.target !== e.currentTarget) return
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onSelect(row)
+                        }
+                      }
+                    : undefined
+                }
               >
                 {columns.map((c) => (
                   <td key={c.key} data-label={c.title}>{c.render ? c.render(row) : row[c.key]}</td>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api.js'
-import { Badge, Card, DataTable, Field, LoadState, Notice } from '../components/ui.jsx'
+import { Badge, Card, DataTable, Field, LoadState, Notice, SearchBox } from '../components/ui.jsx'
 import DatePicker, { DateNav } from '../components/DatePicker.jsx'
 import MySchedulePage from './MySchedulePage.jsx'
 import { formatTime, label, longDate, todayISO } from '../format.js'
@@ -23,7 +23,7 @@ function plural(n, word) {
 }
 
 // HK-008 View Staff Schedule, HK-009 Create/Update Schedule, Assign Workload/Shift.
-export default function SchedulesPage({ user, search }) {
+export default function SchedulesPage({ user }) {
   // Housekeepers start on their own schedule and can view the team's (read only).
   const staffMember = user.position === 'HOUSEKEEPER'
   const [mode, setMode] = useState(staffMember ? 'mine' : 'staff')
@@ -37,12 +37,13 @@ export default function SchedulesPage({ user, search }) {
           {staffMember ? 'Team schedule' : 'HK staff'}
         </button>
       </div>
-      {mode === 'mine' ? <MySchedulePage user={user} /> : <StaffSchedules user={user} search={search} />}
+      {mode === 'mine' ? <MySchedulePage user={user} /> : <StaffSchedules user={user} />}
     </div>
   )
 }
 
-function StaffSchedules({ user, search }) {
+function StaffSchedules({ user }) {
+  const [search, setSearch] = useState('')
   const [date, setDate] = useState(todayISO)
   const [view, setView] = useState('')
   const [selectedId, setSelectedId] = useState(null)
@@ -59,7 +60,7 @@ function StaffSchedules({ user, search }) {
     .map((s) => ({ schedule_id: `off-${s.user_id}`, staff_id: s.user_id, staff_name: s.name, position: s.position, off: true }))
   const all = view === 'ASSIGNED' ? onDuty : view === 'DAY_OFF' ? dayOff : [...onDuty, ...dayOff]
   const rows = all.filter(
-    (s) => !search || `${s.staff_name} ${s.assigned_area || ''}`.toLowerCase().includes(search.toLowerCase())
+    (s) => !search.trim() || `${s.staff_name} ${s.assigned_area || ''}`.toLowerCase().includes(search.trim().toLowerCase())
   )
   const selected = creating ? null : onDuty.find((s) => s.schedule_id === selectedId) || null
   const assigned = onDuty.reduce((n, s) => n + s.assigned_tasks, 0)
@@ -86,6 +87,9 @@ function StaffSchedules({ user, search }) {
                 <span>{v === 'ASSIGNED' ? onDuty.length : v === 'DAY_OFF' ? dayOff.length : onDuty.length + dayOff.length}</span>
               </button>
             ))}
+          </div>
+          <div className="hk-toolbar">
+            <SearchBox value={search} onChange={setSearch} placeholder="Search staff or area" />
           </div>
           <DateNav value={date} onChange={setDate}>
             <Badge value="AVAILABLE">{onDuty.length} staff on duty</Badge>
@@ -142,9 +146,10 @@ function StaffSchedules({ user, search }) {
             setCreating(true)
             setSelectedId(null)
           }}
-          onSaved={(msg) => {
+          onSaved={(msg, removed) => {
             setFlash(msg)
             setCreating(false)
+            if (removed) setSelectedId(null)
             schedules.reload()
           }}
         />
@@ -192,7 +197,22 @@ function ScheduleForm({ schedule, date, staff, isSupervisor, onNew, onSaved }) {
   })
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value })
+  // Shifts that already happened stay on record (the API refuses to remove them).
+  const removable = schedule && schedule.shift_date >= todayISO()
+
+  async function remove() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.deleteSchedule(schedule.schedule_id)
+      onSaved({ tone: 'green', title: `${schedule.staff_name}'s shift was removed.` }, true)
+    } catch (err) {
+      setError(err.message)
+      setBusy(false)
+    }
+  }
 
   function setShift(e) {
     const shift = e.target.value
@@ -253,10 +273,10 @@ function ScheduleForm({ schedule, date, staff, isSupervisor, onNew, onSaved }) {
           <input type="time" value={form.endTime} onChange={set('endTime')} disabled={!isSupervisor} />
         </Field>
         <Field label="Assigned area / workload" wide>
-          <input value={form.assignedArea} onChange={set('assignedArea')} placeholder="e.g. Floor 2, rooms 201-205" disabled={!isSupervisor} />
+          <input value={form.assignedArea} maxLength={100} onChange={set('assignedArea')} placeholder="e.g. Floor 2, rooms 201-205" disabled={!isSupervisor} />
         </Field>
         <Field label="Notes" wide>
-          <textarea rows={2} value={form.notes} onChange={set('notes')} disabled={!isSupervisor} />
+          <textarea rows={2} maxLength={255} value={form.notes} onChange={set('notes')} disabled={!isSupervisor} />
         </Field>
       </div>
       {!isSupervisor && <Notice tone="amber" title="View only">Only supervisors can create or change schedules.</Notice>}
@@ -266,11 +286,22 @@ function ScheduleForm({ schedule, date, staff, isSupervisor, onNew, onSaved }) {
           <button
             type="button"
             className="hk-btn hk-btn--primary"
-            disabled={busy || !form.staffId || !form.assignedArea}
+            disabled={busy || !form.staffId || !form.assignedArea.trim()}
             onClick={save}
           >
             Save schedule
           </button>
+          {removable && !confirmRemove && (
+            <button type="button" className="hk-btn hk-btn--secondary" disabled={busy} onClick={() => setConfirmRemove(true)}>
+              Remove shift
+            </button>
+          )}
+          {removable && confirmRemove && (
+            <>
+              <button type="button" className="hk-btn hk-btn--primary" disabled={busy} onClick={remove}>Yes, remove</button>
+              <button type="button" className="hk-btn hk-btn--secondary" disabled={busy} onClick={() => setConfirmRemove(false)}>Cancel</button>
+            </>
+          )}
         </div>
       )}
     </Card>

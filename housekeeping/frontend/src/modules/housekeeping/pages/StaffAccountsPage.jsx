@@ -46,7 +46,11 @@ export default function StaffAccountsPage({ user }) {
   }
 
   const pending = requests.data?.requests || []
-  const team = (staff.data?.staff || []).filter((s) => s.user_id !== user.userId)
+  // Another supervisor's password is reset by the system administrator (the
+  // API refuses it), so only housekeepers and inspectors are listed here.
+  const team = (staff.data?.staff || []).filter(
+    (s) => s.user_id !== user.userId && (s.position !== 'SUPERVISOR' || user.role === 'ADMIN')
+  )
 
   return (
     <div className="hk-stack">

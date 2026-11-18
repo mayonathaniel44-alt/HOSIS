@@ -26,8 +26,8 @@ const PAGES = {
   tasks: { component: CleaningTasksPage, title: 'Cleaning Tasks', subtitle: 'Create, assign and track today’s cleaning work.' },
   inspection: { component: InspectionPage, title: 'Room Inspection', subtitle: 'Review completed cleaning before approving a room for guests.' },
   schedules: { component: SchedulesPage, title: 'Schedules', subtitle: 'Balance staff shifts and room workloads for today.' },
-  'lost-found': { component: LostFoundPage, title: 'LOST & FOUND', subtitle: 'Record, store and return found belongings with verified claims.' },
-  requests: { component: GuestRequestsPage, title: 'Guest Request', subtitle: 'Assign and resolve guest needs without losing track of open work.' },
+  'lost-found': { component: LostFoundPage, title: 'Lost & Found', subtitle: 'Record, store and return found belongings with verified claims.' },
+  requests: { component: GuestRequestsPage, title: 'Guest Requests', subtitle: 'Assign and resolve guest needs without losing track of open work.' },
   maintenance: { component: MaintenancePage, title: 'Maintenance', subtitle: 'Report defects, coordinate with Engineering and protect room readiness.' },
   'staff-accounts': { component: StaffAccountsPage, title: 'Staff Accounts', subtitle: 'Forgotten passwords and temporary passwords for your team.' },
   record: { component: PersonalRecordPage, title: 'Personal Record', subtitle: 'Your work history, inspection results and reports.' },
@@ -141,7 +141,11 @@ export default function HousekeepingApp({ session: shellSession = null, onLogout
     return (
       <div className="hk-app">
         <main className="hk-content">
-          <PageHeader title="Access denied" subtitle="This account is not authorized for the Housekeeping module." actions={null} />
+          <PageHeader
+            title="Access denied"
+            subtitle="This account is not authorized for the Housekeeping module."
+            actions={<button type="button" className="hk-btn hk-btn--secondary" onClick={logout}>Sign out</button>}
+          />
         </main>
       </div>
     )
