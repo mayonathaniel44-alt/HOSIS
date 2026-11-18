@@ -8,6 +8,17 @@ const { checkLoginAllowed, recordLoginFailure, clearLoginFailures } = require('.
 
 const router = express.Router();
 
+// A bcrypt hash of a random value, compared against when the account does
+// not exist (see /login).
+const DUMMY_HASH = bcrypt.hashSync(require('node:crypto').randomBytes(16).toString('hex'), 10);
+
+// "Forgot password?" requests have their own limit, counted for every
+// request (known name or not). Counting only unknown names, as before, let a
+// caller tell real accounts apart: only unknown names ever got locked out.
+function forgotAttempt(req, username) {
+  return { ip: req.ip, body: { username: `forgot:${username}` } };
+}
+
 // POST /api/auth/login  { username, password, department? }
 // username may also be the staff member's email address.
 // When a department is given (e.g. HOUSEKEEPING), the account must belong
@@ -30,7 +41,10 @@ router.post('/login', async (req, res) => {
     [username]
   );
   const user = rows[0];
-  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+  // An unknown name still runs one bcrypt compare, so the response takes as
+  // long as a wrong password and cannot be used to find which accounts exist.
+  const passwordOk = await bcrypt.compare(password, user ? user.password_hash : DUMMY_HASH);
+  if (!user || !passwordOk) {
     await recordLoginFailure(req);
     throw new HttpError(401, 'Incorrect email or password.');
   }
@@ -66,23 +80,23 @@ router.post('/forgot-password', async (req, res) => {
   if (!username || typeof username !== 'string' || username.length > 100) {
     throw new HttpError(400, 'Enter your email or username.');
   }
-  await checkLoginAllowed(req);
+  const attempt = forgotAttempt(req, username);
+  await checkLoginAllowed(attempt);
+  await recordLoginFailure(attempt);
   const { rows } = await db.query(
     `SELECT user_id FROM users
       WHERE (username = $1 OR LOWER(email) = LOWER($1)) AND role = 'HOUSEKEEPING' AND employment_status = 'ACTIVE'`,
     [username]
   );
   if (rows[0]) {
+    // At most one waiting request per person (a unique index backs this up).
     await db.query(
       `INSERT INTO hk_password_resets (user_id)
        SELECT $1 WHERE NOT EXISTS (
-         SELECT 1 FROM hk_password_resets WHERE user_id = $1 AND status = 'REQUESTED')`,
+         SELECT 1 FROM hk_password_resets WHERE user_id = $1 AND status = 'REQUESTED')
+       ON CONFLICT DO NOTHING`,
       [rows[0].user_id]
     );
-  } else {
-    // Unknown names count like a wrong password, so this cannot be used to
-    // test many names quickly.
-    await recordLoginFailure(req);
   }
   res.json({
     ok: true,

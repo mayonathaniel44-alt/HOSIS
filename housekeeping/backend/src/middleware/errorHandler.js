@@ -22,7 +22,10 @@ function errorHandler(err, req, res, _next) {
       return res.status(400).json({ error: `The selected ${what} does not exist.` });
     }
     case '23514':
-      return res.status(400).json({ error: 'Invalid value: ' + (err.detail || err.message) });
+      // The database detail (failing row, constraint name) stays in the
+      // server log; it is not sent to the browser.
+      console.warn('Check constraint failed:', err.constraint || err.message);
+      return res.status(400).json({ error: 'One of the values is not allowed. Please check the form and try again.' });
     case '22001':
       return res.status(400).json({ error: 'One of the fields is too long.' });
     case '22003':

@@ -222,6 +222,9 @@ router.post('/room-reports', async (req, res) => {
   const body = req.body || {};
   v.required(body, ['roomId', 'condition', 'details']);
   v.oneOf(body.condition, CONDITIONS, 'condition');
+  // The notice is "Room 101 condition (...): <details>" in a 255-character
+  // column, so details are limited to 200 characters instead of being cut off.
+  v.maxLengths(body, { details: [200, 'Details'] });
   const roomId = v.id(body.roomId, 'room');
   const details = String(body.details).trim();
   if (!details) {

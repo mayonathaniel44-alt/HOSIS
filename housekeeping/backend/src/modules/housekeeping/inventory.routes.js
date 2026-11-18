@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
     where.push(`i.category = $${params.length}`);
   }
   if (search) {
-    params.push(`%${search}%`);
+    params.push(v.likePattern(search));
     where.push(`(i.item_name ILIKE $${params.length} OR i.storage_area ILIKE $${params.length})`);
   }
   if (low === '1') {
@@ -148,7 +148,7 @@ router.post('/:id/movements', async (req, res) => {
     if (req.user.position !== 'SUPERVISOR' && req.user.role !== 'ADMIN') {
       throw new HttpError(403, 'Only supervisors can record a stock count.');
     }
-    if (!body.remarks) {
+    if (typeof body.remarks !== 'string' || !body.remarks.trim()) {
       throw new HttpError(400, 'Write why the stock count differs (e.g. monthly count, damaged linen).');
     }
   }

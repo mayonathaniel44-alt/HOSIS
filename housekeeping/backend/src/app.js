@@ -7,6 +7,19 @@ const { corsOrigins } = require('./config/env');
 
 const app = express();
 
+// Basic security headers on every response: no "X-Powered-By: Express", no
+// MIME sniffing, no framing of API responses, and no referrer leaks.
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    'Cache-Control': 'no-store',
+  });
+  next();
+});
+
 // Only the HOSIS frontend may call the API from a browser (set CORS_ORIGIN).
 app.use(cors({ origin: corsOrigins() }));
 // 3 MB leaves room for one lost-and-found photo (2 MB) sent as base64.

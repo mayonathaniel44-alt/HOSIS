@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../../config/db');
 const HttpError = require('../../utils/httpError');
 const v = require('./validate');
-const { changeRoomStatus, lockRoom } = require('./roomStatus');
+const { changeRoomStatus, lockRoom, FRONT_OFFICE_HELD } = require('./roomStatus');
 
 // Housekeeping side of maintenance (HK-015). Engineering's side
 // (viewing incoming requests and updating repair progress) is in
@@ -11,9 +11,9 @@ const router = express.Router();
 
 const CATEGORIES = ['PLUMBING', 'ELECTRICAL', 'AIRCON', 'FURNITURE', 'APPLIANCE', 'OTHER'];
 
-// Front Office owns rooms that are sold or in use. Housekeeping can still
-// report a problem in them, but cannot take them off sale by itself.
-const FRONT_OFFICE_HELD = ['OCCUPIED', 'RESERVED'];
+// Front Office owns rooms that are sold or in use (FRONT_OFFICE_HELD).
+// Housekeeping can still report a problem in them, but cannot take them off
+// sale by itself.
 
 const SELECT = `
   SELECT m.*, r.room_number, r.room_status,
@@ -24,9 +24,11 @@ const SELECT = `
 
 const PRIORITY_ORDER = `CASE m.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END`;
 
-// Open issues by default, ?view=all for history.
+// Open issues by default; ?view=all adds the issues closed in the last 90 days.
 router.get('/', async (req, res) => {
-  const where = req.query.view === 'all' ? '' : `WHERE m.status <> 'CLOSED'`;
+  const where = req.query.view === 'all'
+    ? `WHERE m.status <> 'CLOSED' OR m.reported_at >= CURRENT_DATE - 90`
+    : `WHERE m.status <> 'CLOSED'`;
   const { rows } = await db.query(`${SELECT} ${where} ORDER BY ${PRIORITY_ORDER}, m.reported_at DESC`);
   res.json({ requests: rows });
 });
@@ -89,7 +91,10 @@ router.patch('/:id', async (req, res) => {
     [body.priority || null, body.description || null, requestId]
   );
   if (!rows[0]) {
-    throw new HttpError(409, 'Request not found or already closed.');
+    const { rows: exists } = await db.query('SELECT 1 FROM hk_maintenance_requests WHERE request_id = $1', [requestId]);
+    throw exists[0]
+      ? new HttpError(409, 'This request is already closed.')
+      : new HttpError(404, 'Maintenance request not found.');
   }
   res.json({ request: rows[0] });
 });

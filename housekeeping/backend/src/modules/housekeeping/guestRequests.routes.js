@@ -48,18 +48,19 @@ const REQUEST_SELECT = `
     LEFT JOIN users u ON u.user_id = q.staff_id`;
 
 // Open requests (default), completed requests for today (?view=completed),
-// or every request (?view=all).
+// or open requests plus those completed in the last 30 days (?view=all), so
+// the list does not grow without end as months of history pile up.
 const VIEWS = {
   open: [`q.request_status <> 'COMPLETED'`],
   completed: [`q.request_status = 'COMPLETED' AND q.completed_at::date = CURRENT_DATE`],
-  all: [],
+  all: [`(q.request_status <> 'COMPLETED' OR q.completed_at >= CURRENT_DATE - 30)`],
 };
 
 router.get('/', async (req, res) => {
   const params = [];
   const where = [...(VIEWS[req.query.view] || VIEWS.open)];
   if (req.query.search) {
-    params.push(`%${req.query.search}%`);
+    params.push(v.likePattern(req.query.search));
     where.push(`(r.room_number ILIKE $1 OR q.request_details ILIKE $1 OR CONCAT(g.first_name, ' ', g.last_name) ILIKE $1)`);
   }
   const { rows } = await db.query(
@@ -113,44 +114,50 @@ router.patch('/:id', async (req, res) => {
   v.oneOf(body.priority, v.PRIORITIES, 'priority');
   v.maxLengths(body, { details: [255, 'Details'] });
   v.notBlank(body, { details: 'Details' });
-  const { rows: found } = await db.query('SELECT * FROM hk_guest_requests WHERE request_id = $1', [requestId]);
-  const current = found[0];
-  if (!current) {
-    throw new HttpError(404, 'Guest request not found.');
-  }
-  if (current.request_status === 'COMPLETED') {
-    throw new HttpError(409, 'This request is already completed.');
-  }
-  const staffId = body.staffId !== undefined ? v.optionalId(body.staffId, 'staff') : current.staff_id;
-  if (!canManage(req.user)) {
-    if (current.staff_id && current.staff_id !== req.user.userId) {
-      throw new HttpError(403, 'This request is assigned to another staff member. Ask a supervisor to reassign it.');
+  // The row is locked, so an approval of the stock at the same moment cannot
+  // slip in between the check below and the update (the stock would then be
+  // taken out of inventory for a different item or amount).
+  const request = await db.withTransaction(async (client) => {
+    const { rows: found } = await client.query('SELECT * FROM hk_guest_requests WHERE request_id = $1 FOR UPDATE', [requestId]);
+    const current = found[0];
+    if (!current) {
+      throw new HttpError(404, 'Guest request not found.');
     }
-    if (staffId && staffId !== req.user.userId) {
-      throw new HttpError(403, 'Only a supervisor can assign a request to someone else.');
+    if (current.request_status === 'COMPLETED') {
+      throw new HttpError(409, 'This request is already completed.');
     }
-  }
-  if (staffId && staffId !== current.staff_id) {
-    await assertHousekeepingStaff(db, staffId, 'Guest requests can only be assigned to active housekeeping staff.');
-  }
-  if (current.stock_approved_at && (body.invItemId !== undefined || body.quantity !== undefined)) {
-    const same = Number(body.invItemId ?? current.inv_item_id) === current.inv_item_id
-      && Number(body.quantity ?? current.quantity_requested) === current.quantity_requested;
-    if (!same) {
-      throw new HttpError(409, 'The stock for this request was already approved and taken out of inventory.');
+    const staffId = body.staffId !== undefined ? v.optionalId(body.staffId, 'staff') : current.staff_id;
+    if (!canManage(req.user)) {
+      if (current.staff_id && current.staff_id !== req.user.userId) {
+        throw new HttpError(403, 'This request is assigned to another staff member. Ask a supervisor to reassign it.');
+      }
+      if (staffId && staffId !== req.user.userId) {
+        throw new HttpError(403, 'Only a supervisor can assign a request to someone else.');
+      }
     }
-  }
-  const stock = await readStock(db, body, current);
-  const { rows } = await db.query(
-    `UPDATE hk_guest_requests
-        SET staff_id = $1, request_type = $2, priority = $3, request_details = $4, request_status = $5,
-            inv_item_id = $6, quantity_requested = $7
-      WHERE request_id = $8 RETURNING *`,
-    [staffId, body.requestType || current.request_type, body.priority || current.priority,
-      body.details || current.request_details, staffId ? 'IN_PROGRESS' : 'OPEN',
-      stock.itemId, stock.quantity, requestId]
-  );
-  res.json({ request: rows[0] });
+    if (staffId && staffId !== current.staff_id) {
+      await assertHousekeepingStaff(client, staffId, 'Guest requests can only be assigned to active housekeeping staff.');
+    }
+    if (current.stock_approved_at && (body.invItemId !== undefined || body.quantity !== undefined)) {
+      const same = Number(body.invItemId ?? current.inv_item_id) === current.inv_item_id
+        && Number(body.quantity ?? current.quantity_requested) === current.quantity_requested;
+      if (!same) {
+        throw new HttpError(409, 'The stock for this request was already approved and taken out of inventory.');
+      }
+    }
+    const stock = await readStock(client, body, current);
+    const { rows } = await client.query(
+      `UPDATE hk_guest_requests
+          SET staff_id = $1, request_type = $2, priority = $3, request_details = $4, request_status = $5,
+              inv_item_id = $6, quantity_requested = $7
+        WHERE request_id = $8 RETURNING *`,
+      [staffId, body.requestType || current.request_type, body.priority || current.priority,
+        body.details || current.request_details, staffId ? 'IN_PROGRESS' : 'OPEN',
+        stock.itemId, stock.quantity, requestId]
+    );
+    return rows[0];
+  });
+  res.json({ request });
 });
 
 // Approve request: take the requested stock out of inventory for the room.
@@ -214,28 +221,37 @@ router.post('/:id/approve-stock', async (req, res) => {
 router.post('/:id/complete', async (req, res) => {
   const requestId = v.id(req.params.id, 'request id');
   v.maxLengths(req.body || {}, { completionNotes: [255, 'Completion notes'] });
-  const { rows: found } = await db.query(
-    'SELECT staff_id, inv_item_id, stock_approved_at, request_status FROM hk_guest_requests WHERE request_id = $1',
-    [requestId]
-  );
-  if (found[0] && found[0].staff_id && found[0].staff_id !== req.user.userId && !canManage(req.user)) {
-    throw new HttpError(403, 'Only the assigned staff member or a supervisor can complete this request.');
-  }
-  // Stock handed to the guest must be taken out of inventory first.
-  if (found[0] && found[0].request_status !== 'COMPLETED' && found[0].inv_item_id && !found[0].stock_approved_at) {
-    throw new HttpError(409, 'Approve the requested stock first, so it is taken out of inventory, then complete the request.');
-  }
-  const { rows } = await db.query(
-    `UPDATE hk_guest_requests
-        SET request_status = 'COMPLETED', completed_at = NOW(), completion_notes = $1,
-            staff_id = COALESCE(staff_id, $2)
-      WHERE request_id = $3 AND request_status <> 'COMPLETED' RETURNING *`,
-    [(req.body && req.body.completionNotes) || null, req.user.userId, requestId]
-  );
-  if (!rows[0]) {
-    throw new HttpError(409, 'Request not found or already completed.');
-  }
-  res.json({ request: rows[0] });
+  // Checked and saved on a locked row, so a change of the stock item at the
+  // same moment cannot get past the "approve the stock first" rule.
+  const request = await db.withTransaction(async (client) => {
+    const { rows: found } = await client.query(
+      'SELECT staff_id, inv_item_id, stock_approved_at, request_status FROM hk_guest_requests WHERE request_id = $1 FOR UPDATE',
+      [requestId]
+    );
+    const current = found[0];
+    if (!current) {
+      throw new HttpError(404, 'Guest request not found.');
+    }
+    if (current.request_status === 'COMPLETED') {
+      throw new HttpError(409, 'This request is already completed.');
+    }
+    if (current.staff_id && current.staff_id !== req.user.userId && !canManage(req.user)) {
+      throw new HttpError(403, 'Only the assigned staff member or a supervisor can complete this request.');
+    }
+    // Stock handed to the guest must be taken out of inventory first.
+    if (current.inv_item_id && !current.stock_approved_at) {
+      throw new HttpError(409, 'Approve the requested stock first, so it is taken out of inventory, then complete the request.');
+    }
+    const { rows } = await client.query(
+      `UPDATE hk_guest_requests
+          SET request_status = 'COMPLETED', completed_at = NOW(), completion_notes = $1,
+              staff_id = COALESCE(staff_id, $2)
+        WHERE request_id = $3 RETURNING *`,
+      [(req.body && req.body.completionNotes) || null, req.user.userId, requestId]
+    );
+    return rows[0];
+  });
+  res.json({ request });
 });
 
 module.exports = router;

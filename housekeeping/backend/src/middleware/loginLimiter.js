@@ -36,6 +36,9 @@ async function recordLoginFailure(req) {
                        THEN hk_login_failures.first_at ELSE NOW() END`,
     [keyFor(req), WINDOW_MINUTES]
   );
+  // Old windows are no longer needed; without this the table keeps one row
+  // for every name ever mistyped.
+  await db.query(`DELETE FROM hk_login_failures WHERE first_at < NOW() - INTERVAL '1 day'`);
 }
 
 async function clearLoginFailures(req) {

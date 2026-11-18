@@ -268,3 +268,17 @@ CREATE TABLE IF NOT EXISTS hk_lost_found_audit (
 );
 
 CREATE INDEX IF NOT EXISTS idx_hk_lf_audit_item ON hk_lost_found_audit (item_id, acted_at);
+
+-- ---------------------------------------------------------------------
+-- Additions from the November 18, 2026 audit
+-- ---------------------------------------------------------------------
+
+-- At most one waiting "forgot password" request per staff member, even when
+-- two requests arrive at the same moment.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_hk_password_resets_waiting
+    ON hk_password_resets (user_id) WHERE status = 'REQUESTED';
+
+-- Lookups that every inspection list, personal record and room page makes.
+CREATE INDEX IF NOT EXISTS idx_hk_inspections_task ON hk_inspections (task_id);
+CREATE INDEX IF NOT EXISTS idx_hk_tasks_room       ON hk_cleaning_tasks (room_id);
+CREATE INDEX IF NOT EXISTS idx_hk_requests_room    ON hk_guest_requests (room_id);

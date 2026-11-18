@@ -36,7 +36,8 @@ async function authenticate(req, res, next) {
     if (!account || account.employment_status !== 'ACTIVE') {
       return next(new HttpError(401, 'This account is no longer active. Please contact your supervisor.'));
     }
-    if (payload.pwv && payload.pwv !== passwordVersion(account.password_hash)) {
+    // Every token this server signs carries pwv; one without it is refused.
+    if (!payload.pwv || payload.pwv !== passwordVersion(account.password_hash)) {
       return next(new HttpError(401, 'Your password was changed. Please log in again.'));
     }
     req.user = {

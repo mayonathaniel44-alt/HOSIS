@@ -102,9 +102,19 @@ function int(value, label, { min = 0, max = 100000 } = {}) {
   return n;
 }
 
+// Search text for ILIKE: "%" and "_" typed by the user are matched as plain
+// characters instead of wildcards, and very long input is refused.
+function likePattern(value, label = 'Search') {
+  if (typeof value !== 'string' || value.length > 100) {
+    throw new HttpError(400, `${label} must be text of 100 characters or fewer.`);
+  }
+  return `%${value.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 
 module.exports = {
+  likePattern,
   required, notBlank, oneOf, id, optionalId, maxLengths, date, optionalTime, optionalPastDateTime, int, isRealDate,
   DATE_RE, TIME_RE, PRIORITIES,
 };

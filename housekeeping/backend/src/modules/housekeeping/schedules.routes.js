@@ -7,7 +7,7 @@ const { requirePosition } = require('../../middleware/auth');
 const router = express.Router();
 
 const SHIFTS = ['MORNING', 'AFTERNOON', 'NIGHT'];
-const { DATE_RE, TIME_RE } = v;
+const { TIME_RE } = v;
 
 function checkSchedule(body) {
   v.oneOf(body.shift, SHIFTS, 'shift');
@@ -73,10 +73,7 @@ function assertNotPast(shiftDate) {
 // HK-008: view the staff schedule for a day (defaults to today),
 // with each person's cleaning task count for that day.
 router.get('/', async (req, res) => {
-  const date = req.query.date || db.today();
-  if (!DATE_RE.test(date)) {
-    throw new HttpError(400, 'date must be in YYYY-MM-DD format.');
-  }
+  const date = req.query.date ? v.date(req.query.date, 'date') : db.today();
   const { rows } = await db.query(
     `SELECT s.*, TO_CHAR(s.shift_date, 'YYYY-MM-DD') AS shift_date,
             CONCAT(u.first_name, ' ', u.last_name) AS staff_name, u.position,
@@ -200,12 +197,21 @@ router.patch('/:id', requirePosition('SUPERVISOR'), async (req, res) => {
   res.json({ schedule });
 });
 
+// Remove a shift that has not happened yet. Shifts on past days stay, because
+// they are the record of who worked (My Record, work reports).
 router.delete('/:id', requirePosition('SUPERVISOR'), async (req, res) => {
   const scheduleId = v.id(req.params.id, 'schedule id');
-  const { rowCount } = await db.query('DELETE FROM hk_schedules WHERE schedule_id = $1', [scheduleId]);
-  if (!rowCount) {
+  const { rows } = await db.query(
+    `SELECT TO_CHAR(shift_date, 'YYYY-MM-DD') AS shift_date FROM hk_schedules WHERE schedule_id = $1`,
+    [scheduleId]
+  );
+  if (!rows[0]) {
     throw new HttpError(404, 'Schedule not found.');
   }
+  if (rows[0].shift_date < db.today()) {
+    throw new HttpError(409, 'A shift that already happened cannot be removed; it is part of the staff work record.');
+  }
+  await db.query('DELETE FROM hk_schedules WHERE schedule_id = $1', [scheduleId]);
   res.status(204).end();
 });
 

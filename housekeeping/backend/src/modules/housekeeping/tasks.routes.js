@@ -3,7 +3,7 @@ const db = require('../../config/db');
 const HttpError = require('../../utils/httpError');
 const v = require('./validate');
 const { requirePosition } = require('../../middleware/auth');
-const { changeRoomStatus, assertNotOutOfOrder, FRONT_OFFICE_HELD } = require('./roomStatus');
+const { changeRoomStatus, assertNotOutOfOrder, lockRoom, FRONT_OFFICE_HELD } = require('./roomStatus');
 const { assertHousekeepingStaff } = require('./staff');
 
 const router = express.Router();
@@ -39,6 +39,11 @@ router.get('/', async (req, res) => {
   if (status) {
     params.push(status);
     where.push(`t.task_status = $${params.length}`);
+    // Inspected tasks are history; only the last 30 days are listed, so the
+    // list does not grow with every room cleaned since the system started.
+    if (status === 'INSPECTED') {
+      where.push(`t.completion_time >= CURRENT_DATE - 30`);
+    }
   } else {
     // Active work plus anything finished today.
     where.push(`(t.task_status <> 'INSPECTED' OR t.completion_time::date = CURRENT_DATE)`);
@@ -48,7 +53,7 @@ router.get('/', async (req, res) => {
     where.push(`t.staff_id = $${params.length}`);
   }
   if (search) {
-    params.push(`%${search}%`);
+    params.push(v.likePattern(search));
     where.push(`(r.room_number ILIKE $${params.length} OR CONCAT(u.first_name, ' ', u.last_name) ILIKE $${params.length})`);
   }
   const { rows } = await db.query(
@@ -95,11 +100,11 @@ router.post('/', requirePosition('SUPERVISOR'), async (req, res) => {
   const staffId = v.optionalId(body.staffId, 'housekeeper');
 
   const task = await db.withTransaction(async (client) => {
-    const { rows: room } = await client.query('SELECT room_status FROM rooms WHERE room_id = $1', [roomId]);
-    if (!room[0]) {
-      throw new HttpError(404, 'Room not found.');
-    }
-    if (room[0].room_status === 'OUT_OF_ORDER') {
+    // Locking the room makes two supervisors creating a task for the same
+    // room at the same moment wait for each other, so the "one open task per
+    // room" check below cannot be passed by both.
+    const room = await lockRoom(client, roomId);
+    if (room.room_status === 'OUT_OF_ORDER') {
       throw new HttpError(409, 'This room is OUT OF ORDER. Release the maintenance request first.');
     }
     const { rows: active } = await client.query(

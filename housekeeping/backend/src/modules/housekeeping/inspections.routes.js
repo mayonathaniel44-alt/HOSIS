@@ -7,6 +7,30 @@ const { changeRoomStatus, assertNotOutOfOrder, FRONT_OFFICE_HELD } = require('./
 
 const router = express.Router();
 
+// The inspection checklist (same items as the Inspection page).
+const CHECKLIST_ITEMS = ['bed', 'bathroom', 'amenities', 'floors', 'fixtures'];
+
+// Only the known items, each true or false, are saved. Anything else in the
+// request (unknown keys, nested objects, very large values) is refused.
+function readChecklist(value) {
+  if (value === undefined || value === null) {
+    return Object.fromEntries(CHECKLIST_ITEMS.map((item) => [item, false]));
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new HttpError(400, 'checklist must be a list of items ticked true or false.');
+  }
+  const unknown = Object.keys(value).filter((k) => !CHECKLIST_ITEMS.includes(k));
+  if (unknown.length) {
+    throw new HttpError(400, `Unknown checklist item(s): ${unknown.slice(0, 5).join(', ')}`);
+  }
+  return Object.fromEntries(CHECKLIST_ITEMS.map((item) => {
+    if (value[item] !== undefined && typeof value[item] !== 'boolean') {
+      throw new HttpError(400, `Checklist item "${item}" must be true or false.`);
+    }
+    return [item, value[item] === true];
+  }));
+}
+
 // Rooms waiting for inspection: tasks that are cleaned but not yet inspected.
 router.get('/queue', async (req, res) => {
   const { rows } = await db.query(
@@ -56,7 +80,12 @@ router.post('/', requirePosition('INSPECTOR', 'SUPERVISOR'), async (req, res) =>
     throw new HttpError(400, 'Please write what needs re-cleaning when an inspection fails.');
   }
   v.maxLengths(body, { remarks: [255, 'Remarks'] });
-  const checklist = body.checklist && typeof body.checklist === 'object' ? body.checklist : {};
+  const checklist = readChecklist(body.checklist);
+  // A room passes only when every checklist item meets the standard, so the
+  // API cannot approve a room that the Inspection page would not.
+  if (body.result === 'PASSED' && !CHECKLIST_ITEMS.every((item) => checklist[item])) {
+    throw new HttpError(400, 'Every checklist item must be ticked before a room can pass inspection.');
+  }
 
   const result = await db.withTransaction(async (client) => {
     const { rows: tasks } = await client.query(
