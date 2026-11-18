@@ -106,6 +106,8 @@
   gap: 16px;
   padding: 12px 24px;
   background: linear-gradient(90deg, #1a1488 0%, #3a33e0 100%);
+  position: relative;
+  z-index: 50;
 }
 
 .hk-user {
@@ -942,6 +944,7 @@
 
 .hk-bell {
   position: relative;
+  margin-left: auto;
 }
 
 .hk-bell__btn {
