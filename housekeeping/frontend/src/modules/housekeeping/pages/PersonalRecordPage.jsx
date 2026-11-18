@@ -90,11 +90,23 @@ export default function PersonalRecordPage() {
 // "Download my work report": the staff member picks a period and downloads
 // their shifts, cleaning tasks, inspection results, guest requests, found
 // items and maintenance reports as PDF, Excel or CSV.
+function nextDay(iso) {
+  const d = new Date(iso + 'T00:00:00')
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+function prevDay(iso) {
+  const d = new Date(iso + 'T00:00:00')
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
 function WorkReportCard({ name }) {
   const today = todayISO()
   const [from, setFrom] = useState(`${today.slice(0, 8)}01`)
   const [to, setTo] = useState(today)
-  const invalid = !from || !to || from > to
+  const invalid = !from || !to || from >= to
 
   async function getReport() {
     const data = await api.workReport(`?from=${from}&to=${to}`)
@@ -105,14 +117,14 @@ function WorkReportCard({ name }) {
     <Card title="Download my work report" subtitle="Your shifts, rooms cleaned, inspection results, guest requests and reports for a period">
       <div className="hk-form hk-form--inline">
         <Field label="From">
-          <input type="date" value={from} max={to || today} onChange={(e) => setFrom(e.target.value)} />
+          <input type="date" value={from} max={to ? prevDay(to) : today} onChange={(e) => setFrom(e.target.value)} />
         </Field>
         <Field label="To">
-          <input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
+          <input type="date" value={to} min={from ? nextDay(from) : undefined} max={today} onChange={(e) => setTo(e.target.value)} />
         </Field>
         <div className="hk-form__end">
           {invalid ? (
-            <span className="hk-muted">Pick a From date on or before the To date.</span>
+            <span className="hk-muted">The end date must be after the start date.</span>
           ) : (
             <ExportMenu title="Housekeeping Work Report" fileName={`work-report-${name.toLowerCase()}-${from}-to-${to}`} getReport={getReport} label="Download report" />
           )}
