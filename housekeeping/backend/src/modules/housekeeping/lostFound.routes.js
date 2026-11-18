@@ -247,6 +247,26 @@ router.post('/:id/claims', requirePosition('SUPERVISOR', 'INSPECTOR'), async (re
     if (items[0].item_status !== 'STORED') {
       throw new HttpError(409, `This item is already ${items[0].item_status.toLowerCase()}.`);
     }
+
+    // ---- Anti-theft safeguards ----
+    // 1. Separation of duties: the person who found the item cannot process
+    //    its own claim. This makes single-person theft and simple two-person
+    //    collusion harder because a third party must handle the release.
+    if (items[0].found_by === req.user.userId) {
+      throw new HttpError(403, 'You cannot process a claim for an item you recorded. Ask another supervisor or inspector to handle the release.');
+    }
+    // 2. Photo evidence: at least one photo must be on file before releasing.
+    //    This proves the item existed and was stored, making it harder to
+    //    create a fake record and release it without anyone noticing.
+    if (valid) {
+      const { rows: photoCount } = await client.query(
+        'SELECT COUNT(*)::int AS n FROM hk_lost_found_photos WHERE item_id = $1', [itemId]
+      );
+      if (photoCount[0].n === 0) {
+        throw new HttpError(400, 'Upload at least one photo of the item before releasing it. Photo evidence is required for all releases.');
+      }
+    }
+
     const { rows: claims } = await client.query(
       `INSERT INTO hk_item_claims
          (item_id, guest_id, claimant_name, claimant_contact, id_verified, description_match,

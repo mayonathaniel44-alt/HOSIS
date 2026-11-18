@@ -210,6 +210,17 @@ test('lost and found: invalid claim is rejected, valid claim releases', async ()
   assert.equal(rejected.body.released, false);
   assert.equal(rejected.body.item.item_status, 'STORED');
 
+  // A release requires at least one photo (anti-theft safeguard).
+  const noPhoto = await api('POST', `/housekeeping/lost-found/${itemId}/claims`, {
+    token: sup.token,
+    body: { claimantName: 'Grace Lim', claimantContact: '0918', idVerified: true, idType: 'PASSPORT', idNumber: 'P1234567A', descriptionMatch: true },
+  });
+  assert.equal(noPhoto.status, 400, 'release without photo should be blocked');
+
+  // Upload a photo so the release can proceed.
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  assert.equal((await api('POST', `/housekeeping/lost-found/${itemId}/photos`, { token: liza.token, body: { image: png } })).status, 201);
+
   const valid = await api('POST', `/housekeeping/lost-found/${itemId}/claims`, {
     token: sup.token,
     body: { claimantName: 'Grace Lim', claimantContact: '0918', idVerified: true, idType: 'PASSPORT', idNumber: 'P1234567A', descriptionMatch: true },

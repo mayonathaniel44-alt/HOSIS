@@ -3091,6 +3091,40 @@ body.hk-no-scroll {
   margin-top: 8px;
 }
 
+/* QR code shown inline on the item detail card */
+.hk-detail-with-qr {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.hk-detail-with-qr .hk-facts {
+  flex: 1;
+  min-width: 0;
+}
+
+.hk-qr-inline {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--hk-line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.hk-qr-inline img {
+  display: block;
+  border-radius: 4px;
+}
+
+.hk-qr-inline small {
+  font-size: 11px;
+  text-align: center;
+}
+
 /* Lost & found storage label with QR code */
 .hk-print-label {
   display: flex;

@@ -36,8 +36,16 @@ export default function LostFoundPage({ search: topSearch, user }) {
   const canProcessClaim = supervisor || user?.position === 'INSPECTOR'
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
-  const [selectedId, setSelectedId] = useState(null)
-  const [openId, setOpenId] = useState(null)
+  // If the URL has ?verify=<id> (from scanning a QR code), auto-select that item.
+  const verifyParam = (() => {
+    try {
+      const hash = window.location.hash
+      const q = hash.includes('?') ? new URLSearchParams(hash.split('?')[1]) : null
+      return q?.get('verify') ? Number(q.get('verify')) : null
+    } catch { return null }
+  })()
+  const [selectedId, setSelectedId] = useState(verifyParam)
+  const [openId, setOpenId] = useState(verifyParam)
   const [creating, setCreating] = useState(false)
   const [labelFor, setLabelFor] = useState(null)
   const [flash, setFlash] = useState(null)
@@ -112,13 +120,16 @@ export default function LostFoundPage({ search: topSearch, user }) {
           {selected ? (
             <>
               <Card title="Found item detail" subtitle={`Recorded by ${selected.found_by_name}`} actions={<Badge value={selected.item_status} />}>
-                <dl className="hk-facts">
-                  <dt>Reference</dt><dd>{selected.storage_label}</dd>
-                  <dt>Item</dt><dd>{selected.item_description}</dd>
-                  <dt>Found</dt><dd>{selected.room_number ? `Room ${selected.room_number} · ` : ''}{selected.found_location}</dd>
-                  <dt>Date / time</dt><dd>{formatDateTime(selected.found_at)}</dd>
-                  <dt>Storage</dt><dd>{selected.storage_location}</dd>
-                </dl>
+                <div className="hk-detail-with-qr">
+                  <dl className="hk-facts">
+                    <dt>Reference</dt><dd>{selected.storage_label}</dd>
+                    <dt>Item</dt><dd>{selected.item_description}</dd>
+                    <dt>Found</dt><dd>{selected.room_number ? `Room ${selected.room_number} · ` : ''}{selected.found_location}</dd>
+                    <dt>Date / time</dt><dd>{formatDateTime(selected.found_at)}</dd>
+                    <dt>Storage</dt><dd>{selected.storage_location}</dd>
+                  </dl>
+                  <QRPreview item={selected} />
+                </div>
                 {selected.photo_ids?.length > 0 && <PhotoStrip item={selected} />}
                 {selected.item_status === 'DISPOSED' && (
                   <Notice tone="amber" title={`Disposed by ${selected.disposed_by_name || 'a supervisor'}`}>
@@ -142,7 +153,7 @@ export default function LostFoundPage({ search: topSearch, user }) {
 
       {opened && (
         <Modal title={`Found item ${opened.storage_label}`} onClose={() => setOpenId(null)}>
-          <ItemDetail key={opened.item_id} item={opened} onSaved={refresh} supervisor={supervisor} canProcessClaim={canProcessClaim} onPhotoAdded={items.reload} />
+          <ItemDetail key={opened.item_id} item={opened} onSaved={refresh} supervisor={supervisor} canProcessClaim={canProcessClaim} onPhotoAdded={items.reload} user={user} />
         </Modal>
       )}
       {labelFor && (
@@ -244,7 +255,7 @@ function NewItemForm({ rooms, onSaved }) {
   )
 }
 
-function ItemDetail({ item, onSaved, supervisor, canProcessClaim, onPhotoAdded }) {
+function ItemDetail({ item, onSaved, supervisor, canProcessClaim, onPhotoAdded, user }) {
   const [form, setForm] = useState({ description: item.item_description, storageLocation: item.storage_location })
   const [claim, setClaim] = useState({ claimantName: '', claimantContact: '', idType: '', idNumber: '', idVerified: false, descriptionMatch: false })
   const [disposeReason, setDisposeReason] = useState('')
@@ -256,6 +267,9 @@ function ItemDetail({ item, onSaved, supervisor, canProcessClaim, onPhotoAdded }
   const verified = claim.idVerified && idRecorded && claim.descriptionMatch
   const hasClaimant = claim.claimantName && claim.claimantContact
   const releaseReady = Boolean(hasClaimant && verified)
+  // Anti-theft: the person who found the item cannot release it.
+  const isTheFinder = user && item.found_by === user.userId
+  const hasPhotos = photos.length > 0
 
   async function run(action) {
     setBusy(true)
@@ -336,9 +350,13 @@ function ItemDetail({ item, onSaved, supervisor, canProcessClaim, onPhotoAdded }
         </Field>
       </div>
 
-      {stored && canProcessClaim && (
+      {stored && canProcessClaim && !isTheFinder && (
         <>
           <h3 className="hk-subhead">Claimant verification</h3>
+          <Notice tone="blue" title="Security notice">
+            This item was recorded by <strong>{item.found_by_name}</strong>. You are processing this claim as a different staff member, which is required by the system's separation of duties.
+            {!hasPhotos && ' At least one photo of the item is required before it can be released.'}
+          </Notice>
           <div className="hk-form">
             <Field label="Claimant name">
               <input value={claim.claimantName} onChange={(e) => setClaim({ ...claim, claimantName: e.target.value })} />
@@ -364,14 +382,22 @@ function ItemDetail({ item, onSaved, supervisor, canProcessClaim, onPhotoAdded }
             <input type="checkbox" checked={claim.descriptionMatch} onChange={(e) => setClaim({ ...claim, descriptionMatch: e.target.checked })} />
             Claimant's description matches the item
           </label>
-          {verified ? (
+          {verified && !hasPhotos && (
+            <Notice tone="red" title="Photo required">Upload at least one photo of the item before releasing it. Photo evidence is required for all releases.</Notice>
+          )}
+          {verified && hasPhotos ? (
             <Notice tone="green" title="Valid claim">The item can be released to the claimant.</Notice>
-          ) : (
+          ) : !verified && (
             <Notice tone="amber" title="Release blocked - verification incomplete">
               Enter the claimant details, record the ID type and number, check the ID, and confirm that the description matches before releasing the item.
             </Notice>
           )}
         </>
+      )}
+      {stored && canProcessClaim && isTheFinder && (
+        <Notice tone="red" title="Cannot process this claim">
+          You recorded this item. For security, a different supervisor or inspector must handle claims on items you found. This prevents any one person from recording and releasing an item.
+        </Notice>
       )}
       {stored && !canProcessClaim && (
         <Notice tone="amber" title="View only">Only supervisors and inspectors can process claims and release items.</Notice>
@@ -380,12 +406,12 @@ function ItemDetail({ item, onSaved, supervisor, canProcessClaim, onPhotoAdded }
       {stored && (
         <div className="hk-actions">
           <button type="button" className="hk-btn hk-btn--secondary" disabled={busy} onClick={update}>Save item details</button>
-          {canProcessClaim && (
+          {canProcessClaim && !isTheFinder && (
             <>
               <button type="button" className="hk-btn hk-btn--secondary" disabled={busy || !hasClaimant || verified} onClick={processClaim}>
                 Record rejected claim
               </button>
-              <button type="button" className="hk-btn hk-btn--primary" disabled={busy || !releaseReady} onClick={processClaim}>
+              <button type="button" className="hk-btn hk-btn--primary" disabled={busy || !releaseReady || !hasPhotos} onClick={processClaim}>
                 Release item
               </button>
             </>
@@ -528,22 +554,45 @@ function ItemPhoto({ path, alt }) {
   )
 }
 
-// Storage label with a QR code. Scanning it shows the label and description,
-// so the item can be matched to its record. Printed on its own page.
-function ItemLabel({ item }) {
+// Builds the QR data string — a verification URL so scanning opens the item
+// record in the system. The hash route works with the current app routing.
+function qrPayload(item) {
+  const base = window.location.origin
+  return `${base}/#/housekeeping/lost-found?verify=${item.item_id}&label=${encodeURIComponent(item.storage_label)}`
+}
+
+// Shared hook: generates a QR data URL for one item.
+function useQR(item) {
   const [qr, setQr] = useState(null)
   useEffect(() => {
     let active = true
     import('qrcode')
       .then(({ default: QRCode }) =>
-        QRCode.toDataURL(`HOSIS LOST & FOUND\n${item.storage_label}\n${item.item_description}`, { margin: 1, width: 240 })
+        QRCode.toDataURL(qrPayload(item), { margin: 1, width: 240, errorCorrectionLevel: 'M' })
       )
       .then((data) => active && setQr(data))
       .catch(() => {})
-    return () => {
-      active = false
-    }
-  }, [item])
+    return () => { active = false }
+  }, [item.item_id, item.storage_label])
+  return qr
+}
+
+// Inline QR preview shown on the item detail card (not the print modal).
+function QRPreview({ item }) {
+  const qr = useQR(item)
+  if (!qr) return <p className="hk-muted">Making QR code...</p>
+  return (
+    <div className="hk-qr-inline">
+      <img src={qr} alt={`QR code for ${item.storage_label}`} width={120} height={120} />
+      <small className="hk-muted">Scan to verify this item in the system</small>
+    </div>
+  )
+}
+
+// Storage label with a QR code. Scanning it opens the item's record in the
+// system so the item can be verified. Printed on its own page.
+function ItemLabel({ item }) {
+  const qr = useQR(item)
 
   function print() {
     // Log the label print for the audit trail (best effort).
@@ -569,6 +618,9 @@ function ItemLabel({ item }) {
           <small>Grand Horizon Hotel · Housekeeping Lost &amp; Found</small>
         </div>
       </div>
+      <Notice tone="blue" title="About the QR code">
+        The QR code is generated from within the app (no external service). Scanning it opens this item's record in the system so anyone can verify its status. The QR code does not expire — the item record stays in the system even after it is released or disposed.
+      </Notice>
       <div className="hk-actions">
         <button type="button" className="hk-btn hk-btn--primary" disabled={!qr} onClick={print}>Print label</button>
       </div>
