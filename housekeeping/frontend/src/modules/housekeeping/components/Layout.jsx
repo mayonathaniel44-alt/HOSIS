@@ -3,6 +3,7 @@ import { label } from '../format.js'
 import Icon from './Icon.jsx'
 import Modal from './Modal.jsx'
 import NotificationBell from './NotificationBell.jsx'
+import StaffAvatar from './StaffAvatar.jsx'
 import { api } from '../api.js'
 import { Notice } from './ui.jsx'
 import { TABS } from '../tabs.js'
@@ -104,9 +105,12 @@ export function Topbar({ user, onLogout, onMenu, menuOpen = false }) {
       )}
       <NotificationBell />
       <div className="hk-user">
-        <span className="hk-user__avatar" aria-hidden="true">
-          <Icon d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0" size={18} />
-        </span>
+        <StaffAvatar
+          userId={user.userId}
+          name={user.name}
+          className="hk-user__avatar"
+          fallback={<Icon d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0" size={18} />}
+        />
         <span className="hk-user__text">
           <strong>{user.name}</strong>
           <small>{user.position ? `Housekeeping ${label(user.position)}` : user.role}</small>

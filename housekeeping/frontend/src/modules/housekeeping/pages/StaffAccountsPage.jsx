@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api.js'
+import StaffAvatar from '../components/StaffAvatar.jsx'
 import { Card, DataTable, LoadState, Notice } from '../components/ui.jsx'
 import { formatDateTime, label, staffId } from '../format.js'
 import { useLoad } from '../useLoad.js'
@@ -46,6 +47,8 @@ export default function StaffAccountsPage({ user }) {
   }
 
   const pending = requests.data?.requests || []
+  // Photo versions by user id, from the staff list (for the requests table).
+  const photos = Object.fromEntries((staff.data?.staff || []).map((s) => [s.user_id, s.photo_version]))
   // Another supervisor's password is reset by the system administrator (the
   // API refuses it), so only housekeepers and inspectors are listed here.
   const team = (staff.data?.staff || []).filter(
@@ -72,7 +75,16 @@ export default function StaffAccountsPage({ user }) {
           rows={pending}
           empty="No one is waiting for a password reset."
           columns={[
-            { key: 'name', title: 'Staff', render: (r) => <span><strong>{r.name}</strong><small className="hk-block">{r.email || r.username}</small></span> },
+            {
+              key: 'name',
+              title: 'Staff',
+              render: (r) => (
+                <span className="hk-person">
+                  <StaffAvatar userId={r.user_id} name={r.name} version={photos[r.user_id] ?? null} className="hk-avatar--small" />
+                  <span><strong>{r.name}</strong><small className="hk-block">{r.email || r.username}</small></span>
+                </span>
+              ),
+            },
             { key: 'pos', title: 'Position', render: (r) => label(r.position) },
             { key: 'at', title: 'Asked', render: (r) => formatDateTime(r.requested_at) },
             {
@@ -101,7 +113,16 @@ export default function StaffAccountsPage({ user }) {
           rows={team}
           columns={[
             { key: 'id', title: 'User ID', render: (s) => staffId(s.user_id) },
-            { key: 'name', title: 'Name', render: (s) => <strong>{s.name}</strong> },
+            {
+              key: 'name',
+              title: 'Name',
+              render: (s) => (
+                <span className="hk-person">
+                  <StaffAvatar userId={s.user_id} name={s.name} version={s.photo_version} className="hk-avatar--small" />
+                  <strong>{s.name}</strong>
+                </span>
+              ),
+            },
             { key: 'pos', title: 'Position', render: (s) => label(s.position) },
             {
               key: 'act',

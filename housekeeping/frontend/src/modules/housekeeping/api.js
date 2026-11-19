@@ -105,6 +105,9 @@ export const api = {
   login: (body) => request('POST', '/auth/login', body),
   account: () => request('GET', '/auth/account'),
   changePassword: (body) => request('POST', '/auth/password', body),
+  uploadPhoto: (image) => request('PUT', '/auth/account/photo', { image }),
+  removePhoto: () => request('DELETE', '/auth/account/photo'),
+  staffPhotoPath: (userId, version) => `${HK}/staff/${userId}/photo${version ? `?v=${encodeURIComponent(version)}` : ''}`,
   forgotPassword: (body) => request('POST', '/auth/forgot-password', body),
 
   passwordResets: () => request('GET', `${HK}/password-resets`),

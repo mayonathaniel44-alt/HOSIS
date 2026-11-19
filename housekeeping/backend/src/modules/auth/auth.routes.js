@@ -5,6 +5,7 @@ const db = require('../../config/db');
 const HttpError = require('../../utils/httpError');
 const { authenticate, passwordVersion } = require('../../middleware/auth');
 const { checkLoginAllowed, recordLoginFailure, clearLoginFailures } = require('../../middleware/loginLimiter');
+const photos = require('../housekeeping/staffPhotos');
 
 const router = express.Router();
 
@@ -119,7 +120,25 @@ router.get('/account', authenticate, async (req, res) => {
   if (!rows[0]) {
     throw new HttpError(404, 'Account not found.');
   }
-  res.json({ account: rows[0] });
+  const [account] = await photos.withPhotoVersions(rows);
+  res.json({ account });
+});
+
+// PUT /api/auth/account/photo  { image: "data:image/jpeg;base64,..." }
+// Upload or change the signed-in user's profile photo (any position).
+// JPEG, PNG or WebP, at most 2 MB.
+router.put('/account/photo', authenticate, async (req, res) => {
+  const photoVersion = await photos.savePhoto(req.user.userId, (req.body || {}).image);
+  res.json({ photo_version: photoVersion });
+});
+
+// DELETE /api/auth/account/photo: remove the photo; the initials show again.
+router.delete('/account/photo', authenticate, async (req, res) => {
+  const removed = await photos.removePhoto(req.user.userId);
+  if (!removed) {
+    throw new HttpError(404, 'You have no profile photo to remove.');
+  }
+  res.json({ photo_version: null });
 });
 
 const MIN_PASSWORD = 8;

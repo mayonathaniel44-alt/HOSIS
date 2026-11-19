@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../api.js'
 import ExportMenu from '../components/ExportMenu.jsx'
+import StaffAvatar from '../components/StaffAvatar.jsx'
 import { Badge, Card, DataTable, Field, LoadState } from '../components/ui.jsx'
 import { formatDateTime, label, longDate, staffId, todayISO } from '../format.js'
 import { useLoad } from '../useLoad.js'
@@ -26,10 +27,12 @@ export default function PersonalRecordPage() {
   return (
     <div className="hk-stack">
       <section className="hk-record-head">
-        <span className="hk-account-head__avatar hk-account-head__avatar--large" aria-hidden="true">
-          {p.first_name.charAt(0)}
-          {p.last_name.charAt(0)}
-        </span>
+        <StaffAvatar
+          userId={p.user_id}
+          name={`${p.first_name} ${p.last_name}`}
+          version={p.photo_version}
+          className="hk-account-head__avatar hk-account-head__avatar--large"
+        />
         <div className="hk-record-head__name">
           <strong>{p.first_name} {p.last_name}</strong>
           <span>Housekeeping {label(p.position)}</span>

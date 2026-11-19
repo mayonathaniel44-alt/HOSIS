@@ -31,7 +31,7 @@ const PAGES = {
   maintenance: { component: MaintenancePage, title: 'Maintenance', subtitle: 'Report defects, coordinate with Engineering and protect room readiness.' },
   'staff-accounts': { component: StaffAccountsPage, title: 'Staff Accounts', subtitle: 'Forgotten passwords and temporary passwords for your team.' },
   record: { component: PersonalRecordPage, title: 'Personal Record', subtitle: 'Your work history, inspection results and reports.' },
-  account: { component: AccountPage, title: 'Account', subtitle: 'Your user ID, email and password.' },
+  account: { component: AccountPage, title: 'Account', subtitle: 'Your photo, user ID, email and password.' },
 }
 
 // What regular housekeeping staff see in place of the supervisor pages, and
@@ -41,7 +41,7 @@ const STAFF_PAGES = {
   schedules: { ...PAGES.schedules, title: 'Schedules', subtitle: 'Your shifts and assigned area, and who is on duty with you.' },
   report: { component: RoomReportPage, title: 'Report Room Condition', subtitle: 'Tell Front Office and Maintenance about a room’s condition.' },
   record: { component: PersonalRecordPage, title: 'Personal Record', subtitle: 'Your work history, inspection results and reports.' },
-  account: { component: AccountPage, title: 'Account', subtitle: 'Your user ID, email and password.' },
+  account: { component: AccountPage, title: 'Account', subtitle: 'Your photo, user ID, email and password.' },
 }
 const ALL_TABS = [...TABS, ...STAFF_TABS]
 const STAFF_MENU = ['overview', 'rooms', 'tasks', 'schedules', 'requests', 'report', 'lost-found', 'maintenance', 'record', 'account']

@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../../config/db');
 const HttpError = require('../../utils/httpError');
 const v = require('./validate');
+const photos = require('./staffPhotos');
 
 // The signed-in staff member's own records: personal work record and the room
 // condition reports they sent to Front Office and Maintenance.
@@ -78,8 +79,9 @@ router.get('/me/record', async (req, res) => {
   if (!profile.rows[0]) {
     throw new HttpError(404, 'Account not found.');
   }
+  const [profileWithPhoto] = await photos.withPhotoVersions(profile.rows);
   res.json({
-    profile: profile.rows[0],
+    profile: profileWithPhoto,
     totals: { ...totals.rows[0], ...month.rows[0] },
     inspections: inspections.rows,
     recent: recent.rows,

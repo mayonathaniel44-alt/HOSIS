@@ -10,7 +10,7 @@ Housekeeping ERD in our documentation, and the HOSIS Housekeeping UI Figma file.
 
 | Layer    | Location                                         |
 | -------- | ------------------------------------------------ |
-| Database | `database/schema/06-housekeeping.sql`, `database/seed/06-housekeeping-seed.sql` |
+| Database | `database/schema/06-housekeeping.sql`, `database/schema/07-housekeeping-staff-photos.sql`, `database/seed/06-housekeeping-seed.sql` |
 | Backend  | `backend/src/modules/housekeeping/` (REST API under `/api/housekeeping`) |
 | Login    | `backend/src/modules/auth/` (`POST /api/auth/login`, JWT) |
 | Frontend | `frontend/src/modules/housekeeping/` |
@@ -25,6 +25,7 @@ Housekeeping ERD in our documentation, and the HOSIS Housekeeping UI Figma file.
    createdb hosis
    psql hosis -f database/standalone/00-shared-tables.sql
    psql hosis -f database/schema/06-housekeeping.sql
+   psql hosis -f database/schema/07-housekeeping-staff-photos.sql
    psql hosis -f database/seed/06-housekeeping-seed.sql
    ```
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api.js'
+import StaffAvatar from '../components/StaffAvatar.jsx'
 import { Badge, Card, DataTable, Field, LoadState, Notice, SearchBox } from '../components/ui.jsx'
 import DatePicker, { DateNav } from '../components/DatePicker.jsx'
 import MySchedulePage from './MySchedulePage.jsx'
@@ -54,6 +55,7 @@ function StaffSchedules({ user }) {
   const isSupervisor = user.position === 'SUPERVISOR' || user.role === 'ADMIN'
 
   const onDuty = schedules.data?.schedules || []
+  const photos = Object.fromEntries((staff.data?.staff || []).map((s) => [s.user_id, s.photo_version]))
   const scheduled = new Set(onDuty.map((s) => s.staff_id))
   const dayOff = (staff.data?.staff || [])
     .filter((s) => !scheduled.has(s.user_id))
@@ -107,7 +109,16 @@ function StaffSchedules({ user }) {
             }}
             empty={view === 'DAY_OFF' ? 'Everyone is scheduled on this day.' : 'Nobody is scheduled on this day.'}
             columns={[
-              { key: 'name', title: 'Housekeeper', render: (s) => <span><strong>{s.staff_name}</strong><small className="hk-block">{label(s.position)}</small></span> },
+              {
+                key: 'name',
+                title: 'Housekeeper',
+                render: (s) => (
+                  <span className="hk-person">
+                    <StaffAvatar userId={s.staff_id} name={s.staff_name} version={photos[s.staff_id] ?? null} className="hk-avatar--small" />
+                    <span><strong>{s.staff_name}</strong><small className="hk-block">{label(s.position)}</small></span>
+                  </span>
+                ),
+              },
               { key: 'shift', title: 'Shift', render: (s) => (s.off ? <Badge value="DAY_OFF">Day off</Badge> : <span>{label(s.shift)}<small className="hk-block">{formatTime(s.start_time)} - {formatTime(s.end_time)}</small></span>) },
               { key: 'tasks', title: 'Assigned', render: (s) => (s.off ? '-' : <span>{plural(s.assigned_tasks, 'room')}<small className="hk-block">{s.assigned_area}</small></span>) },
               { key: 'done', title: 'Complete', render: (s) => (s.off ? '-' : `${s.completed_tasks || 0} / ${s.assigned_tasks}`) },

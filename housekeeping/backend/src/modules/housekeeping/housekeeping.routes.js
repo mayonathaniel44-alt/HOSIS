@@ -1,6 +1,9 @@
 const express = require('express');
 const db = require('../../config/db');
 const { authenticate, authorize, requirePasswordChanged } = require('../../middleware/auth');
+const HttpError = require('../../utils/httpError');
+const v = require('./validate');
+const photos = require('./staffPhotos');
 
 const router = express.Router();
 
@@ -103,7 +106,20 @@ router.get('/staff', async (req, res) => {
        FROM users WHERE role = 'HOUSEKEEPING' AND employment_status = 'ACTIVE'
       ORDER BY position, name`
   );
-  res.json({ staff: rows });
+  res.json({ staff: await photos.withPhotoVersions(rows) });
+});
+
+// GET /api/housekeeping/staff/:userId/photo: a staff member's profile photo
+// (404 when they have none, and the initials are shown instead).
+router.get('/staff/:userId/photo', async (req, res) => {
+  const userId = v.id(req.params.userId, 'staff id');
+  const photo = await photos.getPhoto(userId);
+  if (!photo) {
+    throw new HttpError(404, 'No profile photo.');
+  }
+  // The page asks with ?v=<photo version>, so a copy may be kept privately.
+  res.set({ 'Content-Type': photo.content_type, 'Cache-Control': 'private, max-age=86400' });
+  res.send(photo.data);
 });
 
 // Limited guest info needed for housekeeping work only
