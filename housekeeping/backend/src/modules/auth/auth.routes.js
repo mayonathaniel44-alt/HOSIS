@@ -35,9 +35,9 @@ router.post('/login', async (req, res) => {
   await checkLoginAllowed(req);
 
   const { rows } = await db.query(
-    `SELECT u.user_id, u.first_name, u.last_name, u.username, u.password_hash, u.role, u.position,
+    `SELECT u.id, u.first_name, u.last_name, u.username, u.password_hash, u.role, u.position,
             u.employment_status, (m.user_id IS NOT NULL) AS must_change_password
-       FROM users u LEFT JOIN hk_password_must_change m ON m.user_id = u.user_id
+       FROM users u LEFT JOIN hk_password_must_change m ON m.user_id = u.id
       WHERE u.username = $1 OR LOWER(u.email) = LOWER($1)`,
     [username]
   );
@@ -58,7 +58,7 @@ router.post('/login', async (req, res) => {
   }
 
   const payload = {
-    userId: user.user_id,
+    userId: user.id,
     username: user.username,
     name: `${user.first_name} ${user.last_name}`,
     role: user.role,
@@ -85,7 +85,7 @@ router.post('/forgot-password', async (req, res) => {
   await checkLoginAllowed(attempt);
   await recordLoginFailure(attempt);
   const { rows } = await db.query(
-    `SELECT user_id FROM users
+    `SELECT id FROM users
       WHERE (username = $1 OR LOWER(email) = LOWER($1)) AND role = 'HOUSEKEEPING' AND employment_status = 'ACTIVE'`,
     [username]
   );
@@ -96,7 +96,7 @@ router.post('/forgot-password', async (req, res) => {
        SELECT $1 WHERE NOT EXISTS (
          SELECT 1 FROM hk_password_resets WHERE user_id = $1 AND status = 'REQUESTED')
        ON CONFLICT DO NOTHING`,
-      [rows[0].user_id]
+      [rows[0].id]
     );
   }
   res.json({
@@ -113,8 +113,8 @@ router.get('/me', authenticate, (req, res) => {
 // GET /api/auth/account: the signed-in user's own account details.
 router.get('/account', authenticate, async (req, res) => {
   const { rows } = await db.query(
-    `SELECT user_id, username, email, first_name, last_name, role, position, employment_status, created_at
-       FROM users WHERE user_id = $1`,
+    `SELECT id, username, email, first_name, last_name, role, position, employment_status, created_at
+       FROM users WHERE id = $1`,
     [req.user.userId]
   );
   if (!rows[0]) {
@@ -160,7 +160,7 @@ router.post('/password', authenticate, async (req, res) => {
   // Same lockout key as the login page: this address plus this account.
   const attempt = { ip: req.ip, body: { username: req.user.username } };
   await checkLoginAllowed(attempt);
-  const { rows } = await db.query('SELECT password_hash FROM users WHERE user_id = $1', [req.user.userId]);
+  const { rows } = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.user.userId]);
   if (!rows[0] || !(await bcrypt.compare(currentPassword, rows[0].password_hash))) {
     await recordLoginFailure(attempt);
     throw new HttpError(400, 'Your current password is incorrect.');
@@ -171,7 +171,7 @@ router.post('/password', authenticate, async (req, res) => {
   }
   const hash = await bcrypt.hash(newPassword, 10);
   await db.withTransaction(async (client) => {
-    await client.query('UPDATE users SET password_hash = $1 WHERE user_id = $2', [hash, req.user.userId]);
+    await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.userId]);
     await client.query('DELETE FROM hk_password_must_change WHERE user_id = $1', [req.user.userId]);
   });
   // Older tokens stop working with the old password, so hand back a new one.

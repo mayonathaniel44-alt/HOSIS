@@ -43,9 +43,9 @@ const REQUEST_SELECT = `
          i.item_name, i.unit, i.category AS item_category, i.quantity AS on_hand, i.reorder_level
     FROM hk_guest_requests q
     LEFT JOIN hk_inventory_items i ON i.inv_item_id = q.inv_item_id
-    JOIN rooms r ON r.room_id = q.room_id
-    LEFT JOIN guests g ON g.guest_id = q.guest_id
-    LEFT JOIN users u ON u.user_id = q.staff_id`;
+    JOIN rooms r ON r.id = q.room_id
+    LEFT JOIN guests g ON g.id = q.guest_id
+    LEFT JOIN users u ON u.id = q.staff_id`;
 
 // Open requests (default), completed requests for today (?view=completed),
 // or open requests plus those completed in the last 30 days (?view=all), so
@@ -87,7 +87,7 @@ router.post('/', async (req, res) => {
     await assertHousekeepingStaff(db, staffId, 'Guest requests can only be assigned to active housekeeping staff.');
   }
   const roomId = v.id(body.roomId, 'room');
-  const { rows: rooms } = await db.query('SELECT room_number, room_status FROM rooms WHERE room_id = $1', [roomId]);
+  const { rows: rooms } = await db.query('SELECT room_number, status AS room_status FROM rooms WHERE id = $1', [roomId]);
   if (!rooms[0]) {
     throw new HttpError(400, 'The selected room does not exist.');
   }

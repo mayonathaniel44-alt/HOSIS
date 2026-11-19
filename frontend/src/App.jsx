@@ -94,6 +94,7 @@ const navigation = [
   { id: 'Rooms', icon: 'bed' },
   { id: 'Guest requests', icon: 'message' },
   { id: 'Billing', icon: 'receipt' },
+  { id: 'Housekeeping', icon: 'broom', external: true },
 ]
 
 function Icon({ name, size = 18, className = '' }) {
@@ -118,6 +119,7 @@ function Icon({ name, size = 18, className = '' }) {
     eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>,
     lock: <><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
     sparkle: <><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z" /><path d="m19 14 1.1 2.9L23 18l-2.9 1.1L19 22l-1.1-2.9L15 18l2.9-1.1L19 14z" /></>,
+    broom: <><path d="M12 2v8M5 22l3-8h8l3 8" /><path d="M9 10h6" /></>,
     filter: <><path d="M4 7h16M7 12h10m-7 5h4" /><circle cx="8" cy="7" r="2" fill="currentColor" /><circle cx="16" cy="12" r="2" fill="currentColor" /></>,
     close: <><path d="m18 6-12 12M6 6l12 12" /></>,
     mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
@@ -586,7 +588,7 @@ function App() {
       <aside className="sidebar">
         <div className="sidebar-brand"><Brand /></div>
         <div className="sidebar-label">FRONT OFFICE</div>
-        <nav className="side-nav" aria-label="Workspace navigation">{user?.role === 'ADMIN' && <button className="nav-item" onClick={() => setShowAdminConsole(true)}><Icon name="lock" size={18} /><span>Admin console</span></button>}{navigation.map((item) => <button key={item.id} className={`nav-item ${activePage === item.id ? 'nav-active' : ''}`} onClick={() => { setActivePage(item.id); setSearch(''); setArrivalFilter('All arrivals') }}><Icon name={item.icon} size={18} /><span>{item.id}</span>{item.id === 'Guest requests' && requests.filter((request) => request.status === 'NEW').length > 0 && <span className="nav-count">{requests.filter((request) => request.status === 'NEW').length}</span>}</button>)}</nav>
+        <nav className="side-nav" aria-label="Workspace navigation">{user?.role === 'ADMIN' && <button className="nav-item" onClick={() => setShowAdminConsole(true)}><Icon name="lock" size={18} /><span>Admin console</span></button>}{navigation.map((item) => <button key={item.id} className={`nav-item ${activePage === item.id ? 'nav-active' : ''}`} onClick={() => { if (item.external) { window.open('http://localhost:5173', '_blank'); return; } setActivePage(item.id); setSearch(''); setArrivalFilter('All arrivals') }}><Icon name={item.icon} size={18} /><span>{item.id}</span>{item.id === 'Guest requests' && requests.filter((request) => request.status === 'NEW').length > 0 && <span className="nav-count">{requests.filter((request) => request.status === 'NEW').length}</span>}</button>)}</nav>
         <div className="sidebar-bottom"><div className="help-card"><span className="help-icon"><Icon name="sparkle" size={18} /></span><strong>Here to help</strong><p>Need a hand? Your hotel admin is one message away.</p><button onClick={() => notify('Please contact your hotel administrator for support.')}>Get support <Icon name="arrow" size={14} /></button></div><button className="profile-button" onClick={() => notify(`Signed in as ${displayName} · ${accessLabel}`)}><Avatar initials={displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="dots" size={18} /></button></div>
       </aside>
       <main className="main-panel">

@@ -26,7 +26,7 @@ const MANUAL_TRANSITIONS = {
 const FRONT_OFFICE_HELD = ['OCCUPIED', 'RESERVED'];
 
 async function lockRoom(client, roomId) {
-  const { rows } = await client.query('SELECT * FROM rooms WHERE room_id = $1 FOR UPDATE', [roomId]);
+  const { rows } = await client.query('SELECT *, id AS room_id, status AS room_status FROM rooms WHERE id = $1 FOR UPDATE', [roomId]);
   if (!rows[0]) {
     throw new HttpError(404, 'Room not found.');
   }
@@ -68,7 +68,7 @@ async function changeRoomStatus(client, { roomId, newStatus, staffId, remarks, m
   }
 
   const { rows } = await client.query(
-    'UPDATE rooms SET room_status = $1, updated_at = NOW() WHERE room_id = $2 RETURNING *',
+    'UPDATE rooms SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *, id AS room_id, status AS room_status',
     [newStatus, roomId]
   );
   await client.query(

@@ -41,35 +41,35 @@ INSERT INTO users (first_name, last_name, username, email, password_hash, role, 
     ('Rafael', 'Navarro',  'eng.tech',      'rafael.navarro@grandhorizon.ph', '$2b$10$UTSyYL.ukW1io4s4jPa4AeYIkmYga4KccIEkw6MnZ/zlUKRUNv4o6', 'ENGINEERING', 'TECHNICIAN')
 ON CONFLICT (username) DO UPDATE SET email = EXCLUDED.email, password_hash = EXCLUDED.password_hash, employment_status = 'ACTIVE';
 
-INSERT INTO rooms (room_number, room_type, floor_number, room_status) VALUES
-    ('101', 'Standard', 1, 'AVAILABLE'),
-    ('102', 'Standard', 1, 'OCCUPIED'),
-    ('103', 'Standard', 1, 'DIRTY'),
-    ('104', 'Standard', 1, 'CLEAN'),
-    ('201', 'Deluxe',   2, 'DIRTY'),
-    ('202', 'Deluxe',   2, 'OCCUPIED'),
-    ('203', 'Deluxe',   2, 'INSPECTED'),
-    ('204', 'Deluxe',   2, 'DIRTY'),
-    ('205', 'Deluxe',   2, 'CLEAN'),
-    ('301', 'Suite',    3, 'OCCUPIED'),
-    ('302', 'Suite',    3, 'OUT_OF_ORDER'),
-    ('303', 'Suite',    3, 'RESERVED')
-ON CONFLICT (room_number) DO UPDATE SET room_status = EXCLUDED.room_status, updated_at = NOW();
+INSERT INTO rooms (room_number, room_type, floor, status) VALUES
+    ('101', 'Standard', '1', 'AVAILABLE'),
+    ('102', 'Standard', '1', 'OCCUPIED'),
+    ('103', 'Standard', '1', 'DIRTY'),
+    ('104', 'Standard', '1', 'CLEAN'),
+    ('201', 'Deluxe',   '2', 'DIRTY'),
+    ('202', 'Deluxe',   '2', 'OCCUPIED'),
+    ('203', 'Deluxe',   '2', 'INSPECTED'),
+    ('204', 'Deluxe',   '2', 'DIRTY'),
+    ('205', 'Deluxe',   '2', 'CLEAN'),
+    ('301', 'Suite',    '3', 'OCCUPIED'),
+    ('302', 'Suite',    '3', 'OUT_OF_ORDER'),
+    ('303', 'Suite',    '3', 'RESERVED')
+ON CONFLICT (room_number) DO UPDATE SET status = EXCLUDED.status, updated_at = NOW();
 
-INSERT INTO guests (first_name, last_name, contact_number)
-SELECT g.first_name, g.last_name, g.contact_number
+INSERT INTO guests (first_name, last_name, phone)
+SELECT g.first_name, g.last_name, g.phone
 FROM (VALUES
     ('Carlos', 'Mendoza', '0917-555-0101'),
     ('Grace',  'Lim',     '0918-555-0202'),
     ('Ramon',  'Bautista','0919-555-0303')
-) AS g(first_name, last_name, contact_number)
+) AS g(first_name, last_name, phone)
 WHERE NOT EXISTS (
     SELECT 1 FROM guests x WHERE x.first_name = g.first_name AND x.last_name = g.last_name
 );
 
 -- Cleaning tasks in different stages of the flowchart.
 INSERT INTO hk_cleaning_tasks (room_id, staff_id, task_type, priority, task_status, notes, due_time, start_time, completion_time)
-SELECT r.room_id, u.user_id, t.task_type, t.priority, t.task_status, t.notes, t.due_time::time,
+SELECT r.id, u.id, t.task_type, t.priority, t.task_status, t.notes, t.due_time::time,
        CASE WHEN t.task_status IN ('IN_PROGRESS', 'COMPLETED') THEN NOW() - INTERVAL '50 minutes' END,
        CASE WHEN t.task_status = 'COMPLETED' THEN NOW() - INTERVAL '10 minutes' END
 FROM (VALUES
@@ -84,7 +84,7 @@ LEFT JOIN users u ON u.username = t.username;
 
 -- Finished work from the past week (Reports page history).
 INSERT INTO hk_cleaning_tasks (room_id, staff_id, task_type, priority, task_status, notes, assigned_date, start_time, completion_time, created_at)
-SELECT r.room_id, u.user_id, h.task_type, 'NORMAL', 'INSPECTED', NULL, CURRENT_DATE - h.days_ago,
+SELECT r.id, u.id, h.task_type, 'NORMAL', 'INSPECTED', NULL, CURRENT_DATE - h.days_ago,
        (CURRENT_DATE - h.days_ago) + TIME '09:00', (CURRENT_DATE - h.days_ago) + TIME '09:45',
        (CURRENT_DATE - h.days_ago) + TIME '08:00'
 FROM (VALUES
@@ -97,18 +97,18 @@ JOIN rooms r ON r.room_number = h.room_number
 JOIN users u ON u.username = h.username;
 
 INSERT INTO hk_inspections (task_id, inspected_by, inspection_result, checklist, remarks, inspected_at)
-SELECT t.task_id, u.user_id, 'PASSED', '{}'::jsonb, NULL, t.completion_time + INTERVAL '20 minutes'
+SELECT t.task_id, u.id, 'PASSED', '{}'::jsonb, NULL, t.completion_time + INTERVAL '20 minutes'
 FROM hk_cleaning_tasks t, users u
 WHERE t.task_status = 'INSPECTED' AND u.username = 'hk.inspector';
 
 -- One of those rooms failed its first inspection before passing.
 INSERT INTO hk_inspections (task_id, inspected_by, inspection_result, checklist, remarks, inspected_at)
 SELECT t.task_id, u.user_id, 'FAILED', '{}'::jsonb, 'Bathroom mirror streaked', t.completion_time - INTERVAL '10 minutes'
-FROM hk_cleaning_tasks t JOIN rooms r ON r.room_id = t.room_id, users u
+FROM hk_cleaning_tasks t JOIN rooms r ON r.id = t.room_id, users u
 WHERE t.task_status = 'INSPECTED' AND r.room_number = '303' AND u.username = 'hk.inspector';
 
 INSERT INTO hk_schedules (staff_id, shift_date, shift, start_time, end_time, assigned_area)
-SELECT u.user_id, CURRENT_DATE + s.day_offset, s.shift, s.start_time::time, s.end_time::time, s.area
+SELECT u.id, CURRENT_DATE + s.day_offset, s.shift, s.start_time::time, s.end_time::time, s.area
 FROM (VALUES
     ('hk.supervisor', 0, 'MORNING',   '06:00', '14:00', 'All floors'),
     ('hk.inspector',  0, 'MORNING',   '07:00', '15:00', 'Floors 1-3'),
@@ -122,18 +122,18 @@ JOIN users u ON u.username = s.username
 ON CONFLICT DO NOTHING;
 
 INSERT INTO hk_guest_requests (guest_id, room_id, staff_id, request_type, priority, request_details, request_status)
-SELECT g.guest_id, r.room_id, u.user_id, q.request_type, q.priority, q.details, q.status
+SELECT g.id, r.id, u.id, q.request_type, q.priority, q.details, q.status
 FROM (VALUES
     ('Carlos', '102', 'hk.joy', 'TOWELS',    'NORMAL', 'Two extra bath towels',            'IN_PROGRESS'),
     ('Grace',  '202', NULL,     'AMENITIES', 'NORMAL', 'Toothbrush kit and slippers',      'OPEN'),
     ('Ramon',  '301', NULL,     'EXTRA_BED', 'HIGH',   'Rollaway bed for a child tonight', 'OPEN')
 ) AS q(guest_name, room_number, username, request_type, priority, details, status)
-JOIN (SELECT DISTINCT ON (first_name) guest_id, first_name FROM guests ORDER BY first_name, guest_id) g ON g.first_name = q.guest_name
+JOIN (SELECT DISTINCT ON (first_name) id, first_name FROM guests ORDER BY first_name, id) g ON g.first_name = q.guest_name
 JOIN rooms r ON r.room_number = q.room_number
 LEFT JOIN users u ON u.username = q.username;
 
 INSERT INTO hk_lost_found_items (room_id, found_by, item_description, found_location, storage_label, storage_location, found_at)
-SELECT r.room_id, u.user_id, i.description, i.location, i.label, i.storage, NOW() - i.age::interval
+SELECT r.id, u.id, i.description, i.location, i.label, i.storage, NOW() - i.age::interval
 FROM (VALUES
     ('201', 'hk.liza', 'Black leather wallet with ID cards', 'Under the bed',      'LF-0001', 'Cabinet A - Shelf 1', '2 hours'),
     ('104', 'hk.mark', 'Silver wristwatch',                  'Bathroom counter',   'LF-0002', 'Safe box 1',          '1 day'),
@@ -144,13 +144,13 @@ JOIN users u ON u.username = i.username
 ON CONFLICT (storage_label) DO NOTHING;
 
 INSERT INTO hk_maintenance_requests (room_id, reported_by, issue_category, issue_description, priority, status, room_set_ooo)
-SELECT r.room_id, u.user_id, 'AIRCON', 'Aircon not cooling and leaking water onto the carpet', 'HIGH', 'IN_PROGRESS', TRUE
+SELECT r.id, u.id, 'AIRCON', 'Aircon not cooling and leaking water onto the carpet', 'HIGH', 'IN_PROGRESS', TRUE
 FROM rooms r, users u
 WHERE r.room_number = '302' AND u.username = 'hk.liza';
 
 -- Recent room status changes (shown under Recent activity on the Inspection page).
 INSERT INTO hk_room_status_logs (room_id, staff_id, previous_status, new_status, remarks, changed_at)
-SELECT r.room_id, u.user_id, l.prev, l.next, l.remarks, NOW() - l.age::interval
+SELECT r.id, u.id, l.prev, l.next, l.remarks, NOW() - l.age::interval
 FROM (VALUES
     ('203', 'hk.inspector', 'CLEAN',     'INSPECTED',    'Inspection passed',              '3 hours'),
     ('302', 'hk.liza',      'AVAILABLE', 'OUT_OF_ORDER', 'Maintenance request #1: AIRCON', '3 hours'),
@@ -162,7 +162,7 @@ JOIN users u ON u.username = l.username;
 
 -- Room 203 passed inspection, so Front Office has its "room ready" notice.
 INSERT INTO hk_front_office_notifications (room_id, message, created_by, created_at)
-SELECT r.room_id, 'Room 203 passed inspection and is ready to be released as AVAILABLE.', u.user_id, NOW() - INTERVAL '3 hours'
+SELECT r.id, 'Room 203 passed inspection and is ready to be released as AVAILABLE.', u.id, NOW() - INTERVAL '3 hours'
 FROM rooms r, users u
 WHERE r.room_number = '203' AND u.username = 'hk.inspector';
 
@@ -180,7 +180,7 @@ INSERT INTO hk_inventory_items (item_name, category, unit, quantity, reorder_lev
     ('Trash bags',          'CLEANING_SUPPLY', 'rolls',    25, 10, 'Janitor closet');
 
 INSERT INTO hk_inventory_movements (inv_item_id, movement_type, quantity, balance_after, room_id, remarks, staff_id, moved_at)
-SELECT i.inv_item_id, m.kind, m.qty, i.quantity, r.room_id, m.remarks, u.user_id, NOW() - m.age::interval
+SELECT i.inv_item_id, m.kind, m.qty, i.quantity, r.id, m.remarks, u.id, NOW() - m.age::interval
 FROM (VALUES
     ('Bath towel',         'OUT', 4,  '205', 'hk.liza',       'Room turnover',            '40 minutes'),
     ('Toothbrush kit',     'OUT', 2,  '102', 'hk.joy',        'Guest request',            '2 hours'),
@@ -197,8 +197,8 @@ UPDATE hk_guest_requests q
   FROM (VALUES ('102', 'Bath towel', 2), ('202', 'Toothbrush kit', 1)) AS x(room_number, item_name, qty)
   JOIN hk_inventory_items i ON i.item_name = x.item_name
   JOIN rooms r ON r.room_number = x.room_number
- WHERE q.room_id = r.room_id;
+ WHERE q.room_id = r.id;
 
 -- A forgot-password request waiting for the supervisor.
 INSERT INTO hk_password_resets (user_id, requested_at)
-SELECT user_id, NOW() - INTERVAL '30 minutes' FROM users WHERE username = 'hk.mark';
+SELECT id, NOW() - INTERVAL '30 minutes' FROM users WHERE username = 'hk.mark';

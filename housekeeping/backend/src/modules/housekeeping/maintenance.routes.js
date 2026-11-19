@@ -16,11 +16,11 @@ const CATEGORIES = ['PLUMBING', 'ELECTRICAL', 'AIRCON', 'FURNITURE', 'APPLIANCE'
 // sale by itself.
 
 const SELECT = `
-  SELECT m.*, r.room_number, r.room_status,
+  SELECT m.*, r.room_number, r.status AS room_status,
          CONCAT(u.first_name, ' ', u.last_name) AS reported_by_name
     FROM hk_maintenance_requests m
-    JOIN rooms r ON r.room_id = m.room_id
-    JOIN users u ON u.user_id = m.reported_by`;
+    JOIN rooms r ON r.id = m.room_id
+    JOIN users u ON u.id = m.reported_by`;
 
 const PRIORITY_ORDER = `CASE m.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END`;
 

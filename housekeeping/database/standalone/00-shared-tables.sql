@@ -19,37 +19,46 @@
 -- STAFF: HOSIS user accounts. Housekeeping staff have role HOUSEKEEPING
 -- and a position of HOUSEKEEPER, INSPECTOR or SUPERVISOR.
 CREATE TABLE IF NOT EXISTS users (
-    user_id           SERIAL PRIMARY KEY,
-    first_name        VARCHAR(50)  NOT NULL,
-    last_name         VARCHAR(50)  NOT NULL,
-    username          VARCHAR(50)  NOT NULL UNIQUE,
+    id                BIGSERIAL PRIMARY KEY,
+    first_name        VARCHAR(50)  NOT NULL DEFAULT '',
+    last_name         VARCHAR(50)  NOT NULL DEFAULT '',
+    username          VARCHAR(80)  NOT NULL UNIQUE,
     email             VARCHAR(100) UNIQUE,
-    password_hash     VARCHAR(255) NOT NULL,
+    password_hash     TEXT         NOT NULL,
     role              VARCHAR(30)  NOT NULL
         CHECK (role IN ('ADMIN', 'FRONT_OFFICE', 'HOUSEKEEPING', 'HR',
                         'FINANCE', 'SALES_MARKETING', 'ENGINEERING')),
     position          VARCHAR(30),
     employment_status VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
-    created_at        TIMESTAMP    NOT NULL DEFAULT NOW()
+    is_active         BOOLEAN      NOT NULL DEFAULT TRUE,
+    session_version   INTEGER      NOT NULL DEFAULT 0 CHECK (session_version >= 0),
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 -- ROOM: one central rooms table shared by every department.
 CREATE TABLE IF NOT EXISTS rooms (
-    room_id      SERIAL PRIMARY KEY,
-    room_number  VARCHAR(10) NOT NULL UNIQUE,
-    room_type    VARCHAR(30) NOT NULL,
-    floor_number INT         NOT NULL,
-    room_status  VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE'
-        CHECK (room_status IN ('AVAILABLE', 'RESERVED', 'OCCUPIED', 'DIRTY',
-                               'CLEAN', 'INSPECTED', 'OUT_OF_ORDER')),
-    updated_at   TIMESTAMP   NOT NULL DEFAULT NOW()
+    id           BIGSERIAL PRIMARY KEY,
+    room_number  VARCHAR(20) NOT NULL UNIQUE,
+    room_type    VARCHAR(100) NOT NULL,
+    floor        VARCHAR(40) NOT NULL,
+    status       VARCHAR(30) NOT NULL DEFAULT 'AVAILABLE'
+        CHECK (status IN ('AVAILABLE', 'RESERVED', 'OCCUPIED', 'DIRTY',
+                          'CLEAN', 'INSPECTED', 'OUT_OF_ORDER')),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- GUEST: only the fields Housekeeping needs (name and contact).
 CREATE TABLE IF NOT EXISTS guests (
-    guest_id       SERIAL PRIMARY KEY,
-    first_name     VARCHAR(50) NOT NULL,
-    last_name      VARCHAR(50) NOT NULL,
-    contact_number VARCHAR(20)
+    id             BIGSERIAL PRIMARY KEY,
+    first_name     VARCHAR(100) NOT NULL,
+    last_name      VARCHAR(100) NOT NULL,
+    email          VARCHAR(254),
+    phone          VARCHAR(40),
+    loyalty_tier   VARCHAR(30) NOT NULL DEFAULT 'Member',
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT guests_email_unique UNIQUE (email)
 );
 

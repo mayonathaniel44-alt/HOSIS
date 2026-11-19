@@ -14,13 +14,13 @@ const router = express.Router();
 // requests that are waiting for Housekeeping to release the room.
 router.get('/incoming', authorize('ENGINEERING'), async (req, res) => {
   const { rows } = await db.query(
-    `SELECT m.request_id, m.room_id, r.room_number, r.floor_number, r.room_status,
+    `SELECT m.request_id, m.room_id, r.room_number, r.floor AS floor_number, r.status AS room_status,
             m.issue_category, m.issue_description, m.priority, m.status,
             m.room_set_ooo, m.reported_at, m.resolved_at,
             CONCAT(u.first_name, ' ', u.last_name) AS reported_by_name
        FROM hk_maintenance_requests m
-       JOIN rooms r ON r.room_id = m.room_id
-       JOIN users u ON u.user_id = m.reported_by
+       JOIN rooms r ON r.id = m.room_id
+       JOIN users u ON u.id = m.reported_by
       WHERE m.status <> 'CLOSED'
       ORDER BY CASE m.status WHEN 'REPAIRED' THEN 1 ELSE 0 END,
                CASE m.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END,

@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
   const { rows } = await db.query(
     `SELECT p.reset_id, p.user_id, p.requested_at, u.username, u.email, u.position,
             CONCAT(u.first_name, ' ', u.last_name) AS name
-       FROM hk_password_resets p JOIN users u ON u.user_id = p.user_id
+       FROM hk_password_resets p JOIN users u ON u.id = p.user_id
       WHERE p.status = 'REQUESTED'
       ORDER BY p.requested_at DESC`
   );
@@ -46,9 +46,9 @@ router.post('/staff/:userId', async (req, res) => {
   const staff = await db.withTransaction(async (client) => {
     const { rows } = await client.query(
       `UPDATE users SET password_hash = $1
-        WHERE user_id = $2 AND role = 'HOUSEKEEPING' AND employment_status = 'ACTIVE'
+        WHERE id = $2 AND role = 'HOUSEKEEPING' AND employment_status = 'ACTIVE'
           AND (position <> 'SUPERVISOR' OR $3)
-        RETURNING user_id, username, CONCAT(first_name, ' ', last_name) AS name`,
+        RETURNING id AS user_id, username, CONCAT(first_name, ' ', last_name) AS name`,
       [hash, userId, req.user.role === 'ADMIN']
     );
     if (!rows[0]) {

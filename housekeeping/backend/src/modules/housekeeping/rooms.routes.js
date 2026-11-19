@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
   const where = [];
   if (status) {
     params.push(status);
-    where.push(`r.room_status = $${params.length}`);
+    where.push(`r.status = $${params.length}`);
   }
   if (search) {
     params.push(`%${search}%`);
@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
   }
   if (floor !== undefined && floor !== '') {
     params.push(v.int(floor, 'floor', { min: 0, max: 500 }));
-    where.push(`r.floor_number = $${params.length}`);
+    where.push(`r.floor = $${params.length}`);
   }
   const paged = req.query.page !== undefined;
   let page = 1;
@@ -44,10 +44,10 @@ router.get('/', async (req, res) => {
   const from = `FROM rooms r
        LEFT JOIN LATERAL (
          SELECT * FROM hk_cleaning_tasks ct
-          WHERE ct.room_id = r.room_id AND ct.task_status <> 'INSPECTED'
+          WHERE ct.room_id = r.id AND ct.task_status <> 'INSPECTED'
           ORDER BY ct.created_at DESC LIMIT 1
        ) t ON TRUE
-       LEFT JOIN users u ON u.user_id = t.staff_id
+       LEFT JOIN users u ON u.id = t.staff_id
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}`;
   const { rows: totalRows } = await db.query(`SELECT COUNT(*)::int AS total ${from}`, params);
   const total = totalRows[0].total;
@@ -58,18 +58,19 @@ router.get('/', async (req, res) => {
     params.push(pageSize, (page - 1) * pageSize);
   }
   const { rows: rooms } = await db.query(
-    `SELECT r.*, t.task_id, t.task_status, t.priority AS task_priority,
+    `SELECT r.*, r.id AS room_id, r.status AS room_status, r.floor AS floor_number,
+            t.task_id, t.task_status, t.priority AS task_priority,
             CONCAT(u.first_name, ' ', u.last_name) AS housekeeper
        ${from}
       ORDER BY r.room_number${paged ? ` LIMIT $${params.length - 1} OFFSET $${params.length}` : ''}`,
     params
   );
   const { rows: counts } = await db.query(
-    'SELECT room_status, COUNT(*)::int AS count FROM rooms GROUP BY room_status'
+    'SELECT status AS room_status, COUNT(*)::int AS count FROM rooms GROUP BY status'
   );
   const summary = Object.fromEntries(ROOM_STATUSES.map((s) => [s, 0]));
   counts.forEach((c) => (summary[c.room_status] = c.count));
-  const { rows: floors } = await db.query('SELECT DISTINCT floor_number FROM rooms ORDER BY floor_number');
+  const { rows: floors } = await db.query('SELECT DISTINCT floor AS floor_number FROM rooms ORDER BY floor');
   res.json({
     rooms,
     summary,
@@ -81,19 +82,19 @@ router.get('/', async (req, res) => {
 // HK-002: select a room to see its details and status history.
 router.get('/:id', async (req, res) => {
   const roomId = v.id(req.params.id, 'room id');
-  const { rows } = await db.query('SELECT * FROM rooms WHERE room_id = $1', [roomId]);
+  const { rows } = await db.query('SELECT *, id AS room_id, status AS room_status, floor AS floor_number FROM rooms WHERE id = $1', [roomId]);
   if (!rows[0]) {
     throw new HttpError(404, 'Room not found.');
   }
   const { rows: history } = await db.query(
     `SELECT l.*, CONCAT(u.first_name, ' ', u.last_name) AS changed_by
-       FROM hk_room_status_logs l LEFT JOIN users u ON u.user_id = l.staff_id
+       FROM hk_room_status_logs l LEFT JOIN users u ON u.id = l.staff_id
       WHERE l.room_id = $1 ORDER BY l.changed_at DESC LIMIT 10`,
     [roomId]
   );
   const { rows: tasks } = await db.query(
     `SELECT t.*, CONCAT(u.first_name, ' ', u.last_name) AS housekeeper
-       FROM hk_cleaning_tasks t LEFT JOIN users u ON u.user_id = t.staff_id
+       FROM hk_cleaning_tasks t LEFT JOIN users u ON u.id = t.staff_id
       WHERE t.room_id = $1 AND t.task_status <> 'INSPECTED'
       ORDER BY t.created_at DESC LIMIT 1`,
     [roomId]

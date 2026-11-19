@@ -35,12 +35,12 @@ function readChecklist(value) {
 router.get('/queue', async (req, res) => {
   const { rows } = await db.query(
     `SELECT t.task_id, t.staff_id, t.task_type, t.priority, t.start_time, t.completion_time, t.notes,
-            r.room_id, r.room_number, r.room_type, r.room_status,
+            r.id AS room_id, r.room_number, r.room_type, r.status AS room_status,
             CONCAT(u.first_name, ' ', u.last_name) AS housekeeper,
             (SELECT COUNT(*)::int FROM hk_inspections i WHERE i.task_id = t.task_id) AS previous_inspections
        FROM hk_cleaning_tasks t
-       JOIN rooms r ON r.room_id = t.room_id
-       LEFT JOIN users u ON u.user_id = t.staff_id
+       JOIN rooms r ON r.id = t.room_id
+       LEFT JOIN users u ON u.id = t.staff_id
       WHERE t.task_status = 'COMPLETED'
       ORDER BY t.completion_time`
   );
@@ -59,8 +59,8 @@ router.get('/', async (req, res) => {
     `SELECT i.*, r.room_number, CONCAT(u.first_name, ' ', u.last_name) AS inspector
        FROM hk_inspections i
        JOIN hk_cleaning_tasks t ON t.task_id = i.task_id
-       JOIN rooms r ON r.room_id = t.room_id
-       JOIN users u ON u.user_id = i.inspected_by
+       JOIN rooms r ON r.id = t.room_id
+       JOIN users u ON u.id = i.inspected_by
       ${where}
       ORDER BY i.inspected_at DESC LIMIT 20`,
     params

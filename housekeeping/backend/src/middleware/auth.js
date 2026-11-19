@@ -24,24 +24,40 @@ async function authenticate(req, res, next) {
   } catch {
     return next(new HttpError(401, 'Your session has expired. Please log in again.'));
   }
+  // Accept both token formats: housekeeping tokens carry `userId`,
+  // main-system tokens carry `sub` (a string user id).
+  const userId = payload.userId ?? (payload.sub ? Number(payload.sub) : null);
+  if (!userId) {
+    return next(new HttpError(401, 'Your session has expired. Please log in again.'));
+  }
   try {
     const { rows } = await db.query(
       `SELECT u.role, u.position, u.employment_status, u.password_hash,
+              u.session_version,
               (m.user_id IS NOT NULL) AS must_change_password
-         FROM users u LEFT JOIN hk_password_must_change m ON m.user_id = u.user_id
-        WHERE u.user_id = $1`,
-      [payload.userId]
+         FROM users u LEFT JOIN hk_password_must_change m ON m.user_id = u.id
+        WHERE u.id = $1`,
+      [userId]
     );
     const account = rows[0];
     if (!account || account.employment_status !== 'ACTIVE') {
       return next(new HttpError(401, 'This account is no longer active. Please contact your supervisor.'));
     }
-    // Every token this server signs carries pwv; one without it is refused.
-    if (!payload.pwv || payload.pwv !== passwordVersion(account.password_hash)) {
-      return next(new HttpError(401, 'Your password was changed. Please log in again.'));
+    if (payload.pwv) {
+      // Housekeeping token: validate password version
+      if (payload.pwv !== passwordVersion(account.password_hash)) {
+        return next(new HttpError(401, 'Your password was changed. Please log in again.'));
+      }
+    } else if (payload.sessionVersion !== undefined) {
+      // Main-system token: validate session version
+      if (account.session_version != null && payload.sessionVersion < account.session_version) {
+        return next(new HttpError(401, 'Your session has been revoked. Please log in again.'));
+      }
     }
     req.user = {
-      ...payload,
+      userId,
+      username: payload.username || payload.sub,
+      name: payload.name || '',
       role: account.role,
       position: account.position,
       mustChangePassword: account.must_change_password,

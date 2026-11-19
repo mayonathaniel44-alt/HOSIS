@@ -14,7 +14,7 @@ router.get('/notifications', authorize('HOUSEKEEPING', 'FRONT_OFFICE'), async (r
   const unread = req.query.unread === '1';
   const { rows } = await db.query(
     `SELECT n.*, r.room_number FROM hk_front_office_notifications n
-       JOIN rooms r ON r.room_id = n.room_id
+       JOIN rooms r ON r.id = n.room_id
       ${unread ? 'WHERE n.read_at IS NULL' : ''}
       ORDER BY n.created_at DESC LIMIT 50`
   );
@@ -93,7 +93,7 @@ router.post('/checkout', authorize('FRONT_OFFICE'), async (req, res) => {
 
 // GET /api/housekeeping/front-office/rooms: every room and its status.
 router.get('/front-office/rooms', authorize('FRONT_OFFICE'), async (req, res) => {
-  const { rows } = await db.query('SELECT room_id, room_number, room_type, room_status FROM rooms ORDER BY room_number');
+  const { rows } = await db.query('SELECT id AS room_id, room_number, room_type, status AS room_status FROM rooms ORDER BY room_number');
   res.json({ rooms: rows });
 });
 

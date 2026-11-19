@@ -69,8 +69,8 @@ router.get('/movements', async (req, res) => {
     `SELECT m.*, i.item_name, i.unit, r.room_number, CONCAT(u.first_name, ' ', u.last_name) AS staff_name
        FROM hk_inventory_movements m
        JOIN hk_inventory_items i ON i.inv_item_id = m.inv_item_id
-       LEFT JOIN rooms r ON r.room_id = m.room_id
-       JOIN users u ON u.user_id = m.staff_id
+       LEFT JOIN rooms r ON r.id = m.room_id
+       JOIN users u ON u.id = m.staff_id
       ${where}
       ORDER BY m.moved_at DESC, m.movement_id DESC LIMIT $${params.length}`,
     params

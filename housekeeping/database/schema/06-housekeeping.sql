@@ -23,8 +23,8 @@
 -- ROOM_STATUS_LOG: every room status change, who made it and when (HK-003).
 CREATE TABLE IF NOT EXISTS hk_room_status_logs (
     log_id          SERIAL PRIMARY KEY,
-    room_id         INT         NOT NULL REFERENCES rooms(room_id),
-    staff_id        INT         REFERENCES users(user_id),
+    room_id         INT         NOT NULL REFERENCES rooms(id),
+    staff_id        INT         REFERENCES users(id),
     previous_status VARCHAR(20) NOT NULL,
     new_status      VARCHAR(20) NOT NULL,
     remarks         VARCHAR(255),
@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS hk_room_status_logs (
 -- CLEANING_TASK: a cleaning assignment for a room (HK-004 to HK-006).
 CREATE TABLE IF NOT EXISTS hk_cleaning_tasks (
     task_id         SERIAL PRIMARY KEY,
-    room_id         INT         NOT NULL REFERENCES rooms(room_id),
-    staff_id        INT         REFERENCES users(user_id),
+    room_id         INT         NOT NULL REFERENCES rooms(id),
+    staff_id        INT         REFERENCES users(id),
     task_type       VARCHAR(30) NOT NULL
         CHECK (task_type IN ('CHECKOUT', 'STAYOVER', 'DEEP_CLEAN', 'TOUCH_UP', 'POST_REPAIR')),
     priority        VARCHAR(10) NOT NULL DEFAULT 'NORMAL'
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS hk_cleaning_tasks (
 CREATE TABLE IF NOT EXISTS hk_inspections (
     inspection_id     SERIAL PRIMARY KEY,
     task_id           INT         NOT NULL REFERENCES hk_cleaning_tasks(task_id),
-    inspected_by      INT         NOT NULL REFERENCES users(user_id),
+    inspected_by      INT         NOT NULL REFERENCES users(id),
     inspection_result VARCHAR(10) NOT NULL CHECK (inspection_result IN ('PASSED', 'FAILED')),
     checklist         JSONB       NOT NULL DEFAULT '{}'::jsonb,
     remarks           VARCHAR(255),
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS hk_inspections (
 -- SCHEDULE: shift and work area entries for staff (HK-008, HK-009).
 CREATE TABLE IF NOT EXISTS hk_schedules (
     schedule_id   SERIAL PRIMARY KEY,
-    staff_id      INT         NOT NULL REFERENCES users(user_id),
+    staff_id      INT         NOT NULL REFERENCES users(id),
     shift_date    DATE        NOT NULL,
     shift         VARCHAR(20) NOT NULL CHECK (shift IN ('MORNING', 'AFTERNOON', 'NIGHT')),
     start_time    TIME        NOT NULL,
@@ -79,9 +79,9 @@ CREATE TABLE IF NOT EXISTS hk_schedules (
 -- GUEST_REQUEST: housekeeping requests from guests (HK-013, HK-014).
 CREATE TABLE IF NOT EXISTS hk_guest_requests (
     request_id       SERIAL PRIMARY KEY,
-    guest_id         INT          REFERENCES guests(guest_id),
-    room_id          INT          NOT NULL REFERENCES rooms(room_id),
-    staff_id         INT          REFERENCES users(user_id),
+    guest_id         INT          REFERENCES guests(id),
+    room_id          INT          NOT NULL REFERENCES rooms(id),
+    staff_id         INT          REFERENCES users(id),
     request_type     VARCHAR(30)  NOT NULL
         CHECK (request_type IN ('TOWELS', 'AMENITIES', 'EXTRA_BED', 'CLEANING', 'LAUNDRY', 'OTHER')),
     priority         VARCHAR(10)  NOT NULL DEFAULT 'NORMAL'
@@ -97,8 +97,8 @@ CREATE TABLE IF NOT EXISTS hk_guest_requests (
 -- LOST_FOUND_ITEM: items found in rooms, stored under a label (HK-010, HK-011).
 CREATE TABLE IF NOT EXISTS hk_lost_found_items (
     item_id          SERIAL PRIMARY KEY,
-    room_id          INT          REFERENCES rooms(room_id),
-    found_by         INT          NOT NULL REFERENCES users(user_id),
+    room_id          INT          REFERENCES rooms(id),
+    found_by         INT          NOT NULL REFERENCES users(id),
     item_description VARCHAR(255) NOT NULL,
     found_location   VARCHAR(100) NOT NULL,
     storage_label    VARCHAR(30)  NOT NULL UNIQUE,
@@ -113,12 +113,12 @@ CREATE TABLE IF NOT EXISTS hk_lost_found_items (
 CREATE TABLE IF NOT EXISTS hk_item_claims (
     claim_id           SERIAL PRIMARY KEY,
     item_id            INT          NOT NULL REFERENCES hk_lost_found_items(item_id),
-    guest_id           INT          REFERENCES guests(guest_id),
+    guest_id           INT          REFERENCES guests(id),
     claimant_name      VARCHAR(100) NOT NULL,
     claimant_contact   VARCHAR(100) NOT NULL,
     id_verified        BOOLEAN      NOT NULL DEFAULT FALSE,
     description_match  BOOLEAN      NOT NULL DEFAULT FALSE,
-    processed_by       INT          NOT NULL REFERENCES users(user_id),
+    processed_by       INT          NOT NULL REFERENCES users(id),
     claim_status       VARCHAR(10)  NOT NULL CHECK (claim_status IN ('VALID', 'REJECTED')),
     claimed_at         TIMESTAMP    NOT NULL DEFAULT NOW(),
     released_at        TIMESTAMP
@@ -127,8 +127,8 @@ CREATE TABLE IF NOT EXISTS hk_item_claims (
 -- MAINTENANCE_REQUEST: room issues reported to Engineering (HK-015).
 CREATE TABLE IF NOT EXISTS hk_maintenance_requests (
     request_id        SERIAL PRIMARY KEY,
-    room_id           INT          NOT NULL REFERENCES rooms(room_id),
-    reported_by       INT          NOT NULL REFERENCES users(user_id),
+    room_id           INT          NOT NULL REFERENCES rooms(id),
+    reported_by       INT          NOT NULL REFERENCES users(id),
     issue_category    VARCHAR(30)  NOT NULL
         CHECK (issue_category IN ('PLUMBING', 'ELECTRICAL', 'AIRCON', 'FURNITURE',
                                   'APPLIANCE', 'OTHER')),
@@ -148,11 +148,11 @@ CREATE TABLE IF NOT EXISTS hk_maintenance_requests (
 -- a room's condition (damage, missing items, smoking, ...) to Front Office.
 CREATE TABLE IF NOT EXISTS hk_front_office_notifications (
     notification_id SERIAL PRIMARY KEY,
-    room_id         INT          NOT NULL REFERENCES rooms(room_id),
+    room_id         INT          NOT NULL REFERENCES rooms(id),
     notice_type     VARCHAR(20)  NOT NULL DEFAULT 'ROOM_READY'
         CHECK (notice_type IN ('ROOM_READY', 'ROOM_CONDITION')),
     message         VARCHAR(255) NOT NULL,
-    created_by      INT          REFERENCES users(user_id),
+    created_by      INT          REFERENCES users(id),
     created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
     read_at         TIMESTAMP
 );
@@ -167,7 +167,7 @@ ALTER TABLE hk_front_office_notifications
 -- ---------------------------------------------------------------------
 
 -- Lost & found: who disposed of an item, when and why.
-ALTER TABLE hk_lost_found_items ADD COLUMN IF NOT EXISTS disposed_by     INT REFERENCES users(user_id);
+ALTER TABLE hk_lost_found_items ADD COLUMN IF NOT EXISTS disposed_by     INT REFERENCES users(id);
 ALTER TABLE hk_lost_found_items ADD COLUMN IF NOT EXISTS disposed_at     TIMESTAMP;
 ALTER TABLE hk_lost_found_items ADD COLUMN IF NOT EXISTS disposal_reason VARCHAR(255);
 
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS hk_lost_found_photos (
     item_id      INT          NOT NULL REFERENCES hk_lost_found_items(item_id) ON DELETE CASCADE,
     content_type VARCHAR(30)  NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp')),
     data         BYTEA        NOT NULL,
-    uploaded_by  INT          NOT NULL REFERENCES users(user_id),
+    uploaded_by  INT          NOT NULL REFERENCES users(id),
     uploaded_at  TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
@@ -197,18 +197,18 @@ CREATE TABLE IF NOT EXISTS hk_login_failures (
 -- password, and the staff member must choose a new one at the next sign-in.
 CREATE TABLE IF NOT EXISTS hk_password_resets (
     reset_id      SERIAL PRIMARY KEY,
-    user_id       INT          NOT NULL REFERENCES users(user_id),
+    user_id       INT          NOT NULL REFERENCES users(id),
     status        VARCHAR(20)  NOT NULL DEFAULT 'REQUESTED'
         CHECK (status IN ('REQUESTED', 'DONE', 'DISMISSED')),
     requested_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
-    handled_by    INT          REFERENCES users(user_id),
+    handled_by    INT          REFERENCES users(id),
     handled_at    TIMESTAMP
 );
 
 -- Accounts that must change their password at the next sign-in.
 CREATE TABLE IF NOT EXISTS hk_password_must_change (
-    user_id  INT PRIMARY KEY REFERENCES users(user_id),
-    set_by   INT REFERENCES users(user_id),
+    user_id  INT PRIMARY KEY REFERENCES users(id),
+    set_by   INT REFERENCES users(id),
     set_at   TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -233,9 +233,9 @@ CREATE TABLE IF NOT EXISTS hk_inventory_movements (
     movement_type VARCHAR(10)  NOT NULL CHECK (movement_type IN ('IN', 'OUT', 'ADJUST')),
     quantity      INT          NOT NULL,
     balance_after INT          NOT NULL CHECK (balance_after >= 0),
-    room_id       INT          REFERENCES rooms(room_id),
+    room_id       INT          REFERENCES rooms(id),
     remarks       VARCHAR(255),
-    staff_id      INT          NOT NULL REFERENCES users(user_id),
+    staff_id      INT          NOT NULL REFERENCES users(id),
     moved_at      TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
@@ -259,7 +259,7 @@ CREATE INDEX IF NOT EXISTS idx_hk_requests_state ON hk_guest_requests (request_s
 CREATE TABLE IF NOT EXISTS hk_lost_found_audit (
     audit_id   SERIAL PRIMARY KEY,
     item_id    INT          NOT NULL REFERENCES hk_lost_found_items(item_id),
-    user_id    INT          NOT NULL REFERENCES users(user_id),
+    user_id    INT          NOT NULL REFERENCES users(id),
     action     VARCHAR(30)  NOT NULL
         CHECK (action IN ('CREATED', 'UPDATED', 'PHOTO_ADDED', 'PHOTO_REMOVED',
                           'LABEL_PRINTED', 'CLAIM_PROCESSED', 'DISPOSED', 'VIEWED')),

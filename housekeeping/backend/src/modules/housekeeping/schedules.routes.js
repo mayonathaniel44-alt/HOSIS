@@ -82,7 +82,7 @@ router.get('/', async (req, res) => {
             (SELECT COUNT(*)::int FROM hk_cleaning_tasks t
               WHERE t.staff_id = s.staff_id AND t.assigned_date = s.shift_date
                 AND t.task_status IN ('COMPLETED', 'INSPECTED')) AS completed_tasks
-       FROM hk_schedules s JOIN users u ON u.user_id = s.staff_id
+       FROM hk_schedules s JOIN users u ON u.id = s.staff_id
       WHERE s.shift_date = $1
       ORDER BY s.start_time, staff_name`,
     [date]
@@ -133,7 +133,7 @@ router.post('/', requirePosition('SUPERVISOR'), async (req, res) => {
   assertNotPast(body.shiftDate);
   const staffId = v.id(body.staffId, 'staff');
   const { rows: staff } = await db.query(
-    `SELECT user_id FROM users WHERE user_id = $1 AND role = 'HOUSEKEEPING' AND employment_status = 'ACTIVE'`,
+    `SELECT id FROM users WHERE id = $1 AND role = 'HOUSEKEEPING' AND employment_status = 'ACTIVE'`,
     [staffId]
   );
   if (!staff[0]) {

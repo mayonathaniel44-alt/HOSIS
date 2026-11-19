@@ -13,11 +13,11 @@ const TASK_STATUSES = ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'INSPE
 const ACTIVE_STATUSES = ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'RETURNED'];
 
 const TASK_SELECT = `
-  SELECT t.*, r.room_number, r.room_type, r.room_status,
+  SELECT t.*, r.room_number, r.room_type, r.status AS room_status,
          CONCAT(u.first_name, ' ', u.last_name) AS housekeeper
     FROM hk_cleaning_tasks t
-    JOIN rooms r ON r.room_id = t.room_id
-    LEFT JOIN users u ON u.user_id = t.staff_id`;
+    JOIN rooms r ON r.id = t.room_id
+    LEFT JOIN users u ON u.id = t.staff_id`;
 
 async function getTask(client, taskId, lock = false) {
   const { rows } = await client.query(
@@ -68,13 +68,13 @@ router.get('/', async (req, res) => {
 // Housekeeper workload for today (bottom card on the Cleaning Tasks page).
 router.get('/workload', async (req, res) => {
   const { rows } = await db.query(
-    `SELECT u.user_id, CONCAT(u.first_name, ' ', u.last_name) AS name,
+    `SELECT u.id AS user_id, CONCAT(u.first_name, ' ', u.last_name) AS name,
             COUNT(t.task_id) FILTER (WHERE t.task_status IN ('ASSIGNED', 'IN_PROGRESS', 'RETURNED'))::int AS open_tasks,
             COUNT(t.task_id) FILTER (WHERE t.task_status IN ('COMPLETED', 'INSPECTED'))::int AS done_tasks
        FROM users u
-       LEFT JOIN hk_cleaning_tasks t ON t.staff_id = u.user_id AND t.assigned_date = CURRENT_DATE
+       LEFT JOIN hk_cleaning_tasks t ON t.staff_id = u.id AND t.assigned_date = CURRENT_DATE
       WHERE u.role = 'HOUSEKEEPING' AND u.position = 'HOUSEKEEPER' AND u.employment_status = 'ACTIVE'
-      GROUP BY u.user_id ORDER BY name`
+      GROUP BY u.id ORDER BY name`
   );
   res.json({ workload: rows });
 });

@@ -44,9 +44,9 @@ router.get('/', async (req, res) => {
             COALESCE((SELECT ARRAY_AGG(p.photo_id ORDER BY p.photo_id) FROM hk_lost_found_photos p
                        WHERE p.item_id = i.item_id), '{}') AS photo_ids
        FROM hk_lost_found_items i
-       LEFT JOIN rooms r ON r.room_id = i.room_id
-       JOIN users u ON u.user_id = i.found_by
-       LEFT JOIN users d ON d.user_id = i.disposed_by
+       LEFT JOIN rooms r ON r.id = i.room_id
+       JOIN users u ON u.id = i.found_by
+       LEFT JOIN users d ON d.id = i.disposed_by
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY i.found_at DESC`,
     params
@@ -59,7 +59,7 @@ router.get('/:id/claims', async (req, res) => {
   const itemId = v.id(req.params.id, 'item id');
   const { rows } = await db.query(
     `SELECT c.*, CONCAT(u.first_name, ' ', u.last_name) AS processed_by_name
-       FROM hk_item_claims c JOIN users u ON u.user_id = c.processed_by
+       FROM hk_item_claims c JOIN users u ON u.id = c.processed_by
       WHERE c.item_id = $1 ORDER BY c.claimed_at DESC`,
     [itemId]
   );
@@ -297,7 +297,7 @@ router.get('/:id/audit', requirePosition('SUPERVISOR', 'INSPECTOR'), async (req,
   const { rows } = await db.query(
     `SELECT a.audit_id, a.action, a.details, a.acted_at,
             CONCAT(u.first_name, ' ', u.last_name) AS staff_name, u.position
-       FROM hk_lost_found_audit a JOIN users u ON u.user_id = a.user_id
+       FROM hk_lost_found_audit a JOIN users u ON u.id = a.user_id
       WHERE a.item_id = $1 ORDER BY a.acted_at DESC`,
     [itemId]
   );
