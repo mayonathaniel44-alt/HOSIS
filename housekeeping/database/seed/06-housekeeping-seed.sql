@@ -103,7 +103,7 @@ WHERE t.task_status = 'INSPECTED' AND u.username = 'hk.inspector';
 
 -- One of those rooms failed its first inspection before passing.
 INSERT INTO hk_inspections (task_id, inspected_by, inspection_result, checklist, remarks, inspected_at)
-SELECT t.task_id, u.user_id, 'FAILED', '{}'::jsonb, 'Bathroom mirror streaked', t.completion_time - INTERVAL '10 minutes'
+SELECT t.task_id, u.id, 'FAILED', '{}'::jsonb, 'Bathroom mirror streaked', t.completion_time - INTERVAL '10 minutes'
 FROM hk_cleaning_tasks t JOIN rooms r ON r.id = t.room_id, users u
 WHERE t.task_status = 'INSPECTED' AND r.room_number = '303' AND u.username = 'hk.inspector';
 
