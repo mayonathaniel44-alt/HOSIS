@@ -17,6 +17,42 @@ function range(query) {
   return { from, to };
 }
 
+function reportDate(value) {
+  const date = String(value || new Date().toISOString().slice(0, 10));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
+    throw new HttpError(400, 'Use a valid date in YYYY-MM-DD format.');
+  }
+  return date;
+}
+
+// Housekeeping reads HR-owned assignments and approved leave without editing
+// the HR employee record. Staff without a linked HR record remain schedulable.
+router.get('/integrations/hr/availability', authorize('HOUSEKEEPING'), async (req, res) => {
+  const date = reportDate(req.query.date);
+  const { rows } = await db.query(
+    `SELECT u.user_id, u.username,
+            CONCAT(u.first_name, ' ', u.last_name) AS staff_name, u.position,
+            e.id AS hr_employee_id, e.status AS hr_status, e.assignment AS hr_assignment,
+            e.week AS hr_week,
+            l.id AS leave_id, l.type AS leave_type,
+            l.start_date, l.end_date,
+            (l.id IS NOT NULL) AS on_approved_leave
+       FROM hk_users u
+       LEFT JOIN hr_employees e ON e.staff_user_id = u.user_id
+       LEFT JOIN LATERAL (
+         SELECT id, type, start_date, end_date
+           FROM hr_leave_requests
+          WHERE emp = e.id AND status = 'Approved'
+            AND $1::date BETWEEN start_date AND end_date
+          ORDER BY start_date, id LIMIT 1
+       ) l ON TRUE
+      WHERE u.role = 'HOUSEKEEPING' AND u.employment_status = 'ACTIVE'
+      ORDER BY staff_name`,
+    [date]
+  );
+  res.json({ date, staff: rows });
+});
+
 // HR receives performance/workload totals without guest or claim details.
 router.get('/integrations/hr/staff-summary', authorize('HR'), async (req, res) => {
   const dates = range(req.query);

@@ -61,6 +61,21 @@ async function assertNoOverlap({ staffId, shiftDate, startTime, endTime, ignoreI
   }
 }
 
+async function assertHrAvailable(staffId, shiftDate, client = db) {
+  const { rows } = await client.query(
+    `SELECT l.type, l.start_date, l.end_date
+       FROM hr_employees e
+       JOIN hr_leave_requests l ON l.emp = e.id
+      WHERE e.staff_user_id = $1 AND l.status = 'Approved'
+        AND $2::date BETWEEN l.start_date AND l.end_date
+      ORDER BY l.start_date LIMIT 1`,
+    [staffId, shiftDate]
+  );
+  if (rows[0]) {
+    throw new HttpError(409, `HR shows approved ${rows[0].type.toLowerCase()} leave for this staff member on ${shiftDate}.`);
+  }
+}
+
 function assertNotPast(shiftDate) {
   if (shiftDate < db.today()) {
     throw new HttpError(400, 'Shifts cannot be created or moved to a date that has already passed.');
@@ -141,6 +156,7 @@ router.post('/', requirePosition('SUPERVISOR'), async (req, res) => {
   if (!staff[0]) {
     throw new HttpError(400, 'Schedules can only be created for active housekeeping staff.');
   }
+  await assertHrAvailable(staffId, body.shiftDate, client);
   await assertNoOverlap({ staffId, shiftDate: body.shiftDate, startTime: body.startTime, endTime: body.endTime },client);
   const { rows } = await client.query(
     `INSERT INTO hk_schedules (staff_id, shift_date, shift, start_time, end_time, assigned_area, notes)
@@ -177,6 +193,7 @@ router.patch('/:id', requirePosition('SUPERVISOR'), async (req, res) => {
   if (merged.shiftDate && merged.shiftDate !== current.shift_date_text) {
     assertNotPast(merged.shiftDate);
   }
+  await assertHrAvailable(current.staff_id, merged.shiftDate || current.shift_date_text, client);
   await assertNoOverlap({
     staffId: current.staff_id,
     shiftDate: merged.shiftDate || current.shift_date_text,

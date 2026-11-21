@@ -42,7 +42,6 @@ router.use(requirePasswordChanged);
 // Integration endpoints for other HOSIS departments. Each route checks its own
 // role, so these are mounted before the HOUSEKEEPING-only gate below.
 router.use(require('./frontOffice.routes.js'));
-router.use('/maintenance', require('./engineering.routes.js'));
 router.use(require('./integrationReports.routes.js'));
 
 // Front Office can view the room board and details through a scoped session.

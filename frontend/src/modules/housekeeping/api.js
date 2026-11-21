@@ -115,6 +115,7 @@ export const api = {
   alerts: () => request('GET', `${HK}/alerts`),
   activity: () => request('GET', `${HK}/activity`),
   audit: (q = '') => request('GET', `${HK}/audit${q}`),
+  staffAvailability: (date) => request('GET', `${HK}/integrations/hr/availability?date=${encodeURIComponent(date)}`),
 
   rooms: (q = '') => request('GET', `${HK}/rooms${q}`),
   room: (id) => request('GET', `${HK}/rooms/${id}`),

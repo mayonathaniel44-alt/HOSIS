@@ -107,6 +107,12 @@ test(
         await api('GET', '/finance/payroll', 'finance')
         const roster = await api('GET', '/finance/payroll-roster', 'finance')
         assert.ok(roster.staff.some((staff) => staff.staffId === accounts.technician && staff.role === 'TECHNICIAN'))
+        const housekeepingUsage = await api(
+          'GET',
+          `/housekeeping/integrations/finance/inventory-usage?from=${dates.today}&to=${dates.later}`,
+          'finance',
+        )
+        assert.deepEqual(housekeepingUsage.range, { from: dates.today, to: dates.later })
         const created = await api('POST', '/finance/invoices', 'finance', {
           guestName: 'Synthetic Finance Guest', items: [{ desc: 'Service', qty: 2, unitPrice: '5.25' }],
         }, 201)
@@ -156,6 +162,12 @@ test(
           assert.equal(data.employees.find((row) => row.id === employee).assign, 'Back Office')
           assert.equal(data.leaves.find((row) => row.id === leave).status, 'Approved')
           assert.equal(data.assignments.find((row) => row.emp === employee).by, `${prefix}.hr`)
+          const summary = await api(
+            'GET',
+            `/housekeeping/integrations/hr/staff-summary?from=${dates.today}&to=${dates.later}`,
+            'hr',
+          )
+          assert.deepEqual(summary.range, { from: dates.today, to: dates.later })
         } finally {
           await pool.query('DELETE FROM hr_assignment_logs WHERE emp = $1', [employee])
           await pool.query('DELETE FROM hr_leave_requests WHERE emp = $1', [employee])
@@ -250,6 +262,7 @@ test(
             '/housekeeping/schedules',
             '/housekeeping/schedules/mine',
             '/housekeeping/schedules/days',
+            `/housekeeping/integrations/hr/availability?date=${dates.today}`,
             '/housekeeping/guest-requests',
             '/housekeeping/lost-found',
             '/housekeeping/maintenance',
@@ -506,6 +519,7 @@ test(
             [room.id],
           )
           assert.ok(task)
+          assert.equal(task.reservation_reference, reservation.confirmationCode)
           await api('PATCH', `/housekeeping/tasks/${task.task_id}`, 'sup', {
             staffId: accounts.cleaner,
           })
@@ -735,6 +749,43 @@ test(
           assert.deepEqual(statuses.sort(), [201, 409])
         },
       )
+      await t.test('approved HR leave blocks a Housekeeping schedule', async () => {
+        const employee = prefix + '.housekeeper'
+        const leave = prefix + '.hk-leave'
+        await pool.query(
+          `INSERT INTO hr_employees
+             (id,name,dept,pos,status,hired,rate,assignment,week,today,time_in,contact,staff_user_id)
+           VALUES ($1,'Synthetic Housekeeper','housekeeping','Room Attendant','Regular',CURRENT_DATE,100,
+                   'Floor 2','["AM","AM","AM","AM","AM","OFF","OFF"]','present','06:00','',$2)`,
+          [employee, accounts.other],
+        )
+        try {
+          await pool.query(
+            `INSERT INTO hr_leave_requests
+               (id,emp,type,start_date,end_date,days,status,reason)
+             VALUES ($1,$2,'Annual',$3,$3,1,'Approved','Synthetic leave')`,
+            [leave, employee, dates.tomorrow],
+          )
+          const availability = await api(
+            'GET', `/housekeeping/integrations/hr/availability?date=${dates.tomorrow}`, 'sup',
+          )
+          assert.equal(
+            availability.staff.find((member) => member.user_id === accounts.other).on_approved_leave,
+            true,
+          )
+          await api('POST', '/housekeeping/schedules', 'sup', {
+            staffId: accounts.other,
+            shiftDate: dates.tomorrow,
+            shift: 'MORNING',
+            startTime: '06:00',
+            endTime: '14:00',
+            assignedArea: 'Floor 2',
+          }, 409)
+        } finally {
+          await pool.query('DELETE FROM hr_leave_requests WHERE emp=$1', [employee])
+          await pool.query('DELETE FROM hr_employees WHERE id=$1', [employee])
+        }
+      })
       await t.test(
         'repairs keep rooms off sale until repair release and post-repair cleaning',
         async () => {
@@ -762,6 +813,13 @@ test(
             },
             201,
           )
+          const { rows: [engineeringRequest] } = await pool.query(
+            `SELECT payload FROM engineering.engineering_records
+              WHERE collection='requests' AND record_id=$1`,
+            [`HK-MR-${maintenance.request.request_id}`],
+          )
+          assert.equal(engineeringRequest.payload.source, 'Housekeeping')
+          assert.equal(engineeringRequest.payload.roomId, String(room.id))
           await api(
             'POST',
             '/front-office/reservations',
@@ -775,12 +833,17 @@ test(
             },
             409,
           )
-          await api(
-            'PATCH',
-            `/housekeeping/maintenance/${maintenance.request.request_id}/status`,
-            'engineer',
-            { status: 'REPAIRED' },
+          await pool.query(
+            `UPDATE engineering.engineering_records
+                SET payload = jsonb_set(payload, '{status}', '"Completed"'::jsonb)
+              WHERE collection='requests' AND record_id=$1`,
+            [`HK-MR-${maintenance.request.request_id}`],
           )
+          const { rows: [repaired] } = await pool.query(
+            'SELECT status FROM hk_maintenance_requests WHERE request_id=$1',
+            [maintenance.request.request_id],
+          )
+          assert.equal(repaired.status, 'REPAIRED')
           const released = await api(
             'POST',
             `/housekeeping/maintenance/${maintenance.request.request_id}/release`,
