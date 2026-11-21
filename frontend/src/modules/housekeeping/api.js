@@ -57,9 +57,13 @@ export function setUnauthorizedHandler(fn) {
   onUnauthorized = fn
 }
 
+function apiBase() {
+  return import.meta.env.VITE_API_BASE_URL || (externalSession ? '/api/v1' : '/api')
+}
+
 export async function request(method, path, body) {
   const session = getSession()
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api/v1'}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -80,7 +84,7 @@ export async function request(method, path, body) {
 // blob: URL the page can show in an <img>.
 export async function fetchImage(path) {
   const session = getSession()
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api/v1'}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     headers: session ? { Authorization: `Bearer ${session.token}` } : {},
   })
   if (!res.ok) throw new ApiError(res.status, 'Photo could not be loaded')

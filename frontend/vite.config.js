@@ -5,7 +5,7 @@ import { extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, searchForWorkspaceRoot } from 'vite'
 
-const housekeepingSource = fileURLToPath(new URL('../../HOSIS-Housekeeping/hosis-housekeeping/frontend/src/modules/housekeeping', import.meta.url))
+const housekeepingSource = fileURLToPath(new URL('./src/modules/housekeeping', import.meta.url))
 const housekeepingDependencies = ['react-dom', 'jspdf', 'jspdf-autotable', 'qrcode', 'write-excel-file/browser']
 const departmentSources = ['admin', 'engineering', 'finance', 'food-and-beverage', 'front-office', 'hr', 'sales-marketing']
   .map((name) => fileURLToPath(new URL(`../departments/${name}/frontend`, import.meta.url)))
