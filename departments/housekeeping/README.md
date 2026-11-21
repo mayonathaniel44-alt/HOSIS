@@ -1,9 +1,15 @@
-# Housekeeping development
+# Housekeeping subsystem
 
-- UI, in the sibling project. [Housekeeping frontend](../../../HOSIS-Housekeeping/hosis-housekeeping/frontend/src/modules/housekeeping/)
-- UI integration. [Vite alias](../../frontend/vite.config.js) resolves the workspace to that sibling folder.
-- API. [Integrated Housekeeping backend](backend/)
-- Database. [Housekeeping tables and shared views](../../database/schema/14-housekeeping-integration.sql)
-- Tests. [Housekeeping inputs](../../backend/test/housekeeping-input.test.js), [session handling](../../backend/test/housekeeping-session.test.js), and [cross-department workflows](../../backend/test/operations.integration.test.js)
+Housekeeping is integrated directly into the main HOSIS application. It uses
+the shared React shell, JWT session, PostgreSQL connection, and canonical
+`users`, `rooms`, and `guests` records through the `hk_users`, `hk_rooms`, and
+`hk_guests` integration views.
 
-Keep the sibling Housekeeping project beside the main repository. Start HOSIS from the main repository for integrated work. [Housekeeping integration guide](../../integrations/housekeeping/README.md)
+- Frontend: `frontend/src/modules/housekeeping/`
+- Backend: `departments/housekeeping/backend/`
+- Database: `database/schema/14-housekeeping-integration.sql`
+- Integration contract: `docs/housekeeping/INTEGRATION.md`
+- Automated checks: `backend/test/` and `frontend/test/`
+
+Run the main HOSIS backend and frontend; no sibling checkout or separate
+Housekeeping login server is required.

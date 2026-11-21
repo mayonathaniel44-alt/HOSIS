@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isRegularHousekeeper } from '../../../HOSIS-Housekeeping/hosis-housekeeping/frontend/src/modules/housekeeping/tabs.js'
+import { isRegularHousekeeper } from '../src/modules/housekeeping/tabs.js'
 test('administrator is not restricted to the housekeeper menu by a default position', () => {
   assert.equal(
     isRegularHousekeeper({ role: 'ADMIN', position: 'HOUSEKEEPER' }),

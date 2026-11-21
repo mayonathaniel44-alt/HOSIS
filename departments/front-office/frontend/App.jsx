@@ -7,6 +7,7 @@ import useVisibleRefresh from '../../../frontend/src/useVisibleRefresh.js'
 import {loadWorkspace} from './workspace.js'
 import { housekeepingLandingHash, isHousekeepingHash } from '../../../frontend/src/modules/housekeeping/tabs.js'
 import HousekeepingApp from '@housekeeping/HousekeepingApp.jsx'
+import PublicLostFoundPage from '@housekeeping/pages/PublicLostFoundPage.jsx'
 import { exportPdf } from '@housekeeping/exportReport.js'
 
 const ACCESS_LABELS = {
@@ -206,6 +207,7 @@ function App() {
   const [user, setUser] = useState(null)
   const [showAdminConsole, setShowAdminConsole] = useState(false)
   const [workspaceHash, setWorkspaceHash] = useState(() => window.location.hash)
+  const publicLostFoundCode = /^#\/lost-found\/item\/([^/?#]+)$/.exec(workspaceHash)?.[1]
   const showHousekeeping = user?.role === 'ADMIN' && isHousekeepingHash(workspaceHash)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -633,6 +635,7 @@ function App() {
   const accessLabel = user?.role === 'ADMIN' ? 'Administrator' : user?.role === 'HOUSEKEEPING' ? 'Housekeeping' : 'Front Office'
 
   function replaceSession(next) { authApi.saveSession(next, authApi.isRemembered()); setUser(next.user) }
+  if (publicLostFoundCode) return <PublicLostFoundPage code={decodeURIComponent(publicLostFoundCode)} />
   if (signedIn && (['HOUSEKEEPING', 'HOUSEKEEPING_VIEWER'].includes(user?.role) || user?.mustChangePassword || showHousekeeping)) {
     return <HousekeepingErrorBoundary onSignOut={signOut}>
       {user?.role==='ADMIN' && <button className="button button-secondary" onClick={() => {

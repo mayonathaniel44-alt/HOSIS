@@ -18,7 +18,7 @@ function client() {
   })
   const source = fs
     .readFileSync(
-      path.resolve(__dirname, '../../../HOSIS-Housekeeping/hosis-housekeeping/frontend/src/modules/housekeeping/api.js'),
+      path.resolve(__dirname, '../../frontend/src/modules/housekeeping/api.js'),
       'utf8',
     )
     .replace(/^export /gm, '')

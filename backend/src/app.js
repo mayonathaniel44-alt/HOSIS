@@ -56,6 +56,7 @@ api.use((req, res, next) => {
 api.use('/auth', authRoutes)
 api.use('/front-office', frontOfficeRoutes)
 api.use('/admin', adminRoutes)
+api.use('/public/lost-found', require('../../departments/housekeeping/backend/publicLostFound.routes.js'))
 api.use('/housekeeping', require('../../departments/housekeeping/backend/index.js'))
 api.use('/hr', require('../../departments/hr/backend/hrRoutes.js'))
 api.use('/engineering', require('../../departments/engineering/backend/routes.js'))

@@ -1,9 +1,38 @@
 const express = require('../../../backend/src/lib/departmentDependencies.js').express;
 const db = require('../../../backend/src/config/db.js');
-const { authenticate, authorize, requirePasswordChanged } = require('../../../backend/src/middleware/auth.js');
+const HttpError = require('../../../backend/src/utils/httpError.js');
+const { authenticate, authorize, requirePosition, requirePasswordChanged } = require('../../../backend/src/middleware/auth.js');
 const { HOUSEKEEPING_VIEWER } = require('../../../backend/src/lib/accessRole.js');
 
 const router = express.Router();
+
+function reportWindow(period, anchorText) {
+  const value = String(period || '').toUpperCase();
+  if (!['WEEKLY', 'MONTHLY', 'ANNUAL'].includes(value)) {
+    throw new HttpError(400, 'Report period must be WEEKLY, MONTHLY or ANNUAL.');
+  }
+  const anchor = String(anchorText || new Date().toISOString().slice(0, 10));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchor) || Number.isNaN(Date.parse(`${anchor}T00:00:00Z`))) {
+    throw new HttpError(400, 'Report anchor must be a valid YYYY-MM-DD date.');
+  }
+  const day = new Date(`${anchor}T00:00:00Z`);
+  let start;
+  let end;
+  if (value === 'WEEKLY') {
+    const mondayOffset = (day.getUTCDay() + 6) % 7;
+    start = new Date(day);
+    start.setUTCDate(start.getUTCDate() - mondayOffset);
+    end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 7);
+  } else if (value === 'MONTHLY') {
+    start = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), 1));
+    end = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 1));
+  } else {
+    start = new Date(Date.UTC(day.getUTCFullYear(), 0, 1));
+    end = new Date(Date.UTC(day.getUTCFullYear() + 1, 0, 1));
+  }
+  return { period: value, from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
+}
 
 // All Housekeeping endpoints need a logged-in user.
 router.use(authenticate);
@@ -14,6 +43,7 @@ router.use(requirePasswordChanged);
 // role, so these are mounted before the HOUSEKEEPING-only gate below.
 router.use(require('./frontOffice.routes.js'));
 router.use('/maintenance', require('./engineering.routes.js'));
+router.use(require('./integrationReports.routes.js'));
 
 // Front Office can view the room board and details through a scoped session.
 // Keep that session outside all other Housekeeping routes.
@@ -105,6 +135,78 @@ router.get('/activity', async (req, res) => {
       ORDER BY l.changed_at DESC, l.log_id DESC LIMIT 15`
   );
   res.json({ activity: rows });
+});
+
+// Read-only consolidated operational trail used by the supervisor's weekly,
+// monthly and annual PDF/Excel/CSV reports.
+router.get('/audit', requirePosition('SUPERVISOR'), async (req, res) => {
+  const category = String(req.query.category || '').trim().toUpperCase() || null;
+  const search = String(req.query.search || '').trim().slice(0, 100) || null;
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 200, 1), 500);
+  const report = reportWindow(req.query.period || 'WEEKLY', req.query.anchor);
+  const { rows } = await db.query(
+    `WITH events AS (
+       SELECT CONCAT('ROOM-', l.log_id) AS event_id, 'ROOM_STATUS' AS category,
+              CONCAT('Room ', r.room_number) AS reference,
+              CONCAT(REPLACE(l.previous_status, '_', ' '), ' to ', REPLACE(l.new_status, '_', ' '),
+                     CASE WHEN l.remarks IS NULL THEN '' ELSE CONCAT(' - ', l.remarks) END) AS details,
+              COALESCE(CONCAT(u.first_name, ' ', u.last_name), 'System') AS actor, l.changed_at AS occurred_at
+         FROM hk_room_status_logs l JOIN hk_rooms r ON r.room_id = l.room_id
+         LEFT JOIN hk_users u ON u.user_id = l.staff_id
+       UNION ALL
+       SELECT CONCAT('TASK-', t.task_id), 'CLEANING_TASK', CONCAT('Room ', r.room_number, ' / Task #', t.task_id),
+              CONCAT(REPLACE(t.task_type, '_', ' '), ' - ', REPLACE(t.task_status, '_', ' ')),
+              COALESCE(CONCAT(u.first_name, ' ', u.last_name), 'Unassigned'), t.created_at
+         FROM hk_cleaning_tasks t JOIN hk_rooms r ON r.room_id = t.room_id
+         LEFT JOIN hk_users u ON u.user_id = t.staff_id
+       UNION ALL
+       SELECT CONCAT('INSPECTION-', i.inspection_id), 'INSPECTION', CONCAT('Room ', r.room_number, ' / Task #', t.task_id),
+              CONCAT(i.inspection_result, CASE WHEN i.remarks IS NULL THEN '' ELSE CONCAT(' - ', i.remarks) END),
+              CONCAT(u.first_name, ' ', u.last_name), i.inspected_at
+         FROM hk_inspections i JOIN hk_cleaning_tasks t ON t.task_id = i.task_id
+         JOIN hk_rooms r ON r.room_id = t.room_id JOIN hk_users u ON u.user_id = i.inspected_by
+       UNION ALL
+       SELECT CONCAT('REQUEST-', q.request_id), 'GUEST_REQUEST', CONCAT('Room ', r.room_number, ' / Request #', q.request_id),
+              CONCAT(REPLACE(q.request_type, '_', ' '), ' - ', REPLACE(q.request_status, '_', ' '), ' - ', q.request_details),
+              COALESCE(CONCAT(u.first_name, ' ', u.last_name), 'Unassigned'), q.requested_at
+         FROM hk_guest_requests q JOIN hk_rooms r ON r.room_id = q.room_id LEFT JOIN hk_users u ON u.user_id = q.staff_id
+       UNION ALL
+       SELECT CONCAT('LOST-', f.item_id), 'LOST_FOUND', CONCAT('Item ', f.storage_label),
+              CONCAT(f.item_description, ' - ', f.item_status, ' - ', f.found_location),
+              CONCAT(u.first_name, ' ', u.last_name), f.found_at
+         FROM hk_lost_found_items f JOIN hk_users u ON u.user_id = f.found_by
+       UNION ALL
+       SELECT CONCAT('CLAIM-', c.claim_id), 'ITEM_CLAIM', CONCAT('Item ', f.storage_label, ' / Claim #', c.claim_id),
+              CONCAT(c.claim_status, ' claim by ', c.claimant_name), CONCAT(u.first_name, ' ', u.last_name), c.claimed_at
+         FROM hk_item_claims c JOIN hk_lost_found_items f ON f.item_id = c.item_id
+         JOIN hk_users u ON u.user_id = c.processed_by
+       UNION ALL
+       SELECT CONCAT('MAINT-', m.request_id), 'MAINTENANCE', CONCAT('Room ', r.room_number, ' / Request #', m.request_id),
+              CONCAT(m.issue_category, ' - ', m.status, ' - ', m.issue_description),
+              CONCAT(u.first_name, ' ', u.last_name), m.reported_at
+         FROM hk_maintenance_requests m JOIN hk_rooms r ON r.room_id = m.room_id JOIN hk_users u ON u.user_id = m.reported_by
+       UNION ALL
+       SELECT CONCAT('STOCK-', m.movement_id), 'INVENTORY', CONCAT(i.item_name, ' / Movement #', m.movement_id),
+              CONCAT(m.movement_type, ' ', m.quantity, ' ', i.unit, '; balance ', m.balance_after,
+                     CASE WHEN m.remarks IS NULL THEN '' ELSE CONCAT(' - ', m.remarks) END),
+              CONCAT(u.first_name, ' ', u.last_name), m.moved_at
+         FROM hk_inventory_movements m JOIN hk_inventory_items i ON i.inv_item_id = m.inv_item_id
+         JOIN hk_users u ON u.user_id = m.staff_id
+       UNION ALL
+       SELECT CONCAT('SCHEDULE-', s.schedule_id), 'SCHEDULE', CONCAT('Shift #', s.schedule_id, ' / ', s.assigned_area),
+              CONCAT(s.shift, ' shift, ', s.start_time, ' to ', s.end_time),
+              CONCAT(u.first_name, ' ', u.last_name), (s.shift_date + s.start_time)
+         FROM hk_schedules s JOIN hk_users u ON u.user_id = s.staff_id
+     )
+     SELECT * FROM events
+      WHERE ($1::text IS NULL OR category = $1)
+        AND ($2::text IS NULL OR reference ILIKE CONCAT('%', $2, '%')
+             OR details ILIKE CONCAT('%', $2, '%') OR actor ILIKE CONCAT('%', $2, '%'))
+        AND occurred_at >= $3::date AND occurred_at < $4::date
+      ORDER BY occurred_at DESC, event_id DESC LIMIT $5`,
+    [category, search, report.from, report.to, limit]
+  );
+  res.json({ events: rows, report });
 });
 
 // Lookups for dropdowns.
