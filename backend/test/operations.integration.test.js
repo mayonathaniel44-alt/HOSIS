@@ -457,22 +457,31 @@ test(
         assert.deepEqual(rows, [{ task_type: 'TOUCH_UP', notes: 'Requires touch-up' }])
 
         const cleanerChoices = await api('GET', `/housekeeping/rooms/${manualRoom.id}`, 'cleaner')
-        assert.ok(cleanerChoices.allowedStatuses.includes('CLEAN'))
-        await api('PATCH', endpoint, 'cleaner', { status: 'CLEAN' }, 400)
-        for (const status of ['CLEAN', 'INSPECTED', 'AVAILABLE', 'RESERVED', 'OCCUPIED', 'OUT_OF_ORDER', 'AVAILABLE']) {
-          const result = await api('PATCH', endpoint, 'cleaner', { status, remarks: 'Verified manual status' })
-          const projected = await frontOfficeRooms()
-          assert.equal(result.room.room_status, status)
-          assert.equal(projected.status, status)
-          assert.equal(projected.readyForAssignment, status === 'AVAILABLE')
-          if (status === 'RESERVED' || status === 'OCCUPIED') {
-            assert.equal(projected.manualHold, true)
-            await api('POST', '/front-office/reservations', 'fo', {
-              guestId: guest.id, roomId: manualRoom.id, roomType: 'Suite',
-              checkIn: dates.tomorrow, checkOut: dates.later,
-            }, 409)
-          }
-        }
+        assert.deepEqual(cleanerChoices.allowedStatuses, [])
+        await api('PATCH', endpoint, 'cleaner', { status: 'CLEAN', remarks: 'Attempted bypass' }, 403)
+        await api('PATCH', endpoint, 'inspector', { status: 'CLEAN', remarks: 'Attempted bypass' }, 403)
+        await api('PATCH', endpoint, 'sup', { status: 'CLEAN' }, 400)
+        const cleaned = await api('PATCH', endpoint, 'sup', { status: 'CLEAN', remarks: 'Supervisor verified touch-up' })
+        assert.equal(cleaned.room.room_status, 'CLEAN')
+        assert.equal((await frontOfficeRooms()).readyForAssignment, false)
+        await api('PATCH', endpoint, 'sup', { status: 'INSPECTED', remarks: 'Attempted inspection bypass' }, 400)
+        await api('PATCH', endpoint, 'sup', { status: 'AVAILABLE', remarks: 'Attempted Front Office bypass' }, 400)
+        const { rows: [touchUp] } = await pool.query(
+          "SELECT task_id FROM hk_cleaning_tasks WHERE room_id=$1 AND task_status='COMPLETED'",
+          [manualRoom.id],
+        )
+        await api('POST', '/housekeeping/inspections', 'inspector', {
+          taskId: touchUp.task_id,
+          result: 'PASSED',
+        }, 400)
+        const inspected = await api('POST', '/housekeeping/inspections', 'inspector', {
+          taskId: touchUp.task_id,
+          result: 'PASSED',
+          checklist: { bed: true, bathroom: true, amenities: true, floors: true, fixtures: true },
+        }, 201)
+        assert.equal(inspected.room.room_status, 'INSPECTED')
+        await api('PATCH', `/front-office/rooms/${manualRoom.id}/status`, 'fo', { status: 'AVAILABLE' })
+        assert.equal((await frontOfficeRooms()).readyForAssignment, true)
       })
       await t.test('retrying the same payment request records one payment', async () => {
         const invoice = await api('POST', '/front-office/invoices', 'fo', {
@@ -533,6 +542,13 @@ test(
           await api(
             'POST',
             `/housekeeping/tasks/${task.task_id}/start`,
+            'sup',
+            undefined,
+            403,
+          )
+          await api(
+            'POST',
+            `/housekeeping/tasks/${task.task_id}/start`,
             'cleaner',
           )
           await api(
@@ -566,7 +582,11 @@ test(
             'POST',
             '/housekeeping/inspections',
             'inspector',
-            { taskId: task.task_id, result: 'PASSED' },
+            {
+              taskId: task.task_id,
+              result: 'PASSED',
+              checklist: { bed: true, bathroom: true, amenities: true, floors: true, fixtures: true },
+            },
             201,
           )
           assert.equal(passed.room.room_status, 'INSPECTED')
@@ -578,10 +598,10 @@ test(
           assert.ok(notices.notifications.some((n) => n.room_id === room.id))
           await api('PATCH', `/housekeeping/rooms/${room.id}/status`, 'inspector', {
             status: 'AVAILABLE',
-          }, 400)
+          }, 403)
           await api('PATCH', `/housekeeping/rooms/${room.id}/status`, 'cleaner', {
             status: 'AVAILABLE',
-          }, 400)
+          }, 403)
           const availabilityBeforeRelease = (await api('GET', '/admin/dashboard', 'admin')).frontOffice.rooms.available
           await api('PATCH', `/front-office/rooms/${room.id}/status`, 'fo', {
             status: 'AVAILABLE',
@@ -661,6 +681,13 @@ test(
               quantity: 10,
             },
             201,
+          )
+          await api(
+            'POST',
+            `/housekeeping/inventory/${stock.item.inv_item_id}/movements`,
+            'cleaner',
+            { type: 'IN', quantity: 1, remarks: 'Attempted unauthorized receipt' },
+            403,
           )
           await api(
             'PATCH',
@@ -786,6 +813,27 @@ test(
           await pool.query('DELETE FROM hr_employees WHERE id=$1', [employee])
         }
       })
+      await t.test('lost-item custody enforces image validation, ownership and supervisor release', async () => {
+        const created = await api('POST', '/housekeeping/lost-found', 'cleaner', {
+          roomId: room.id,
+          description: `${prefix} test wallet`,
+          foundLocation: 'Test location',
+          storageLocation: 'Test cabinet',
+        }, 201)
+        const itemId = created.item.item_id
+        await api('POST', `/housekeeping/lost-found/${itemId}/photos`, 'cleaner', {
+          image: 'data:image/png;base64,PHNjcmlwdD4=',
+        }, 400)
+        const validPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nZkAAAAASUVORK5CYII='
+        await api('POST', `/housekeeping/lost-found/${itemId}/photos`, 'other', { image: validPng }, 403)
+        await api('POST', `/housekeeping/lost-found/${itemId}/claims`, 'cleaner', {
+          claimantName: 'Test Claimant', claimantContact: 'test@example.invalid',
+        }, 403)
+        const rejected = await api('POST', `/housekeeping/lost-found/${itemId}/claims`, 'sup', {
+          claimantName: 'Test Claimant', claimantContact: 'test@example.invalid',
+        }, 201)
+        assert.equal(rejected.released, false)
+      })
       await t.test(
         'repairs keep rooms off sale until repair release and post-repair cleaning',
         async () => {
@@ -813,6 +861,9 @@ test(
             },
             201,
           )
+          await api('PATCH', `/housekeeping/maintenance/${maintenance.request.request_id}`, 'other', {
+            priority: 'LOW',
+          }, 403)
           const { rows: [engineeringRequest] } = await pool.query(
             `SELECT payload FROM engineering.engineering_records
               WHERE collection='requests' AND record_id=$1`,

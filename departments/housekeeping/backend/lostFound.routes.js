@@ -3,6 +3,7 @@ const db = require('../../../backend/src/config/db.js');
 const HttpError = require('../../../backend/src/utils/httpError.js');
 const v = require('./validate.js');
 const { requirePosition } = require('../../../backend/src/middleware/auth.js');
+const { isSupportedImageData } = require('../../../backend/src/utils/imageUpload.js');
 
 const router = express.Router();
 const canManageAll = (user) => user.role === 'ADMIN' || user.position === 'SUPERVISOR';
@@ -141,16 +142,22 @@ router.post('/:id/photos', async (req, res) => {
     throw new HttpError(400, 'Upload a JPEG, PNG or WebP photo.');
   }
   const data = Buffer.from(match[2], 'base64');
-  if (data.length > MAX_PHOTO_BYTES) {
-    throw new HttpError(400, 'Photos must be 2 MB or smaller.');
+  if (!data.length || data.length > MAX_PHOTO_BYTES || !isSupportedImageData(data, match[1])) {
+    throw new HttpError(400, 'Upload a valid JPEG, PNG or WebP photo no larger than 2 MB.');
   }
   const photo = await db.withTransaction(async (client) => {
     const { rows: items } = await client.query(
-      'SELECT item_status FROM hk_lost_found_items WHERE item_id = $1 FOR UPDATE',
+      'SELECT item_status, found_by FROM hk_lost_found_items WHERE item_id = $1 FOR UPDATE',
       [itemId]
     );
     if (!items[0]) {
       throw new HttpError(404, 'Item not found.');
+    }
+    if (items[0].item_status !== 'STORED') {
+      throw new HttpError(409, 'Photos cannot be added after an item is released or disposed.');
+    }
+    if (!canManageAll(req.user) && items[0].found_by !== req.user.userId) {
+      throw new HttpError(403, 'Only the recording staff member or a supervisor can add item photos.');
     }
     const { rows: count } = await client.query(
       'SELECT COUNT(*)::int AS n FROM hk_lost_found_photos WHERE item_id = $1',
@@ -202,7 +209,7 @@ router.delete('/:id/photos/:photoId', async (req, res) => {
 
 // HK-012: process a claim. The item is released only when the claimant's ID
 // is verified and the description matches; otherwise the claim is rejected.
-router.post('/:id/claims', async (req, res) => {
+router.post('/:id/claims', requirePosition('SUPERVISOR'), async (req, res) => {
   const itemId = v.id(req.params.id, 'item id');
   const body = req.body;
   v.required(body, ['claimantName', 'claimantContact']);

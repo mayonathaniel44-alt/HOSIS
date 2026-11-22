@@ -2,10 +2,13 @@ const express = require('../../../backend/src/lib/departmentDependencies.js').ex
 const db = require('../../../backend/src/config/db.js');
 const HttpError = require('../../../backend/src/utils/httpError.js');
 const v = require('./validate.js');
+const { requirePosition } = require('../../../backend/src/middleware/auth.js');
 const { ROOM_STATUSES, MANUAL_TRANSITIONS, changeRoomStatus, lockRoom } = require('./roomStatus.js');
 
 const router = express.Router();
 const isViewer = (user) => user.role === 'HOUSEKEEPING_VIEWER';
+const canOverride = (user) => user.role === 'ADMIN' || user.position === 'SUPERVISOR';
+const SUPERVISOR_MANUAL_STATUSES = ['DIRTY', 'CLEAN'];
 
 // HK-001: view room status, with counts for the summary cards.
 router.get('/', async (req, res) => {
@@ -76,17 +79,25 @@ router.get('/:id', async (req, res) => {
     room,
     history,
     currentTask: tasks[0] || null,
-    allowedStatuses: ROOM_STATUSES.filter((status) => status !== room.room_status),
+    allowedStatuses: canOverride(req.user)
+      ? SUPERVISOR_MANUAL_STATUSES.filter((status) => status !== room.room_status)
+      : [],
   });
 });
 
 // HK-003: routine dirty changes and logged Housekeeping overrides.
-router.patch('/:id/status', async (req, res) => {
+// Only supervisors can make a manual correction, and only between DIRTY and
+// CLEAN. Inspection, availability, occupancy and out-of-order changes belong
+// to their dedicated controlled workflows.
+router.patch('/:id/status', requirePosition('SUPERVISOR'), async (req, res) => {
   const roomId = v.id(req.params.id, 'room id');
   v.required(req.body, ['status']);
   v.oneOf(req.body.status, ROOM_STATUSES, 'status');
   v.maxLengths(req.body, { remarks: [255, 'Remarks'] });
   const { status } = req.body;
+  if (!SUPERVISOR_MANUAL_STATUSES.includes(status)) {
+    throw new HttpError(400, 'Use Cleaning Tasks, Inspection, Maintenance or Front Office to make that room-status change.');
+  }
   if (req.body.remarks != null && typeof req.body.remarks !== 'string') {
     throw new HttpError(400, 'Remarks must be text.');
   }
@@ -94,10 +105,10 @@ router.patch('/:id/status', async (req, res) => {
   const room = await db.withTransaction(async (client) => {
     const before = await lockRoom(client, roomId);
     if (before.room_status === status) return before;
-    const override = !MANUAL_TRANSITIONS[before.room_status].includes(status);
-    if (override && !remarks) {
-      throw new HttpError(400, 'Enter a reason for the manual status change.');
+    if (!remarks) {
+      throw new HttpError(400, 'Enter a reason for the supervisor status correction.');
     }
+    const override = !MANUAL_TRANSITIONS[before.room_status].includes(status);
     const { rows: [holds] } = await client.query(
       `SELECT EXISTS (SELECT FROM reservations WHERE room_id = $1 AND status = 'CHECKED_IN') AS occupied,
               EXISTS (SELECT FROM reservations WHERE room_id = $1 AND status = 'CONFIRMED') AS reserved,

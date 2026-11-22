@@ -76,9 +76,11 @@ export default defineConfig({
         configure(proxy) {
           proxy.on('proxyReq', (outgoing, incoming) => {
             outgoing.setHeader('X-Forwarded-For', incoming.socket.remoteAddress)
-            outgoing.setHeader('X-Forwarded-Proto', 'http')
+            const origin = incoming.headers.origin || ''
+            const protocol = origin.startsWith('https://') ? 'https' : 'http'
+            outgoing.setHeader('X-Forwarded-Proto', protocol)
             // The browser reaches the API through the same HOSIS frontend origin.
-            if (incoming.headers.origin === `http://${incoming.headers.host}`) {
+            if (origin === `http://${incoming.headers.host}` || origin === `https://${incoming.headers.host}`) {
               outgoing.removeHeader('origin')
             }
           })

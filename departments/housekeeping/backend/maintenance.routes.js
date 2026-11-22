@@ -82,17 +82,27 @@ router.patch('/:id', async (req, res) => {
   }
   v.oneOf(body.priority, v.PRIORITIES, 'priority');
   v.maxLengths(body, { description: [255, 'Description'] });
-  const { rows } = await db.query(
-    `UPDATE hk_maintenance_requests
-        SET priority = COALESCE($1, priority),
-            issue_description = COALESCE($2, issue_description)
-      WHERE request_id = $3 AND status <> 'CLOSED' RETURNING *`,
-    [body.priority || null, body.description || null, requestId]
-  );
-  if (!rows[0]) {
-    throw new HttpError(409, 'Request not found or already closed.');
-  }
-  res.json({ request: rows[0] });
+  const canManageAll = req.user.role === 'ADMIN' || req.user.position === 'SUPERVISOR';
+  const request = await db.withTransaction(async (client) => {
+    const { rows: found } = await client.query(
+      'SELECT * FROM hk_maintenance_requests WHERE request_id = $1 FOR UPDATE',
+      [requestId]
+    );
+    if (!found[0]) throw new HttpError(404, 'Maintenance request not found.');
+    if (found[0].status === 'CLOSED') throw new HttpError(409, 'This maintenance request is already closed.');
+    if (!canManageAll && found[0].reported_by !== req.user.userId) {
+      throw new HttpError(403, 'Only the reporting staff member or a supervisor can edit this request.');
+    }
+    const { rows } = await client.query(
+      `UPDATE hk_maintenance_requests
+          SET priority = COALESCE($1, priority),
+              issue_description = COALESCE($2, issue_description)
+        WHERE request_id = $3 RETURNING *`,
+      [body.priority || null, body.description || null, requestId]
+    );
+    return rows[0];
+  });
+  res.json({ request });
 });
 
 // After Engineering marks the repair REPAIRED, Housekeeping releases the room:

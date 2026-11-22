@@ -10,6 +10,7 @@ const { staffPassword } = require('../../../departments/admin/backend/adminValid
 const { sessionFor } = require('../services/authService')
 const { sendBrowserSession } = require('../lib/browserSession')
 const userModel = require('../models/userModel')
+const { isSupportedImageData } = require('../utils/imageUpload')
 const PROFILE_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
 router.get('/account', authenticate, async (req, res) => {
@@ -75,8 +76,8 @@ router.put('/account/photo', authenticate, async (req, res) => {
     throw appError(400, 'INVALID_PHOTO', 'Upload a JPEG, PNG or WebP profile photo.')
   }
   const data = Buffer.from(match[2], 'base64')
-  if (!data.length || data.length > MAX_PROFILE_PHOTO_BYTES) {
-    throw appError(400, 'INVALID_PHOTO', 'Profile photos must be 2 MB or smaller.')
+  if (!data.length || data.length > MAX_PROFILE_PHOTO_BYTES || !isSupportedImageData(data, match[1])) {
+    throw appError(400, 'INVALID_PHOTO', 'Upload a valid JPEG, PNG or WebP photo no larger than 2 MB.')
   }
   const { rows } = await pool.query(
     `INSERT INTO hk_staff_profile_photos(user_id,content_type,data) VALUES($1,$2,$3)
