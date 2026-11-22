@@ -292,6 +292,26 @@ test(
             await api('GET', endpoint, 'fo')
         },
       )
+      await t.test('notification bulk read state is private to the signed-in Housekeeping user', async () => {
+        const { rows: rooms } = await pool.query('SELECT id FROM rooms ORDER BY id LIMIT 1')
+        await pool.query(
+          `INSERT INTO hk_front_office_notifications (room_id, notice_type, message, created_by)
+           VALUES ($1, 'ROOM_READY', $2, $3)`,
+          [rooms[0].id, `${prefix} notification read-state test`, accounts.sup],
+        )
+        const initial = await api('GET', '/housekeeping/alerts', 'sup')
+        assert.ok(initial.alerts.some((alert) => alert.message.includes(prefix) && alert.is_read === false))
+        await api('PUT', '/housekeeping/alerts/read-state', 'sup', { read: true })
+        const read = await api('GET', '/housekeeping/alerts', 'sup')
+        assert.ok(read.alerts.length > 0)
+        assert.ok(read.alerts.every((alert) => alert.is_read === true))
+        const other = await api('GET', '/housekeeping/alerts', 'inspector')
+        assert.ok(other.alerts.some((alert) => alert.message.includes(prefix) && alert.is_read === false))
+        await api('PUT', '/housekeeping/alerts/read-state', 'sup', { read: false })
+        const unread = await api('GET', '/housekeeping/alerts', 'sup')
+        assert.ok(unread.alerts.every((alert) => alert.is_read === false))
+        await api('PUT', '/housekeeping/alerts/read-state', 'sup', { read: 'yes' }, 400)
+      })
       await t.test('administrator credentials open a restricted Front Office session and keep its scope after a password change',async()=>{
    const scoped=await api('POST','/auth/login',null,{username:`${prefix}.admin`,password,role:'FRONT_OFFICE'})
    assert.equal(scoped.user.role,'FRONT_OFFICE')
