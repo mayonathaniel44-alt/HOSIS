@@ -70,7 +70,9 @@ async function changeRoomStatus(client, { roomId, newStatus, staffId, remarks, m
      VALUES ($1, $2, $3, $4, $5)`,
     [roomId, staffId, room.room_status, newStatus, remarks || null]
   );
-  await client.query('INSERT INTO front_office_activity(user_id,action,description) VALUES($1,$2,$3)',[staffId,activityAction,`Room ${room.room_number}: ${room.room_status} → ${newStatus}. ${remarks || ''}`]);
+  // Keep audit text compatible with legacy HOSIS databases created with
+  // WIN1252 encoding. A Unicode arrow here made the whole transaction fail.
+  await client.query('INSERT INTO front_office_activity(user_id,action,description) VALUES($1,$2,$3)',[staffId,activityAction,`Room ${room.room_number}: ${room.room_status} -> ${newStatus}. ${remarks || ''}`]);
   if (newStatus === 'INSPECTED') {
     await notifyFrontOffice(
       client,
