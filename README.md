@@ -88,6 +88,18 @@ For the full database-backed suite, provision a **separate local database named 
 
 The sibling `HOSIS-Housekeeping/hosis-housekeeping` is retained as a standalone project and has also received session, concurrency, validation, password-policy, and dependency fixes. Its test suite now refuses to run without an explicit local `TEST_DATABASE_URL` whose database name begins with `hosis_test`. Its demo credential is `password12345` for synthetic development data only.
 
+### Shared Housekeeping classroom credentials
+
+The integrated and standalone classroom/demo installations use the same three role accounts:
+
+| Username | Position | Demo password |
+| --- | --- | --- |
+| `hk.supervisor` | Supervisor | `password12345` |
+| `hk.inspector` | Inspector | `password12345` |
+| `hk.housekeeper` | Housekeeper | `password12345` |
+
+These credentials are for local classroom demonstrations only. Replace them before publishing a deployment to the internet.
+
 Historical records from that separate database are **not automatically copied** into the canonical HOSIS database. Importing real standalone staff, room, and guest data needs explicit ID mapping and duplicate review. Do not load its standalone shared-table SQL or demo seed into the main database.
 
 The old `integrations/housekeeping/backend` server/app/migration entry points delegate to the main backend. Its separate bootstrap/demo commands are disabled. The old HTTP connector helpers remain as reference-only code and isolated tests; `HOSIS_API_BASE_URL` and `HOSIS_INTEGRATION_TOKEN` are no longer used by the running app.
