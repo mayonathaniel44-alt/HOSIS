@@ -137,12 +137,28 @@ async function apiRequest(url, options = {}) {
         clearAndReturnToSignIn(token);
         throw new Error('Session expired. Please sign in.');
     }
-    const payload = await response.json().catch(() => ({}));
+    if (response.status === 204 && path === '/logout') return null;
+    const invalidResponse = () => Object.assign(
+        new Error(`The HOSIS API returned an invalid response (${response.status}).`),
+        { status: response.ok ? 502 : response.status }
+    );
+    let payload;
+    try {
+        payload = await response.json();
+    } catch {
+        throw invalidResponse();
+    }
     if (!response.ok) {
         throw Object.assign(
             new Error(payload.error?.message || payload.error || `Request failed (${response.status})`),
             { status: response.status }
         );
+    }
+    if (!payload || typeof payload !== 'object') throw invalidResponse();
+    if (path === '/data' && (!options.method || options.method === 'GET') &&
+        (!Number.isSafeInteger(payload._revision) || payload._revision < 0 ||
+            !COLLECTIONS.every((key) => Array.isArray(payload[key])))) {
+        throw invalidResponse();
     }
     return payload;
 }
@@ -150,9 +166,6 @@ async function initializeApplication() {
     try {
         currentAccount = await apiRequest('/me');
         db = await apiRequest('/data');
-        for (const collection of COLLECTIONS) {
-            if (!Array.isArray(db[collection])) db[collection] = [];
-        }
         lastSaved = structuredClone(db);
         if (isHead()) {
             technicianUsers = await apiRequest('/users');
