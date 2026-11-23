@@ -74,3 +74,21 @@ Both versions share the core domain and workflow model for assignment, approvals
 ## Unable to verify
 
 No live shared database credentials, approved isolated fixture database, deployment host or TLS certificate were supplied. Actual grants, query timings, real sign-ins and financial handoff, production runtime health, operational logs, dependency attribution obligations and recovery time/data-loss objectives require those environments or operator documentation. Existing test skips were not changed.
+
+## Final verification and finding dispositions
+
+The final frontend test suite passed all 25 tests. Build and lint passed with the same shared large-chunk warning. Backend passed 19 tests with the same two environment-dependent skips. The three new Engineering adapter tests passed. Head and Technician browser smoke tests passed with mocked central API responses. A separate central backend instance started with disposable local settings. It returned 503 with the expected database-unavailable response and 401 for an unauthenticated Engineering request. Healthy PostgreSQL connectivity and real sign-in still require an approved staging environment.
+
+npm reported newer releases for dotenv (major), DOMPurify, lucide-react and Recharts. Neither lockfile flagged deprecated packages. No updates were applied. Engineering has no standalone manifest in this checkout. Shared dependency usage and distribution license obligations need shared review. The deploy verdict remains **not ready** pending the High findings and integration evidence.
+
+| ID | Status | Verification or reason |
+| --- | --- | --- |
+| F-001 | FIXED | Rejects invalid and incomplete successful responses. Three adapter tests and Head/Technician browser smoke passed. |
+| F-002 | FIXED | Queue reuses the central request helper and clears stale refresh errors on success. Frontend tests, build and lint passed. Live Housekeeping handoff remains unverified. |
+| F-003 | FIXED | Removed the external font import. Existing local/system fallback remains. Frontend build passed. |
+| F-004 | FIXED | Added verification steps and documented where the operational backup and isolated restore drill fit. A real recovery drill remains an operator task. |
+| F-005 | DEFERRED | Shared database schema/grants and isolated grant verification require approval. No grants were changed. |
+| F-006 | DEFERRED | Central TLS and auth/session policy, including the local stale-401 behavior, need approval and real HTTPS verification. |
+| F-007 | DEFERRED | Obtain an approved representative data set first. Changing paging or API payload shape requires approval. |
+| F-008 | DEFERRED | Standalone notification parity requires approval for schema, route contracts and role visibility. |
+| F-009 | FIXED | Removed dormant standalone-only handlers. Central Finance handoff, stock alerts and existing API routes remain. Browser fixture, build and lint checks passed. |
