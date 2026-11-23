@@ -1920,7 +1920,7 @@ function reportsPage() {
                 <h2>Department Report</h2>
                 <button class="secondary" data-action="export-records">Export CSV</button>
                 <button class="secondary" data-action="audit-trail">Audit Trail</button>
-                <button class="secondary" data-action="clear-audit" ${currentAccount.integrated ? 'hidden' : ''}>Clear Test Audit Only</button>
+                <button class="secondary" data-action="clear-audit" ${currentAccount.integrated ? 'hidden' : ''}>Clear Audit Events</button>
                 <button class="secondary" data-action="backup-export">Export Records Backup</button>
             </div>
             <p class="summary">${records.length} matching records · Verified repairs: ${records.filter((r) => r.source === 'history').length} · Approved finance invoices (non-void): <strong>${money(sumMoney(costs))}</strong></p>
@@ -2584,10 +2584,10 @@ function clearAuditForm() {
         'Clear Past Audit Events Only',
         `
         <form id="clearAuditForm">
-            <p>This test-data action clears audit events only. Repair history, schedules, material usage, finance and accounts remain. A server-side backup is written first, and one cleanup event remains.</p>
+            <p>This maintenance action clears audit events only. Repair history, schedules, material usage, finance and accounts remain. A server-side backup is written first, and one cleanup event remains.</p>
             ${input('Administrator Password', 'password', '', 'password', true)}
             ${input('Type CLEAR AUDIT HISTORY', 'confirmation', '', 'text', true)}
-            ${textarea('Reason for Clearing Test Audit', 'reason')}
+            ${textarea('Reason for Clearing Audit Events', 'reason')}
             <div class="modal-footer"><button class="secondary" type="button" data-action="close">Cancel</button><button class="primary" type="submit">Clear Audit Only</button></div>
         </form>`
     );

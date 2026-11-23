@@ -238,10 +238,10 @@ HR.pageRecruitment = function () {
     recruitmentStage(candidate.stage)
   ]);
 
-  return `<h1>Recruitment</h1><p class="sub">Open roles and a demo sample of recent applicants.</p>
-    <div class="grid4">${HR.stat('brief', 'Open Vacancies', HR.VACANCIES.length, `${HR.VACANCIES.reduce((n, vacancy) => n + vacancy.openings, 0)} positions available`)}${HR.stat('users', 'Applicants', applicants, 'Across open roles')}${HR.stat('clock', 'Interviews', interviews, 'In the demo pipeline')}${HR.stat('check', 'Offers', offers, 'In the demo pipeline')}</div>
-    <div style="height:20px"></div>${HR.panel('Current vacancies', 'Sample recruitment plan for Grand Horizon Hotel.', HR.table(['Position', 'Department', 'Openings', 'Applicants', 'Posted', 'Status'], vacancyRows))}
-    <div style="height:20px"></div>${HR.panel('Recent applicants', 'Fictional candidates and stages for demonstration.', HR.table(['Candidate', 'Applied role', 'Date applied', 'Stage'], candidateRows, 'No applicants match your search.'))}`;
+  return `<h1>Recruitment</h1><p class="sub">Open roles and recent applicant progress.</p>
+    <div class="grid4">${HR.stat('brief', 'Open Vacancies', HR.VACANCIES.length, `${HR.VACANCIES.reduce((n, vacancy) => n + vacancy.openings, 0)} positions available`)}${HR.stat('users', 'Applicants', applicants, 'Across open roles')}${HR.stat('clock', 'Interviews', interviews, 'In the recruitment pipeline')}${HR.stat('check', 'Offers', offers, 'In the recruitment pipeline')}</div>
+    <div style="height:20px"></div>${HR.panel('Current vacancies', 'Approved recruitment plan for Grand Horizon Hotel.', HR.table(['Position', 'Department', 'Openings', 'Applicants', 'Posted', 'Status'], vacancyRows))}
+    <div style="height:20px"></div>${HR.panel('Recent applicants', 'Current candidates and their recruitment stages.', HR.table(['Candidate', 'Applied role', 'Date applied', 'Stage'], candidateRows, 'No applicants match your search.'))}`;
 };
 
 HR.pageAttendance = function () {
@@ -315,9 +315,9 @@ HR.pageTraining = function () {
     ];
   });
 
-  return `<h1>Training &amp; Development</h1><p class="sub">Upcoming learning sessions and completed training. Sessions shown are demo data.</p>
-    <div class="grid4">${HR.stat('cap', 'Upcoming Sessions', upcoming.length, 'Scheduled learning')}${HR.stat('users', 'Participants', enrolled, 'Across upcoming sessions')}${HR.stat('clock', 'Open Seats', openSeats, 'Available places')}${HR.stat('check', 'Completed', HR.TRAINING.filter((session) => session.status === 'Completed').length, 'Recorded demo sessions')}</div>
-    <div style="height:20px"></div>${HR.panel('Training calendar', 'Enrollment counts are sample figures for the prototype.', HR.table(['Session', 'Date', 'Department', 'Facilitator', 'Enrollment', 'Status'], rows))}`;
+  return `<h1>Training &amp; Development</h1><p class="sub">Upcoming learning sessions and completed training.</p>
+    <div class="grid4">${HR.stat('cap', 'Upcoming Sessions', upcoming.length, 'Scheduled learning')}${HR.stat('users', 'Participants', enrolled, 'Across upcoming sessions')}${HR.stat('clock', 'Open Seats', openSeats, 'Available places')}${HR.stat('check', 'Completed', HR.TRAINING.filter((session) => session.status === 'Completed').length, 'Recorded sessions')}</div>
+    <div style="height:20px"></div>${HR.panel('Training calendar', 'Current enrollment and session availability.', HR.table(['Session', 'Date', 'Department', 'Facilitator', 'Enrollment', 'Status'], rows))}`;
 };
 
 HR.pagePerformance = function () {
