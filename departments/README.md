@@ -11,7 +11,6 @@ Open your department’s folder to find the files to edit in the running HOSIS a
 | [Human Resources](hr/README.md) | Employee records, leave, and assignments |
 | [Sales and Marketing](sales-marketing/README.md) | Dashboard, campaigns, and inquiries |
 | [Finance and Accounting](finance/README.md) | Shared billing, expense handoffs, and HR totals |
-| [Food and Beverage](food-and-beverage/README.md) | Room service orders and shared guest billing |
 
 ## Shared files
 

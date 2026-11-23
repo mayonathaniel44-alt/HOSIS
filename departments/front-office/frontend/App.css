@@ -374,6 +374,49 @@
   background: #d1a342;
 }
 
+.front-office-notification-menu {
+  position: relative;
+}
+
+.front-office-notification-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, calc(100vw - 28px));
+  max-height: min(440px, 65vh);
+  overflow: auto;
+  padding: 16px;
+}
+
+.front-office-notification-panel h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.front-office-notices ul {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.front-office-notices li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 540px) {
+  .front-office-notification-panel {
+    position: fixed;
+    top: 64px;
+    right: 14px;
+  }
+}
+
 .topbar-divider {
   width: 1px;
   height: 28px;
@@ -1229,6 +1272,23 @@ tbody tr:last-child td {
 
 .rooms-surface {
   padding: 18px 19px 20px;
+}
+
+.room-availability {
+  margin-bottom: 16px;
+}
+
+.room-availability .form-row {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+
+.room-availability input {
+  min-width: 0;
+}
+
+.invoice-promotion {
+  display: block;
+  white-space: normal;
 }
 
 .room-grid {

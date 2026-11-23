@@ -14,7 +14,6 @@ const ACCESS_LABELS = {
   FRONT_OFFICE: 'Front Office',
   HOUSEKEEPING: 'Housekeeping',
   FINANCE: 'Accounting & Finance',
-  FOOD_BEVERAGE: 'Food & Beverage',
   ENGINEERING: 'Engineering & Maintenance',
   SALES_MARKETING: 'Sales & Marketing',
   HR: 'Human Resources',
@@ -23,9 +22,7 @@ const ACCESS_LABELS = {
 const EngineeringApp=lazy(()=>import('../../engineering/frontend/EngineeringApp.jsx'))
 const SalesMarketingApp = lazy(() => import('../../sales-marketing/frontend/SalesMarketingApp.jsx'))
 const FinanceApp = lazy(() => import('../../finance/frontend/FinanceDashboard.jsx'))
-const FoodBeverageApp = lazy(() => import('../../food-and-beverage/frontend/FoodBeverageApp.jsx'))
 const financeHash = '#/finance'
-const foodBeverageHash = '#/food-beverage'
 const salesMarketingHash = '#/sales-marketing'
 const HumanResourcesApp = lazy(() => import('../../hr/frontend/HumanResourcesApp.jsx'))
 const humanResourcesHash = '#/human-resources'
@@ -66,8 +63,10 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`))
 }
 
+const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' })
+
 function formatMoney(value) {
-  return `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return peso.format(Number(value))
 }
 
 function mapReservation(item) {
@@ -116,7 +115,7 @@ function mapInvoice(item) {
     code: item.invoiceNumber,
     rawAmount: Number(item.amount),
     paidAmount: Number(item.paidAmount),
-    amount: `$${Number(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+    amount: formatMoney(item.amount),
     statusLabel: status.label,
     tone: status.tone,
   }
@@ -125,6 +124,8 @@ function mapInvoice(item) {
 const navigation = [
   { id: 'Dashboard', icon: 'grid' },
   { id: 'Reservations', icon: 'calendar' },
+  { id: 'Arrivals', icon: 'check' },
+  { id: 'Departures', icon: 'logout' },
   { id: 'Guests', icon: 'users' },
   { id: 'Rooms', icon: 'bed' },
   { id: 'Guest requests', icon: 'message' },
@@ -215,7 +216,6 @@ function App() {
     window.location.hash === engineeringHash || window.location.hash === engineeringHandoffHash ? 'ENGINEERING'
       : window.location.hash === humanResourcesHash ? 'HR'
       : window.location.hash === financeHash ? 'FINANCE'
-      : window.location.hash === foodBeverageHash ? 'FOOD_BEVERAGE'
       : window.location.hash === salesMarketingHash ? 'SALES_MARKETING'
       : isHousekeepingHash(window.location.hash) ? 'HOUSEKEEPING' : 'FRONT_OFFICE',
   )
@@ -243,9 +243,12 @@ function App() {
   const [roomList, setRoomList] = useState([])
   const [invoices, setInvoices] = useState([])
   const [arrivalFilter, setArrivalFilter] = useState('All arrivals')
+  const [showEarlyDepartures, setShowEarlyDepartures] = useState(false)
+  const [departureStayId, setDepartureStayId] = useState('')
   const [guestTier, setGuestTier] = useState('')
   const [notices,setNotices]=useState([])
   const [noticeError,setNoticeError]=useState('')
+  const [acknowledgingNotice, setAcknowledgingNotice] = useState(null)
   const todayISO = useHotelToday(user?.timeZone)
 
   const notify = useCallback((message) => {
@@ -300,7 +303,7 @@ function App() {
 
   useVisibleRefresh(
     signedIn && ['ADMIN', 'FRONT_OFFICE'].includes(user?.role) && !user?.mustChangePassword &&
-      !showHousekeeping && !showAdminConsole && ['Dashboard', 'Rooms', 'Reservations', 'Guest requests'].includes(activePage),
+      !showHousekeeping && !showAdminConsole && ['Dashboard', 'Rooms', 'Reservations', 'Arrivals', 'Departures', 'Guest requests', 'Billing', 'Guests'].includes(activePage),
     refreshRoomOperations,
   )
 
@@ -313,7 +316,7 @@ function App() {
       const { role } = result.user
       const hash = window.location.hash
       const departmentHash = role === 'HR' ? humanResourcesHash : role === 'SALES_MARKETING' ? salesMarketingHash
-        : role === 'FINANCE' ? financeHash : role === 'FOOD_BEVERAGE' ? foodBeverageHash : ''
+        : role === 'FINANCE' ? financeHash : ''
       const landingHash = housekeepingLandingHash(role)
       if (departmentHash && hash !== departmentHash) {
         replaceWorkspaceHash(departmentHash)
@@ -404,7 +407,7 @@ function App() {
       setSignedIn(true)
       const role = session.user.role
       replaceWorkspaceHash(role === 'HR' ? humanResourcesHash : role === 'SALES_MARKETING' ? salesMarketingHash
-        : role === 'FINANCE' ? financeHash : role === 'FOOD_BEVERAGE' ? foodBeverageHash
+        : role === 'FINANCE' ? financeHash
         : role === 'ADMIN' ? '' : housekeepingLandingHash(role))
       setWorkspaceHash(window.location.hash)
       setShowAdminConsole(session.user.role === 'ADMIN')
@@ -437,12 +440,21 @@ function App() {
     }
   }
 
-  async function checkIn(id) {
-    await performAction(() => frontOfficeApi.checkIn(id), 'Guest checked in successfully.')
+  async function acknowledgeNotice(id) {
+    if (acknowledgingNotice !== null) return
+    setAcknowledgingNotice(id)
+    try {
+      await performAction(async () => {
+        await frontOfficeApi.acknowledge(id)
+        setNotices((current) => current.filter((notice) => notice.notification_id !== id))
+      }, 'Notice acknowledged.')
+    } finally {
+      setAcknowledgingNotice(null)
+    }
   }
 
-  async function checkOut(id) {
-    await performAction(() => frontOfficeApi.checkOut(id), 'Guest checked out. The room was marked dirty for housekeeping.')
+  async function checkIn(id) {
+    await performAction(() => frontOfficeApi.checkIn(id), 'Guest checked in successfully.')
   }
 
   async function downloadReport(title, fileName, headings, loadRows) {
@@ -503,6 +515,8 @@ function App() {
       setRequests([])
       setRoomList([])
       setInvoices([])
+      setNotices([])
+      setNoticeError('')
       setPassword('')
     }
   }
@@ -538,6 +552,7 @@ function App() {
           roomType: formData.get('type'),
           checkIn: formData.get('checkin'),
           checkOut: formData.get('checkout'),
+          promotionId: formData.get('promotionId') || undefined,
         }
         if (guestId) {
           reservation.guestId = Number(guestId)
@@ -546,12 +561,30 @@ function App() {
           reservation.guest = { firstName, lastName: lastName.join(' ') }
         }
         await frontOfficeApi.createReservation(reservation)
-        setActivePage('Reservations')
+        if (activePage !== 'Arrivals' || reservation.checkIn !== todayISO) setActivePage('Reservations')
         successMessage = 'Reservation created.'
+      } else if (modal === 'checkout') {
+        await frontOfficeApi.checkOut(selectedRecord.id)
+        setDepartureStayId('')
+        successMessage = 'Guest checked out.'
+      } else if (modal === 'move-stay') {
+        await frontOfficeApi.moveStay(selectedRecord.id, Number(formData.get('roomId')))
+        successMessage = 'Guest moved. Housekeeping will clean the previous room.'
+      } else if (modal === 'extend-stay') {
+        await frontOfficeApi.extendStay(selectedRecord.id, formData.get('checkout'))
+        successMessage = 'Stay extended.'
+      } else if (modal === 'maintenance') {
+        await frontOfficeApi.reportRoomIssue(selectedRecord.id, {
+          category: formData.get('category'),
+          priority: formData.get('priority'),
+          description: formData.get('description'),
+        })
+        successMessage = 'Room issue sent to Engineering.'
       } else if (modal === 'request') {
         await frontOfficeApi.createRequest({
           guestName: name,
-          roomId: formData.get('roomId') ? Number(formData.get('roomId')) : null,
+          reservationId: formData.get('reservationId') || undefined,
+          dueAt: formData.get('dueAt') || undefined,
           request: formData.get('request'),
           priority: formData.get('priority'),
         })
@@ -603,6 +636,7 @@ function App() {
           guestId: Number(formData.get('guestId')),
           reservationId: formData.get('reservationId') ? Number(formData.get('reservationId')) : undefined,
           amount: formData.get('amount'),
+          promotionId: formData.get('promotionId') || undefined,
           notes: formData.get('notes') || undefined,
         })
         successMessage = 'Invoice created.'
@@ -655,10 +689,9 @@ function App() {
     }
     return <EngineeringEntry technician={user.role === 'TECHNICIAN'} />
   }
-  if (signedIn && ['FINANCE', 'FOOD_BEVERAGE'].includes(user?.role)) {
-    const Workspace = user.role === 'FINANCE' ? FinanceApp : FoodBeverageApp
+  if (signedIn && user?.role === 'FINANCE') {
     return <Suspense fallback={<p>Loading department workspace…</p>}>
-      <Workspace onSignOut={signOut} />
+      <FinanceApp onSignOut={signOut} />
     </Suspense>
   }
   if (signedIn && user?.role === 'SALES_MARKETING') {
@@ -710,7 +743,7 @@ function App() {
                 <label htmlFor="password">Password</label>
                 <div className="input-wrap"><Icon name="lock" size={17} /><input id="password" required disabled={loginLoading} type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" autoComplete="current-password" /><button className="input-action" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword((value) => !value)}><Icon name="eye" size={17} /></button></div>
                 <label htmlFor="accessRole">Access type</label>
-                <div className="select-wrap"><select id="accessRole" disabled={loginLoading} value={accessRole} onChange={(event) => setAccessRole(event.target.value)}><option value="FRONT_OFFICE">Front Office</option><option value="HOUSEKEEPING">Housekeeping</option><option value="ENGINEERING">Engineering &amp; Maintenance</option><option value="SALES_MARKETING">Sales &amp; Marketing</option><option value="HR">Human Resources</option><option value="FINANCE">Accounting &amp; Finance</option><option value="FOOD_BEVERAGE">Food &amp; Beverage</option><option value="ADMIN">Administrator</option></select><Icon name="chevron" size={15} /></div>
+                <div className="select-wrap"><select id="accessRole" disabled={loginLoading} value={accessRole} onChange={(event) => setAccessRole(event.target.value)}><option value="FRONT_OFFICE">Front Office</option><option value="HOUSEKEEPING">Housekeeping</option><option value="ENGINEERING">Engineering &amp; Maintenance</option><option value="SALES_MARKETING">Sales &amp; Marketing</option><option value="HR">Human Resources</option><option value="FINANCE">Accounting &amp; Finance</option><option value="ADMIN">Administrator</option></select><Icon name="chevron" size={15} /></div>
                 <div className="form-options"><label className="remember-label"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Remember me</label><button type="button" className="text-button" onClick={() => notify('Please contact your system administrator to reset your password.')}>Forgot password?</button></div>
                 <button className="login-submit" type="submit" disabled={loginLoading}>{loginLoading ? 'Signing in…' : 'Sign in'} <Icon name="arrow" size={16} /></button>
               </form>
@@ -741,10 +774,10 @@ function App() {
           <section className="surface arrivals-card">
             <div className="section-heading"><div><h2>Today at a glance</h2><p>Your arrivals and departures</p></div><button className="link-button" onClick={() => setActivePage('Reservations')}>View reservations <Icon name="arrow" size={15} /></button></div>
             <div className="arrival-summary"><div className="summary-item"><span className="summary-icon summary-icon-gold"><Icon name="arrow" size={16} /></span><span><strong>{dashboard?.arrivals.total ?? 0} arrivals</strong><small>{dashboard?.arrivals.ready ?? 0} rooms ready now</small></span></div><div className="summary-item"><span className="summary-icon summary-icon-lilac"><Icon name="logout" size={16} /></span><span><strong>{dashboard?.departures.total ?? 0} departures</strong><small>{dashboard?.departures.pending ?? 0} checkout pending</small></span></div></div>
-            <div className="table-scroll"><table><thead><tr><th>GUEST</th><th>ROOM</th><th>STAY</th><th>STATUS</th></tr></thead><tbody>{reservations.filter((item) => item.status !== 'CANCELLED' && (item.checkIn === todayISO || item.checkOut === todayISO)).slice(0, 4).map((item) => <tr key={item.id}><td><div className="guest-cell"><Avatar initials={item.guestInitials} small /><span><strong>{item.guest}</strong><small>{item.code}</small></span></div></td><td>{item.room}</td><td>{item.dates}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td></tr>)}</tbody></table>{!loadingWorkspace && reservations.filter((item) => item.status !== 'CANCELLED' && (item.checkIn === todayISO || item.checkOut === todayISO)).length === 0 && <EmptyState text="No arrivals or departures are scheduled for today." />}</div>
+            <div className="table-scroll"><table><thead><tr><th>GUEST</th><th>ROOM</th><th>STAY</th><th>STATUS</th></tr></thead><tbody>{reservations.filter((item) => item.status !== 'CANCELLED' && (item.checkIn === todayISO || item.checkOut === todayISO)).slice(0, 4).map((item) => <tr key={item.id}><td><div className="guest-cell"><Avatar initials={item.guestInitials} small /><span><strong>{item.guest}</strong><small>{item.code}</small></span></div></td><td>{item.room}{item.status === 'CONFIRMED' && roomList.find((room) => room.id === item.roomId)?.cleaningStatus && <small className="invoice-promotion">Cleaning: {displayStatus(roomList.find((room) => room.id === item.roomId).cleaningStatus).label}</small>}</td><td>{item.dates}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td></tr>)}</tbody></table>{!loadingWorkspace && reservations.filter((item) => item.status !== 'CANCELLED' && (item.checkIn === todayISO || item.checkOut === todayISO)).length === 0 && <EmptyState text="No arrivals or departures are scheduled for today." />}</div>
           </section>
           <div className="dashboard-side">
-            <section className="surface quick-actions"><div className="section-heading"><div><h2>Quick actions</h2><p>Common front desk tasks</p></div></div><button onClick={() => openModal('reservation')}><span className="action-icon action-gold"><Icon name="calendar" size={17} /></span><span><strong>New reservation</strong><small>Book a stay for a guest</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => { setSearch(''); setActivePage('Reservations'); setArrivalFilter('Arriving') }}><span className="action-icon action-lilac"><Icon name="check" size={17} /></span><span><strong>Check in a guest</strong><small>Welcome your next arrival</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => setActivePage('Rooms')}><span className="action-icon action-blue"><Icon name="bed" size={17} /></span><span><strong>Room availability</strong><small>See rooms ready to assign</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => openModal('request')}><span className="action-icon action-peach"><Icon name="message" size={17} /></span><span><strong>Log a guest request</strong><small>Capture a guest’s needs</small></span><Icon name="arrow" size={16} className="action-arrow" /></button></section>
+            <section className="surface quick-actions"><div className="section-heading"><div><h2>Quick actions</h2><p>Common front desk tasks</p></div></div><button onClick={() => openModal('reservation')}><span className="action-icon action-gold"><Icon name="calendar" size={17} /></span><span><strong>New reservation</strong><small>Book a stay for a guest</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => { setSearch(''); setActivePage('Arrivals') }}><span className="action-icon action-lilac"><Icon name="check" size={17} /></span><span><strong>Check in a guest</strong><small>Welcome your next arrival</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => { setSearch(''); setActivePage('Departures') }}><span className="action-icon action-gold"><Icon name="logout" size={17} /></span><span><strong>Review departures</strong><small>Check balances and check guests out</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => setActivePage('Rooms')}><span className="action-icon action-blue"><Icon name="bed" size={17} /></span><span><strong>Room availability</strong><small>See rooms ready to assign</small></span><Icon name="arrow" size={16} className="action-arrow" /></button><button onClick={() => openModal('request')}><span className="action-icon action-peach"><Icon name="message" size={17} /></span><span><strong>Log a guest request</strong><small>Capture a guest’s needs</small></span><Icon name="arrow" size={16} className="action-arrow" /></button></section>
             <section className="occupancy-card"><div className="occupancy-top"><div><span className="eyebrow">ROOM OCCUPANCY</span><h2>Looking good today</h2></div><span className="occupancy-sun"><Icon name="sun" size={20} /></span></div><div className="occupancy-meter"><span style={{ width: `${dashboard?.rooms.total ? Math.round((dashboard.rooms.occupied / dashboard.rooms.total) * 100) : 0}%` }} /></div><div className="occupancy-bottom"><strong>{dashboard?.rooms.occupied ?? 0} of {dashboard?.rooms.total ?? 0} rooms occupied</strong><span>{dashboard?.rooms.total ? Math.round((dashboard.rooms.occupied / dashboard.rooms.total) * 100) : 0}%</span></div><p>{dashboard?.rooms.available ?? 0} rooms available to welcome your guests.</p></section>
           </div>
         </div>
@@ -753,12 +786,93 @@ function App() {
     )
   }
 
+  function renderStayTable(records, emptyText) {
+    return (
+      <div className="table-scroll">
+        <table className="full-table">
+          <thead><tr><th>GUEST</th><th>RESERVATION</th><th>ROOM</th><th>STAY DATES</th><th>STATUS</th><th>ACTION</th></tr></thead>
+          <tbody>{records.map((item) => {
+            const room = roomList.find((candidate) => candidate.id === item.roomId)
+            const checkInBlocked = !item.roomId ? 'Assign a room first'
+              : item.checkIn !== todayISO ? 'Scheduled arrival only'
+                : !room?.readyForAssignment ? 'Room awaiting release' : ''
+            return <tr key={item.id}>
+              <td><div className="guest-cell"><Avatar initials={item.guestInitials} small /><span><strong>{item.guest}</strong><small>{item.code}</small></span></div></td>
+              <td>{item.type}</td>
+              <td>
+                {item.room}
+                {item.status === 'CONFIRMED' && room?.cleaningStatus && <div><small>Cleaning: {displayStatus(room.cleaningStatus).label}</small></div>}
+              </td>
+              <td>{item.dates}</td>
+              <td><Status tone={item.tone}>{item.statusLabel}</Status></td>
+              <td>
+                <button className="small-action small-action-quiet" onClick={() => openModal('reservation-details', item)}>View details</button>
+                {item.status === 'CONFIRMED' && <>
+                  <button className="small-action" disabled={!!checkInBlocked} onClick={() => checkIn(item.id)}>Check in</button>
+                  {checkInBlocked && <small>{checkInBlocked}</small>}
+                  <button className="small-action small-action-quiet" onClick={() => openModal('edit-reservation', item)}>Edit</button>
+                  <button className="small-action small-action-quiet" onClick={() => performAction(() => frontOfficeApi.cancelReservation(item.id), 'Reservation cancelled.')}>Cancel</button>
+                </>}
+                {item.status === 'CHECKED_IN' && <>
+                  <button className="small-action small-action-quiet" onClick={() => openModal('checkout', item)}>Review checkout</button>
+                  <button className="small-action small-action-quiet" onClick={() => openModal('extend-stay', item)}>Extend stay</button>
+                  <button className="small-action small-action-quiet" onClick={() => openModal('move-stay', item)}>Move room</button>
+                  {item.checkOut <= todayISO && <small>{item.checkOut < todayISO ? 'Overdue' : 'Due out today'}</small>}
+                </>}
+                {item.status === 'CHECKED_OUT' && <button className="small-action small-action-quiet" onClick={() => openModal('stay-lost-items', item)}>Find lost items</button>}
+              </td>
+            </tr>
+          })}</tbody>
+        </table>
+        {!loadingWorkspace && records.length === 0 && <EmptyState text={emptyText} />}
+      </div>
+    )
+  }
+
+  function renderDailyStays(kind) {
+    const arrivals = kind === 'Arrivals'
+    const checkedIn = arrivals ? [] : reservations.filter((stay) => stay.status === 'CHECKED_IN')
+    const departureStay = checkedIn.find((stay) => String(stay.id) === departureStayId)
+    const term = search.trim().toLowerCase()
+    const records = reservations.filter((stay) => {
+      if (!`${stay.guest} ${stay.code} ${stay.room}`.toLowerCase().includes(term)) return false
+      if (arrivals) return stay.checkIn === todayISO && ['CONFIRMED', 'CHECKED_IN'].includes(stay.status)
+      return stay.status === 'CHECKED_IN' && (stay.checkOut <= todayISO || showEarlyDepartures)
+    }).sort((left, right) => (arrivals ? left.checkIn.localeCompare(right.checkIn) : left.checkOut.localeCompare(right.checkOut)))
+
+    return <>
+      <PageIntro
+        eyebrow={formatDate(todayISO)}
+        title={kind}
+        description={arrivals ? 'Check in today?s scheduled guests and walk-ins.' : 'Review balances and check out guests due to leave.'}
+        action={arrivals && <button type="button" className="button button-primary" onClick={() => openModal('reservation')}><Icon name="plus" size={17} /> Add walk-in</button>}
+      />
+      <section className="surface data-surface">
+        {!arrivals && <div className="list-heading">
+          <form className="modal-form" onSubmit={(event) => {
+            event.preventDefault()
+            if (departureStay) openModal('checkout', departureStay)
+          }}>
+            <label htmlFor="departure-stay">Record a departure</label>
+            <select id="departure-stay" value={departureStay ? departureStayId : ''} onChange={(event) => setDepartureStayId(event.target.value)} disabled={checkedIn.length === 0} required>
+              <option value="" disabled>{checkedIn.length ? 'Select a checked-in guest' : 'No guests are checked in'}</option>
+              {checkedIn.map((stay) => <option key={stay.id} value={stay.id}>{stay.guest} | Room {stay.room} | {stay.code}</option>)}
+            </select>
+            <button className="button button-primary" type="submit" disabled={!departureStay}>Review checkout</button>
+          </form>
+          <label><input type="checkbox" checked={showEarlyDepartures} onChange={(event) => setShowEarlyDepartures(event.target.checked)} /> Include early departures in the table</label>
+        </div>}
+        {renderStayTable(records, term ? `No ${kind.toLowerCase()} match your search.` : arrivals ? 'No arrivals scheduled for today.' : 'No guests due for checkout.')}
+      </section>
+    </>
+  }
+
   function renderReservations() {
     return (
       <>
         <PageIntro eyebrow="GUEST STAYS" title="Reservations" description="Manage bookings, arrivals, and departures." action={<button className="button button-primary" onClick={() => openModal('reservation')}><Icon name="plus" size={17} /> New reservation</button>} />
         <section className="surface data-surface"><div className="data-toolbar"><div className="filter-tabs">{['All arrivals', 'Arriving', 'Checked in'].map((filter) => <button key={filter} className={arrivalFilter === filter ? 'tab-active' : ''} onClick={() => setArrivalFilter(filter)}>{filter}</button>)}</div>        <button type="button" className="button button-secondary" onClick={downloadStayActivity}>Download today’s stay report</button></div>
-          <div className="table-scroll"><table className="full-table"><thead><tr><th>GUEST</th><th>RESERVATION</th><th>ROOM</th><th>STAY DATES</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{filteredReservations.map((item) => <tr key={item.id}><td><div className="guest-cell"><Avatar initials={item.guestInitials} small /><span><strong>{item.guest}</strong><small>{item.code}</small></span></div></td><td>{item.type}</td><td>{item.room}</td><td>{item.dates}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.status === 'CONFIRMED' ? <><button className="small-action" onClick={() => checkIn(item.id)}>Check in</button><button className="small-action small-action-quiet" onClick={() => { openModal('edit-reservation', item) }}>Edit</button><button className="small-action small-action-quiet" onClick={() => performAction(() => frontOfficeApi.cancelReservation(item.id), 'Reservation cancelled.')}>Cancel</button></> : item.status === 'CHECKED_IN' ? <button className="small-action small-action-quiet" onClick={() => checkOut(item.id)}>Check out</button> : <span>—</span>}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredReservations.length === 0 && <EmptyState text="No reservations match your search." />}</div>
+          {renderStayTable(filteredReservations, 'No reservations match your search.')}
         </section>
         <div className="info-banner"><span className="info-icon"><Icon name="sparkle" size={18} /></span><p><strong>A smooth arrival starts here.</strong> Check room availability before assigning rooms to avoid overlapping bookings.</p><button className="link-button" onClick={() => setActivePage('Rooms')}>View rooms <Icon name="arrow" size={15} /></button></div>
       </>
@@ -786,8 +900,11 @@ function App() {
     return (
       <>
         <PageIntro eyebrow="ROOMS & AVAILABILITY" title="Room overview" description="A clear view of room status across the hotel." action={<button className="button button-secondary" onClick={() => performAction(refreshData, 'Room availability refreshed.')}><Icon name="filter" size={16} /> Refresh rooms</button>} />
+        <RoomAvailability today={todayISO} />
         <div className="room-summary">{[['Available', roomCounts.available, 'green'], ['Occupied', roomCounts.occupied, 'blue'], ['Reserved', roomCounts.reserved, 'lavender'], ['Needs attention', roomCounts.attention, 'amber']].map(([label, count, tone]) => <div key={label} className="surface room-summary-card"><span className={`room-summary-dot dot-${tone}`} /><span><small>{label}</small><strong>{count}</strong></span></div>)}</div>
-        <section className="surface rooms-surface"><div className="list-heading"><div><h2>All rooms</h2><p>Release inspected rooms here. Assign guests from Reservations.</p></div><button type="button" className="button button-secondary" onClick={() => downloadReport('Room occupancy', `room-occupancy-${todayISO}`, ['Room', 'Type', 'Floor', 'Status'], () => roomList.map((room) => [room.number, room.type, room.floor, room.status]))}>Download room occupancy</button></div>{noticeError && <p className="dialog-note" role="status">Room notices could not be loaded. Other records are available; refresh rooms to retry.</p>}<div className="activity-list">{notices.map(n=><div key={n.notification_id}><span>{n.message}</span><button className="small-action" onClick={()=>performAction(()=>frontOfficeApi.acknowledge(n.notification_id),'Notice acknowledged.')}>Acknowledge</button></div>)}</div><div className="room-grid">{filteredRooms.map((room) => <article key={room.number} className="room-tile"><div className="room-tile-top"><span className={`room-tile-icon room-${room.status.toLowerCase().replaceAll(' ', '-')}`}><Icon name="bed" size={18} /></span><span className="room-number-label">Room</span></div><div><h3>{room.number}</h3><p>{room.type}</p></div><div className="room-tile-bottom"><small>{room.floor}</small><small>{room.manualHold ? room.status + ' · manual hold' : ['Available', 'Reserved'].includes(room.status) && !room.readyForAssignment ? 'Cleaning pending' : room.status}</small></div>{room.status === 'Inspected' && <button type="button" className="small-action" onClick={() => performAction(() => frontOfficeApi.releaseRoom(room.id), 'Room released for assignment.')}>Release room</button>}</article>)}</div>{!loadingWorkspace && filteredRooms.length === 0 && <EmptyState text="No rooms match your search." />}</section>
+        <section className="surface rooms-surface"><div className="list-heading"><div><h2>All rooms</h2><p>Release inspected rooms here. Assign guests from Reservations.</p></div><button type="button" className="button button-secondary" onClick={() => downloadReport('Room occupancy', `room-occupancy-${todayISO}`, ['Room', 'Type', 'Floor', 'Status'], () => roomList.map((room) => [room.number, room.type, room.floor, room.status]))}>Download room occupancy</button></div><RoomNoticeList notices={notices} error={noticeError} loading={loadingWorkspace} acknowledging={acknowledgingNotice} onAcknowledge={acknowledgeNotice} onRetry={() => performAction(refreshData, 'Front Office data refreshed.')} /><div className="room-grid">{filteredRooms.map((room) => <article key={room.number} className="room-tile"><div className="room-tile-top"><span className={`room-tile-icon room-${room.status.toLowerCase().replaceAll(' ', '-')}`}><Icon name="bed" size={18} /></span><span className="room-number-label">Room</span></div><div><h3>{room.number}</h3><p>{room.type}</p>
+          {room.cleaningStatus && <p>Cleaning: {displayStatus(room.cleaningStatus).label}</p>}
+          {room.maintenance && <p>Repair #{room.maintenance.id}: {displayStatus(room.maintenance.status).label}<br />{room.maintenance.description}</p>}</div><div className="room-tile-bottom"><small>{room.floor}</small><small>{room.manualHold ? room.status + ' · manual hold' : ['Available', 'Reserved'].includes(room.status) && !room.readyForAssignment ? 'Cleaning pending' : room.status}</small></div><button type="button" className="small-action small-action-quiet" onClick={() => openModal('maintenance', room)}>Report issue</button>{room.status === 'Inspected' && <button type="button" className="small-action" onClick={() => performAction(() => frontOfficeApi.releaseRoom(room.id), 'Room released for assignment.')}>Release room</button>}</article>)}</div>{!loadingWorkspace && filteredRooms.length === 0 && <EmptyState text="No rooms match your search." />}</section>
       </>
     )
   }
@@ -797,7 +914,7 @@ function App() {
       <>
         <PageIntro eyebrow="GUEST EXPERIENCE" title="Guest requests" description="Keep every guest request visible and moving." action={<button className="button button-primary" onClick={() => openModal('request')}><Icon name="plus" size={17} /> New request</button>} />
         <div className="request-counters"><span><i className="counter-amber" />{requests.filter((item) => item.status === 'NEW').length} new</span><span><i className="counter-blue" />{requests.filter((item) => item.status === 'IN_PROGRESS').length} in progress</span><span><i className="counter-green" />{requests.filter((item) => item.status === 'COMPLETED').length} completed</span></div>
-        <section className="surface data-surface"><div className="list-heading"><div><h2>Request log</h2><p>Updates from guests staying with us today.</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Guest requests refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>REQUEST</th><th>GUEST</th><th>ROOM</th><th>RECEIVED</th><th>STATUS</th><th></th></tr></thead><tbody>{filteredRequests.map((item) => <tr key={item.id}><td><div className="request-title"><span>{item.request}</span><small>{item.code}</small></div></td><td>{item.guest}</td><td>{item.room}</td><td>{item.time}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.roomId && item.status !== 'COMPLETED' ? <span>Managed by Housekeeping</span> : item.status === 'NEW' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'IN_PROGRESS')}>Start</button> : item.status === 'IN_PROGRESS' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'COMPLETED')}>Mark done</button> : <Icon name="check" size={18} className="done-check" />}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredRequests.length === 0 && <EmptyState text="No guest requests match your search." />}</div></section>
+        <section className="surface data-surface"><div className="list-heading"><div><h2>Request log</h2><p>Updates from guests staying with us today.</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Guest requests refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>REQUEST</th><th>GUEST</th><th>ROOM</th><th>RECEIVED</th><th>STATUS</th><th></th></tr></thead><tbody>{filteredRequests.map((item) => <tr key={item.id}><td><div className="request-title"><span>{item.request}</span><small>{item.code}</small>{item.dueAt && <small>Due {item.dueAt.slice(0, 16)}{item.isLate ? ' (overdue)' : ''}</small>}{item.completionNotes && <small>Outcome: {item.completionNotes}</small>}</div></td><td>{item.guest}</td><td>{item.room}</td><td>{item.time}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.roomId && item.status !== 'COMPLETED' ? <span>Managed by Housekeeping</span> : item.status === 'NEW' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'IN_PROGRESS')}>Start</button> : item.status === 'IN_PROGRESS' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'COMPLETED')}>Mark done</button> : <Icon name="check" size={18} className="done-check" />}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredRequests.length === 0 && <EmptyState text="No guest requests match your search." />}</div></section>
       </>
     )
   }
@@ -810,7 +927,7 @@ function App() {
       <>
         <PageIntro eyebrow="GUEST ACCOUNTS" title="Billing" description="A helpful overview of guest invoices and payments." action={<button className="button button-primary" onClick={() => openModal('invoice')}><Icon name="plus" size={16} /> New invoice</button>} />
         <div className="billing-summary"><div className="surface bill-stat"><span className="bill-stat-icon bill-icon-gold"><Icon name="receipt" size={17} /></span><span><small>Invoiced</small><strong>{formatMoney(totalCharges)}</strong><em>{invoices.length} guest invoices</em></span></div><div className="surface bill-stat"><span className="bill-stat-icon bill-icon-green"><Icon name="check" size={17} /></span><span><small>Payments received</small><strong>{formatMoney(totalPaid)}</strong><em>Payments recorded against invoices</em></span></div><div className="surface bill-stat"><span className="bill-stat-icon bill-icon-lilac"><Icon name="clock" size={17} /></span><span><small>Balance due</small><strong>{formatMoney(totalDue)}</strong><em>Outstanding guest balances</em></span></div></div>
-        <section className="surface data-surface"><div className="list-heading"><div><h2>Recent invoices</h2><p>Guest charges and payment status.</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Billing records refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>INVOICE</th><th>GUEST</th><th>ROOM</th><th>ISSUED</th><th>AMOUNT</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{filteredInvoices.map((item) => <tr key={item.id}><td><strong className="invoice-id">{item.code}</strong></td><td>{item.guest}</td><td>{item.room || '—'}</td><td>{item.date}</td><td><strong>{item.amount}</strong></td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.paidAmount > 0 && <button type="button" className="small-action" onClick={() => downloadReceipt(item)}>Download receipt</button>}{item.rawAmount > item.paidAmount && item.status !== 'VOID' ? <button className="small-action" onClick={() => { openModal('payment', item) }}>Record payment</button> : <Icon name="check" size={18} className="done-check" />}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredInvoices.length === 0 && <EmptyState text="No invoices match your search." />}</div></section>
+        <section className="surface data-surface"><div className="list-heading"><div><h2>Recent invoices</h2><p>Guest charges and payment status.</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Billing records refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>INVOICE</th><th>GUEST</th><th>ROOM</th><th>ISSUED</th><th>AMOUNT</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{filteredInvoices.map((item) => <tr key={item.id}><td><strong className="invoice-id">{item.code}</strong></td><td>{item.guest}</td><td>{item.room || '—'}</td><td>{item.date}</td><td><strong>{item.amount}</strong>{item.promotion && <small className="invoice-promotion">{item.promotion.name} ({Number(item.promotion.percent)}% off)</small>}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{item.paidAmount > 0 && <button type="button" className="small-action" onClick={() => downloadReceipt(item)}>Download receipt</button>}{item.rawAmount > item.paidAmount && item.status !== 'VOID' ? <button className="small-action" onClick={() => { openModal('payment', item) }}>Record payment</button> : <Icon name="check" size={18} className="done-check" />}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredInvoices.length === 0 && <EmptyState text="No invoices match your search." />}</div></section>
         <div className="info-banner"><span className="info-icon"><Icon name="lock" size={17} /></span><p>Front Office can view and update guest invoices and record payments. Financial reporting is managed by the Finance team.</p></div>
       </>
     )
@@ -819,6 +936,8 @@ function App() {
   const pageRenderer = {
     Dashboard: renderDashboard,
     Reservations: renderReservations,
+    Arrivals: () => renderDailyStays('Arrivals'),
+    Departures: () => renderDailyStays('Departures'),
     Guests: renderGuests,
     Rooms: renderRooms,
     'Guest requests': renderRequests,
@@ -834,7 +953,7 @@ function App() {
         <div className="sidebar-bottom"><div className="help-card"><span className="help-icon"><Icon name="sparkle" size={18} /></span><strong>Here to help</strong><p>Need a hand? Your hotel admin is one message away.</p><button onClick={() => notify('Please contact your hotel administrator for support.')}>Get support <Icon name="arrow" size={14} /></button></div><button className="profile-button" onClick={() => notify(`Signed in as ${displayName} · ${accessLabel}`)}><Avatar initials={displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="dots" size={18} /></button></div>
       </aside>
       <main className="main-panel">
-        <header className="topbar"><button className="mobile-brand" onClick={() => setActivePage('Dashboard')}><Brand compact /></button><div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activePage}</strong></div><div className="topbar-tools"><label className="global-search"><Icon name="search" size={17} /><input aria-label="Search current page" placeholder="Search anything..." value={search} onChange={(event) => setSearch(event.target.value)} /></label><span className="topbar-date"><Icon name="sun" size={17} />{dateLabel}</span><button className="notification-button" aria-label="Refresh front office data" onClick={() => performAction(refreshData, 'Front Office data refreshed.')}><Icon name="bell" size={19} /><i /></button><span className="topbar-divider" /><button className="topbar-profile" onClick={signOut} aria-label="Sign out"><Avatar initials={initials(displayName)} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="logout" size={16} /></button></div></header>
+        <header className="topbar"><button className="mobile-brand" onClick={() => setActivePage('Dashboard')}><Brand compact /></button><div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activePage}</strong></div><div className="topbar-tools"><label className="global-search"><Icon name="search" size={17} /><input aria-label="Search current page" placeholder="Search anything..." value={search} onChange={(event) => setSearch(event.target.value)} /></label><span className="topbar-date"><Icon name="sun" size={17} />{dateLabel}</span><FrontOfficeNotifications key={user?.id} notices={notices} error={noticeError} loading={loadingWorkspace} acknowledging={acknowledgingNotice} onAcknowledge={acknowledgeNotice} onRetry={() => performAction(refreshData, 'Front Office data refreshed.')} /><span className="topbar-divider" /><button className="topbar-profile" onClick={signOut} aria-label="Sign out"><Avatar initials={initials(displayName)} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="logout" size={16} /></button></div></header>
         <section className="content-area">{dataError && <div className="api-error" role="alert"><strong>Couldn’t load Front Office records.</strong><span>{dataError}</span><button className="small-action" onClick={() => performAction(refreshData, 'Front Office data refreshed.')}>Retry</button></div>}{loadingWorkspace && <div className="loading-banner">Loading Front Office records…</div>}{pageRenderer[activePage]()}</section>
         <footer className="app-footer"><span>© {today.getFullYear()} Grand Horizon Hotel</span><span><i /> Connected to HOSIS API</span></footer>
       </main>
@@ -854,14 +973,179 @@ function App() {
   )
 }
 
+function RoomNoticeList({ notices, error, loading, acknowledging, onAcknowledge, onRetry }) {
+  return <div className="front-office-notices">
+    {error && <p role="alert">Room notices could not be loaded. <button type="button" className="small-action" onClick={onRetry}>Retry</button></p>}
+    {loading && notices.length === 0 && <p role="status">Loading room notices</p>}
+    {!error && !loading && notices.length === 0 && <p role="status">No unread room notices.</p>}
+    {notices.length > 0 && <ul>
+      {notices.map((notice) => <li key={notice.notification_id}>
+        <span>{notice.message}</span>
+        <button type="button" className="small-action" disabled={acknowledging !== null} onClick={() => onAcknowledge(notice.notification_id)}>
+          {acknowledging === notice.notification_id ? 'Acknowledging' : 'Acknowledge'}
+        </button>
+      </li>)}
+    </ul>}
+  </div>
+}
+
+function FrontOfficeNotifications(props) {
+  const [open, setOpen] = useState(false)
+  const container = useRef(null)
+  const trigger = useRef(null)
+  const buttonLabel = props.notices.length ? `Notifications, ${props.notices.length} unread` : 'Notifications'
+
+  useEffect(() => {
+    if (!open) return
+    function closeOutside(event) {
+      if (!container.current?.contains(event.target)) setOpen(false)
+    }
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        trigger.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+
+  return <div className="front-office-notification-menu" ref={container}>
+    <button type="button" className="notification-button" ref={trigger} aria-label={buttonLabel} aria-expanded={open} aria-controls={open ? 'front-office-notification-panel' : undefined} onClick={() => setOpen((value) => !value)}>
+      <Icon name="bell" size={19} />
+      {props.notices.length > 0 && <i aria-hidden="true" />}
+    </button>
+    {open && <section id="front-office-notification-panel" className="surface front-office-notification-panel" aria-label="Notifications">
+      <h2>Notifications</h2>
+      <RoomNoticeList {...props} />
+    </section>}
+  </div>
+}
+
+function StayLostItems({ reservationId }) {
+  const [items, setItems] = useState(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    frontOfficeApi.lostItems(reservationId).then((result) => {
+      if (active) setItems(result)
+    }).catch((failure) => {
+      if (active) setError(failure.message)
+    })
+    return () => { active = false }
+  }, [reservationId])
+  if (error) return <p role="alert">{error}</p>
+  if (!items) return <p role="status">Looking for items</p>
+  if (!items.length) return <p>No found items match the rooms and dates of this stay.</p>
+  return <>
+    <p>Ask Housekeeping to verify the claim and arrange release.</p>
+    <ul>{items.map((item) => <li key={item.reference}>Room {item.room}: {item.description} ({item.reference}, {displayStatus(item.status).label})</li>)}</ul>
+  </>
+}
+
+function CheckoutFolio({ reservationId, saving }) {
+  const [folio, setFolio] = useState(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    frontOfficeApi.stayFolio(reservationId).then((value) => {
+      if (active) setFolio(value)
+    }).catch((failure) => {
+      if (active) setError(failure.message)
+    })
+    return () => { active = false }
+  }, [reservationId])
+  if (error) return <p role="alert">{error}</p>
+  if (!folio) return <p role="status">Loading stay charges</p>
+  const due = Number(folio.balance) > 0
+  return <>
+    {folio.invoices.length > 0 && <ul>{folio.invoices.map((invoice) => <li key={invoice.id}>{invoice.invoiceNumber} ({formatMoney(invoice.balance)} due)</li>)}</ul>}
+    <p><strong>Balance due: {formatMoney(folio.balance)}</strong></p>
+    {due ? <p>Record payment from Billing, then reopen this checkout.</p> : <button type="submit" className="button button-primary" disabled={saving}>{saving ? 'Checking out' : 'Confirm checkout'}</button>}
+  </>
+}
+
+function PromotionPicker({ reservationId, checkIn, checkOut }) {
+  const [promotions, setPromotions] = useState(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    const offers = reservationId ? frontOfficeApi.invoicePromotions(reservationId) : frontOfficeApi.stayPromotions(checkIn, checkOut)
+    offers.then((items) => {
+      if (active) setPromotions(items)
+    }).catch((requestError) => {
+      if (active) setError(requestError.message)
+    })
+    return () => { active = false }
+  }, [reservationId, checkIn, checkOut])
+
+  if (error) return <p role="alert">{error}</p>
+  if (!promotions) return <p role="status">Checking promotions</p>
+  if (!promotions.length) return <p>No eligible promotions for this stay.</p>
+  return <>
+    <label htmlFor="invoice-promotion">Stay promotion (optional)</label>
+    <select id="invoice-promotion" name="promotionId">
+      <option value="">No promotion</option>
+      {promotions.map((item) => <option key={item.id} value={item.id}>{item.name} ({Number(item.percent)}% off)</option>)}
+    </select>
+  </>
+}
+
+function RoomAvailability({ today }) {
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function searchRooms(event) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const checkIn = form.get('checkIn')
+    const checkOut = form.get('checkOut')
+    setLoading(true)
+    setResult(null)
+    setError('')
+    try {
+      const rooms = await frontOfficeApi.availableRooms(checkIn, checkOut)
+      setResult({ rooms, checkIn, checkOut })
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <section className="surface rooms-surface room-availability">
+      <div className="list-heading"><h2>Availability for stay dates</h2></div>
+      <form className="modal-form" onSubmit={searchRooms} aria-busy={loading}>
+        <div className="form-row">
+          <div><label htmlFor="availability-arrival">Check-in</label><input id="availability-arrival" type="date" name="checkIn" defaultValue={today} min={today} required /></div>
+          <div><label htmlFor="availability-departure">Check-out</label><input id="availability-departure" type="date" name="checkOut" min={today} required /></div>
+        </div>
+        <button className="button button-secondary" disabled={loading}>{loading ? 'Checking availability' : 'Check availability'}</button>
+      </form>
+      {error && <p role="alert" className="dialog-error">{error}</p>}
+      {result && <div aria-live="polite">
+        <p>{result.rooms.length} available for {formatDate(result.checkIn)} to {formatDate(result.checkOut)}</p>
+        {result.rooms.length > 0 && <ul>{result.rooms.map((room) => <li key={room.id}>Room {room.roomNumber} ({room.roomType})</li>)}</ul>}
+      </div>}
+    </section>
+  )
+}
+
 function StatCard({ label, value, suffix, note, icon, color }) {
   return <article className="surface stat-card"><div className="stat-top"><span>{label}</span><span className={`stat-icon stat-${color}`}><Icon name={icon} size={18} /></span></div><div className="stat-value">{value}<small>{suffix}</small></div><span className="stat-note">{note}</span></article>
 }
 
 export function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, onSubmit, timeZone, error = '', saving = false }) {
   const roomTypes = [...new Set(rooms.map((room) => room.type))]
-  const [selectedRoomType, setSelectedRoomType] = useState(roomTypes[0] || '')
+  const [selectedRoomType, setSelectedRoomType] = useState('')
   const [selectedGuestId, setSelectedGuestId] = useState('')
+  const [requestStay, setRequestStay] = useState('')
   const [invoiceReservationId,setInvoiceReservationId]=useState('')
   const localToday = useHotelToday(timeZone)
   const nextDay = new Date(`${localToday}T00:00:00`)
@@ -871,10 +1155,39 @@ export function Modal({ modal, selectedRecord, guests, rooms, reservations, onCl
   const [checkOutDate, setCheckOutDate] = useState(localTomorrow)
   const [editCheckInDate, setEditCheckInDate] = useState(selectedRecord?.checkIn || localToday)
   const [editCheckOutDate, setEditCheckOutDate] = useState(selectedRecord?.checkOut || localTomorrow)
-  if (['edit-guest', 'edit-reservation', 'payment'].includes(modal) && !selectedRecord) {
+  if (['edit-guest', 'edit-reservation', 'payment', 'maintenance', 'reservation-details', 'checkout', 'extend-stay', 'move-stay', 'stay-lost-items'].includes(modal) && !selectedRecord) {
     return <div className="modal-backdrop"><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h2 id="modal-title">Record unavailable</h2><p role="alert">Close this dialog and select the record again.</p><button type="button" className="button button-secondary" onClick={onClose}>Close</button></section></div>
   }
+  if (modal === 'reservation-details') {
+    return <div className="modal-backdrop">
+      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <h2 id="modal-title">Reservation {selectedRecord.code}</h2>
+        <dl>
+          <dt>Guest</dt><dd>{selectedRecord.guest}</dd>
+          <dt>Room type</dt><dd>{selectedRecord.type}</dd>
+          <dt>Room</dt><dd>{selectedRecord.roomId ? selectedRecord.room : 'Unassigned'}</dd>
+          <dt>Stay dates</dt><dd>{selectedRecord.dates}</dd>
+          <dt>Status</dt><dd>{selectedRecord.statusLabel}</dd>
+          {selectedRecord.quotedPromotion && <><dt>Quoted promotion</dt><dd>{selectedRecord.quotedPromotion.name} ({Number(selectedRecord.quotedPromotion.percent)}% off)</dd></>}
+        </dl>
+        <button type="button" className="button button-secondary" onClick={onClose} autoFocus>Close</button>
+      </section>
+    </div>
+  }
+  if (modal === 'stay-lost-items') {
+    return <div className="modal-backdrop">
+      <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <h2 id="modal-title">Lost items for {selectedRecord.code}</h2>
+        <StayLostItems reservationId={selectedRecord.id} />
+        <button className="button button-secondary" type="button" onClick={onClose}>Close</button>
+      </section>
+    </div>
+  }
   const titles = {
+    checkout: ['GUEST STAYS', 'Review checkout', `Settle all charges for ${selectedRecord?.guest || 'this stay'} before checkout.`],
+    'move-stay': ['GUEST STAYS', 'Move guest to another room', 'The previous room will be sent to Housekeeping for cleaning.'],
+    'extend-stay': ['GUEST STAYS', 'Extend stay', 'Choose a later checkout date.'],
+    maintenance: ['ROOM MAINTENANCE', `Report a room issue for ${selectedRecord?.number || 'this room'}`, 'Engineering will receive the report.'],
     reservation: ['GUEST STAYS', 'Create a reservation', 'Add the details for an upcoming guest stay.'],
     request: ['GUEST EXPERIENCE', 'Log a guest request', 'Let the team know what your guest needs.'],
     guest: ['PEOPLE & PROFILES', 'Add a guest', 'Create a guest profile for your hotel records.'],
@@ -888,14 +1201,15 @@ export function Modal({ modal, selectedRecord, guests, rooms, reservations, onCl
   const canAssignRoom = (room, arrival) => !room.manualHold && (arrival > localToday
     ? room.status !== 'Out Of Order'
     : room.readyForAssignment ?? ['Available', 'Reserved'].includes(room.status))
-  const roomsForStay = rooms.filter((room) =>
-    room.type === selectedRoomType
+  const roomsOfSelectedType = rooms.filter((room) => room.type === selectedRoomType)
+  const roomsForStay = roomsOfSelectedType.filter((room) =>
+    checkOutDate > checkInDate
     && canAssignRoom(room, checkInDate)
     && !reservations.some((reservation) =>
       Number(reservation.roomId) === Number(room.id)
       && ['CONFIRMED', 'CHECKED_IN'].includes(reservation.status)
       && reservation.checkIn < checkOutDate
-      && reservation.checkOut > checkInDate
+      && (reservation.checkOut > checkInDate || (reservation.status === 'CHECKED_IN' && reservation.checkOut <= localToday))
     )
   )
   const roomsForEditedStay = rooms.filter((room) =>
@@ -906,7 +1220,7 @@ export function Modal({ modal, selectedRecord, guests, rooms, reservations, onCl
       && Number(reservation.roomId) === Number(room.id)
       && ['CONFIRMED', 'CHECKED_IN'].includes(reservation.status)
       && reservation.checkIn < editCheckOutDate
-      && reservation.checkOut > editCheckInDate
+      && (reservation.checkOut > editCheckInDate || (reservation.status === 'CHECKED_IN' && reservation.checkOut <= localToday))
     )
   )
 
@@ -932,7 +1246,44 @@ export function Modal({ modal, selectedRecord, guests, rooms, reservations, onCl
             </>}
           </>}
 
-          {['request', 'guest', 'edit-guest'].includes(modal) && <>
+          {modal === 'maintenance' && <>
+            <label htmlFor="issue-category">Category</label>
+            <select id="issue-category" name="category" defaultValue="" required>
+              <option value="" disabled>Choose a category</option>
+              {Object.entries({ PLUMBING: 'Plumbing', ELECTRICAL: 'Electrical', AIRCON: 'Air conditioning', FURNITURE: 'Furniture', APPLIANCE: 'Appliance', OTHER: 'Other' }).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <label htmlFor="issue-priority">Priority</label>
+            <select id="issue-priority" name="priority" defaultValue="NORMAL">
+              {['Low', 'Normal', 'High', 'Urgent'].map((label) => <option key={label} value={label.toUpperCase()}>{label}</option>)}
+            </select>
+            <label htmlFor="issue-description">Description</label>
+            <textarea id="issue-description" name="description" maxLength={255} required />
+          </>}
+
+          {modal === 'checkout' && <CheckoutFolio reservationId={selectedRecord.id} saving={saving} />}
+          {modal === 'move-stay' && <>
+            <label htmlFor="move-room">Destination room</label>
+            <select id="move-room" name="roomId" defaultValue="" required>
+              <option value="" disabled>Choose a ready room</option>
+              {rooms.filter((room) => room.id !== selectedRecord.roomId && canAssignRoom(room, localToday)
+                && !reservations.some((stay) => stay.roomId === room.id && ['CONFIRMED', 'CHECKED_IN'].includes(stay.status)
+                  && stay.checkIn < (selectedRecord.checkOut > localToday ? selectedRecord.checkOut : localTomorrow)
+                  && (stay.checkOut > localToday || stay.status === 'CHECKED_IN')))
+                .map((room) => <option key={room.id} value={room.id}>{room.number} ({room.type})</option>)}
+            </select>
+          </>}
+          {modal === 'extend-stay' && <>
+            <label htmlFor="extend-checkout">New checkout date</label>
+            <input id="extend-checkout" name="checkout" type="date" min={localTomorrow} required />
+          </>}
+          {modal === 'request' && <>
+            <label htmlFor="request-stay">Checked-in stay</label>
+            <select id="request-stay" name="reservationId" value={requestStay} onChange={(event) => setRequestStay(event.target.value)}>
+              <option value="">Request without a stay</option>
+              {reservations.filter((stay) => stay.status === 'CHECKED_IN' && stay.roomId).map((stay) => <option key={stay.id} value={stay.id}>{stay.guest} (Room {stay.room})</option>)}
+            </select>
+          </>}
+          {(['guest', 'edit-guest'].includes(modal) || (modal === 'request' && !requestStay)) && <>
             <label htmlFor="modal-guest">Guest name</label>
             <input id="modal-guest" name="guest" placeholder="e.g. Taylor Morgan" defaultValue={name} required autoFocus />
           </>}
@@ -946,8 +1297,35 @@ export function Modal({ modal, selectedRecord, guests, rooms, reservations, onCl
 
           {modal === 'reservation' && <>
             <div className="form-row">
-              <div><label htmlFor="modal-type">Room type</label><input id="modal-type" name="type" list="room-types" value={selectedRoomType} onChange={(event) => setSelectedRoomType(event.target.value)} required /><datalist id="room-types">{roomTypes.map((roomType) => <option key={roomType} value={roomType} />)}</datalist></div>
-              <div><label htmlFor="modal-room">Room assignment</label><select id="modal-room" name="roomId"><option value="">Assign later</option>{roomsForStay.map((room) => <option key={room.id} value={room.id}>{room.number} · {room.type}</option>)}</select></div>
+              <div>
+                <label htmlFor="modal-type">Room type</label>
+                {roomTypes.length > 0 ? (
+                  <select id="modal-type" name="type" value={selectedRoomType} onChange={(event) => setSelectedRoomType(event.target.value)} required>
+                    <option value="" disabled>Select a room type</option>
+                    {roomTypes.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
+                  </select>
+                ) : (
+                  <input id="modal-type" name="type" value={selectedRoomType} onChange={(event) => setSelectedRoomType(event.target.value)} required />
+                )}
+              </div>
+              <div>
+                <label htmlFor="modal-room">Room assignment</label>
+                <select key={selectedRoomType} id="modal-room" name="roomId" disabled={!selectedRoomType} aria-describedby="room-assignment-status">
+                  <option value="">Assign later</option>
+                  {roomsOfSelectedType.map((room) => {
+                    const available = roomsForStay.includes(room)
+                    const reason = room.manualHold ? 'On hold'
+                      : !canAssignRoom(room, checkInDate) ? (room.readyForAssignment === false && ['Available', 'Reserved'].includes(room.status) ? 'Awaiting cleaning release' : room.status)
+                        : 'Unavailable for these dates'
+                    return <option key={room.id} value={room.id} disabled={!available}>{room.number}{!available && ` - ${reason}`}</option>
+                  })}
+                </select>
+                <small id="room-assignment-status" className="dialog-note">
+                  {selectedRoomType
+                    ? `${roomsForStay.length} of ${roomsOfSelectedType.length} ${selectedRoomType} rooms available for these dates.`
+                    : 'Select a room type to see its rooms.'}
+                </small>
+              </div>
             </div>
             <div className="form-row">
               <div><label htmlFor="modal-checkin">Check-in</label><input id="modal-checkin" name="checkin" type="date" value={checkInDate} onChange={(event) => setCheckInDate(event.target.value)} required /></div>
@@ -969,11 +1347,14 @@ export function Modal({ modal, selectedRecord, guests, rooms, reservations, onCl
             </div>
           </>}
 
+          {modal === 'reservation' && checkOutDate > checkInDate && <PromotionPicker key={`${checkInDate}:${checkOutDate}`} checkIn={checkInDate} checkOut={checkOutDate} />}
+
           {modal === 'request' && <>
             <div className="form-row">
-              <div><label htmlFor="request-room">Room number</label><select id="request-room" name="roomId"><option value="">Not assigned</option>{rooms.map((room) => <option key={room.id} value={room.id}>{room.number}</option>)}</select></div>
               <div><label htmlFor="request-priority">Priority</label><select id="request-priority" name="priority"><option value="STANDARD">Standard</option><option value="URGENT">Urgent</option></select></div>
             </div>
+            <label htmlFor="request-due">Due date and time (hotel time, optional)</label>
+            <input id="request-due" type="datetime-local" name="dueAt" />
             <label htmlFor="request-text">What does the guest need?</label>
             <textarea id="request-text" name="request" placeholder="Describe the request..." required rows="3" />
           </>}
@@ -983,7 +1364,8 @@ export function Modal({ modal, selectedRecord, guests, rooms, reservations, onCl
             <select id="invoice-guest" name="guestId" required value={selectedGuestId} onChange={event=>{setSelectedGuestId(event.target.value);setInvoiceReservationId('')}}><option value="" disabled>Select a guest</option>{guests.map((guest) => <option key={guest.id} value={guest.id}>{guest.name}</option>)}</select>
             <label htmlFor="invoice-reservation">Reservation (optional)</label>
             <select id="invoice-reservation" name="reservationId" value={invoiceReservationId} disabled={!selectedGuestId} onChange={event=>setInvoiceReservationId(event.target.value)}><option value="">No reservation linked</option>{reservations.filter(reservation=>String(reservation.guestId)===selectedGuestId).map((reservation) => <option key={reservation.id} value={reservation.id}>{reservation.code} · {reservation.guest}</option>)}</select>
-            <label htmlFor="invoice-amount">Invoice amount</label>
+            {invoiceReservationId && <PromotionPicker key={invoiceReservationId} reservationId={invoiceReservationId} />}
+            <label htmlFor="invoice-amount">Invoice amount before any promotion</label>
             <input id="invoice-amount" name="amount" type="number" min="0.01" step="0.01" required />
             <label htmlFor="invoice-notes">Notes (optional)</label>
             <textarea id="invoice-notes" name="notes" rows="2" placeholder="What is this invoice for?" />
@@ -998,7 +1380,7 @@ export function Modal({ modal, selectedRecord, guests, rooms, reservations, onCl
             </div>
           </>}
 
-          <div className="modal-actions"><button className="button button-secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button><button className="button button-primary" type="submit" disabled={saving}><Icon name="check" size={16} />{saving ? 'Saving…' : modal === 'reservation' ? 'Create reservation' : modal === 'request' ? 'Log request' : modal === 'guest' ? 'Create guest' : ['edit-guest', 'edit-reservation'].includes(modal) ? 'Save changes' : modal === 'invoice' ? 'Create invoice' : 'Record payment'}</button></div>
+          <div className="modal-actions"><button className="button button-secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button>{modal !== 'checkout' && <button className="button button-primary" type="submit" disabled={saving}><Icon name="check" size={16} />{saving ? 'Saving…' : modal === 'reservation' ? 'Create reservation' : modal === 'request' ? 'Log request' : modal === 'guest' ? 'Create guest' : ['edit-guest', 'edit-reservation'].includes(modal) ? 'Save changes' : modal === 'invoice' ? 'Create invoice' : modal === 'maintenance' ? 'Send to Engineering' : modal === 'extend-stay' ? 'Extend stay' : modal === 'move-stay' ? 'Move guest' : 'Record payment'}</button>}</div>
         </form>
       </section>
     </div>

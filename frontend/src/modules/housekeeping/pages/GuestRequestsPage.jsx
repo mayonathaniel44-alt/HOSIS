@@ -107,7 +107,7 @@ export default function GuestRequestsPage({ search: topSearch, headerActions, us
             darkHover
             empty="No guest requests match these filters."
             columns={[
-              { key: 'room', title: 'Room / Request', render: (r) => <span><strong>{r.room_number} · {label(r.request_type)}</strong><small className="hk-block">{r.request_details}</small></span> },
+              { key: 'room', title: 'Room / Request', render: (r) => <span><strong>{r.room_number} · {label(r.request_type)}</strong><small className="hk-block">{r.request_details}</small>{r.due_at && <small className="hk-block">Due {r.due_at.slice(0, 16)}{r.is_late ? ' (overdue)' : ''}</small>}</span> },
               { key: 'priority', title: 'Priority', render: (r) => <Badge value={r.priority} /> },
               { key: 'staff', title: 'Assigned', render: (r) => r.assigned_to?.trim() || 'Unassigned' },
               { key: 'status', title: 'Status', render: (r) => <Badge value={r.request_status} /> },

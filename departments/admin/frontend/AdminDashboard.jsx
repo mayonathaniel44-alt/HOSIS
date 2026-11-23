@@ -10,7 +10,6 @@ const staffRoles = [
   ['ENGINEERING', 'Engineering Head'],
   ['TECHNICIAN', 'Engineering Technician'],
   ['FINANCE', 'Accounting & Finance'],
-  ['FOOD_BEVERAGE', 'Food & Beverage'],
   ['HR', 'Human Resources'],
   ['SALES_MARKETING', 'Sales & Marketing'],
 ]

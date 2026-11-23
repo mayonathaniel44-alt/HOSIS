@@ -26,7 +26,10 @@ router.get('/', async (req, res) => {
   }
   const { rows: rooms } = await db.query(
     `SELECT r.*, t.task_id, t.task_status, t.priority AS task_priority,
-            CONCAT(u.first_name, ' ', u.last_name) AS housekeeper
+            CONCAT(u.first_name, ' ', u.last_name) AS housekeeper,
+            (SELECT MIN(s.check_in) FROM reservations s WHERE s.room_id=r.room_id AND s.status='CONFIRMED'
+             AND s.check_out>CURRENT_DATE) AS next_arrival,
+            (SELECT MAX(s.check_out) FROM reservations s WHERE s.room_id=r.room_id AND s.status='CHECKED_IN') AS scheduled_departure
        FROM hk_rooms r
        LEFT JOIN LATERAL (
          SELECT * FROM hk_cleaning_tasks ct

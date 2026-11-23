@@ -17,7 +17,7 @@ function PayrollRegister() {
 function departmentLabel(value) {
   return { frontdesk: 'Front Office', finance: 'Finance', housekeeping: 'Housekeeping', maintenance: 'Engineering',
     ADMIN: 'Administration', FRONT_OFFICE: 'Front Office', HOUSEKEEPING: 'Housekeeping',
-    SALES_MARKETING: 'Sales & Marketing', FOOD_BEVERAGE: 'Food & Beverage',
+    SALES_MARKETING: 'Sales & Marketing',
     ENGINEERING: 'Engineering', TECHNICIAN: 'Engineering', HR: 'Human Resources', FINANCE: 'Finance',
   }[value] || value || '—'
 }

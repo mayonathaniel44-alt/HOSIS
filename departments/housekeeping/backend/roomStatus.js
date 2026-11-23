@@ -28,10 +28,10 @@ async function lockRoom(client, roomId) {
   return rows[0];
 }
 
-async function notifyFrontOffice(client, roomId, message, staffId) {
+async function notifyFrontOffice(client, roomId, message, staffId, noticeType = 'ROOM_READY') {
   await client.query(
-    'INSERT INTO hk_front_office_notifications (room_id, message, created_by) VALUES ($1, $2, $3)',
-    [roomId, message, staffId]
+    'INSERT INTO hk_front_office_notifications (room_id, message, created_by, notice_type) VALUES ($1, $2, $3, $4)',
+    [roomId, message, staffId, noticeType]
   );
 }
 
@@ -82,6 +82,16 @@ async function changeRoomStatus(client, { roomId, newStatus, staffId, remarks, m
         : `Room ${room.room_number} passed inspection and is ready for Front Office to release.`,
       staffId
     );
+  }
+  if (newStatus === 'OUT_OF_ORDER' || (newStatus === 'DIRTY' && room.room_status === 'CLEAN')) {
+    const arrival = await client.query(
+      "SELECT 1 FROM reservations WHERE room_id=$1 AND status='CONFIRMED' AND check_out>CURRENT_DATE LIMIT 1",
+      [roomId],
+    );
+    if (arrival.rowCount) {
+      const detail = newStatus === 'OUT_OF_ORDER' ? 'was taken out of service' : 'needs re-cleaning';
+      await notifyFrontOffice(client, roomId, `Room ${room.room_number} ${detail} and has an upcoming arrival. Review the room assignment.`, staffId, 'ROOM_CONDITION');
+    }
   }
   return rows[0];
 }

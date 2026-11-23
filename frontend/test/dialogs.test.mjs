@@ -49,6 +49,15 @@ test('reservation creation explains an empty room inventory instead of showing a
   assert.ok(html.includes('Assign later'))
   assert.ok(html.includes('Create reservation'))
 })
+test('new reservations list every configured room type once', () => {
+  const rooms = ['Standard', 'Deluxe', 'Executive', 'Standard'].map((type, id) => ({ id, type }))
+  const html = render('reservation', null, { rooms })
+  const roomTypeSelect = html.match(/<select id="modal-type"[^>]*>(.*?)<\/select>/)?.[1]
+  assert.ok(roomTypeSelect?.includes('Select a room type'))
+  for (const type of ['Standard', 'Deluxe', 'Executive']) {
+    assert.equal(roomTypeSelect.split(`value="${type}"`).length, 2)
+  }
+})
 test('editing a reservation shows its fields and a save action', () => {
   const html = render('edit-reservation', {
     id: 4,
@@ -72,7 +81,8 @@ test('editing a guest preserves the selected profile', () => {
 })
 test('payment dialog calculates only the selected invoice balance', () => {
   const html = render('payment', { id: 1, rawAmount: 123.45, paidAmount: 10 })
-  assert.ok(html.includes('Outstanding balance: $113.45.'))
+  const balance = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(113.45)
+  assert.ok(html.includes(`Outstanding balance: ${balance}.`))
   assert.ok(html.includes('max="113.45"'))
 })
 for (const modal of ['edit-reservation', 'edit-guest', 'payment'])

@@ -112,4 +112,4 @@ An administrator may select Front Office at sign-in using the same configured us
 
 From the `backend` folder, run `npm run db:migrate` and then `npm run db:seed-demo`. The seed only runs against a local HOSIS development database. It adds rooms, a checked-in guest, cleaning and repair work, sales records, HR records, and linked invoices and charges. Run it again to check setup without duplicating or resetting data.
 
-The seed creates a `demo_` account for each workspace. Open the ignored `backend/.env.demo` file for the generated passwords and use the matching department on the HOSIS login page. The demo technician uses Engineering & Maintenance.
+The seed creates local staff accounts including `fo.sofia`, `hk.leah`, `eng.roberto`, `fin.bianca`, `hr.patricia`, and `sm.camille`. Open the ignored `backend/.env.demo` file for the generated passwords. Use the password under `demo_front_office` for `fo.sofia` and the matching department key for the other accounts. The demo technician uses Engineering & Maintenance.

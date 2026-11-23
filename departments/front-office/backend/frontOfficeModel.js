@@ -115,6 +115,7 @@ async function deleteGuest(id, userId) {
 }
 
 const reservationColumns = `
+  r.quoted_promotion AS "quotedPromotion",
   r.id, r.confirmation_code AS "confirmationCode", r.guest_id AS "guestId",
   r.room_id AS "roomId", r.room_type AS "roomType",
   r.check_in::text AS "checkIn", r.check_out::text AS "checkOut", r.status,
@@ -190,7 +191,7 @@ async function ensureRoomAvailable(client, roomId, roomType, checkIn, checkOut, 
      WHERE room_id = $1
        AND status IN ('CONFIRMED', 'CHECKED_IN')
        AND check_in < $2::date
-       AND check_out > $3::date
+       AND (check_out > $3::date OR (status = 'CHECKED_IN' AND check_out <= CURRENT_DATE))
        AND ($4::bigint IS NULL OR id <> $4)`,
     [roomId, checkOut, checkIn, excludeReservationId],
   )
@@ -237,13 +238,22 @@ async function createReservation(reservation, userId) {
       guestId = rows[0].id
     }
 
+    let promotion = null
+    if (reservation.promotionId) {
+      const { rows: [offer] } = await client.query(
+        `${availablePromotions} AND p.id=$3 FOR SHARE OF p`,
+        [reservation.checkIn, reservation.checkOut, reservation.promotionId],
+      )
+      if (!offer) throw appError(409, 'PROMOTION_UNAVAILABLE', 'Choose a promotion that covers the entire stay.')
+      promotion = { ...offer, checkIn: reservation.checkIn, checkOut: reservation.checkOut }
+    }
     const code = `RES-${crypto.randomBytes(12).toString('hex').toUpperCase()}`
     const { rows } = await client.query(
       `INSERT INTO reservations
-         (confirmation_code, guest_id, room_id, room_type, check_in, check_out, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (confirmation_code, guest_id, room_id, room_type, check_in, check_out, created_by, quoted_promotion)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
-      [code, guestId, reservation.roomId, reservation.roomType, reservation.checkIn, reservation.checkOut, userId],
+      [code, guestId, reservation.roomId, reservation.roomType, reservation.checkIn, reservation.checkOut, userId, promotion],
     )
     await syncReservedStatus(client, reservation.roomId)
     const assignment = assignedRoom ? ` Assigned room ${assignedRoom.room_number}.` : ''
@@ -289,6 +299,9 @@ async function updateReservation(id, fields, userId) {
 
     const assignments = entries.map(([key], index) => `${allowed[key]} = $${index + 1}`)
     const values = entries.map(([key]) => next[key])
+    if (next.checkIn !== current.check_in || next.checkOut !== current.check_out) {
+      assignments.push('quoted_promotion = NULL')
+    }
     values.push(id)
     await client.query(
       `UPDATE reservations SET ${assignments.join(', ')}, updated_at = NOW()
@@ -370,6 +383,10 @@ async function checkOut(id, userId) {
     if (reservation.status !== 'CHECKED_IN') {
       throw appError(409, 'INVALID_RESERVATION_STATUS', 'Only checked-in reservations can be checked out.')
     }
+    const folio = await stayFolio(id, client)
+    if (Number(folio.balance) > 0) {
+      throw appError(409, 'STAY_BALANCE_DUE', 'Settle the outstanding stay balance before checking out.')
+    }
     if (reservation.room_id) {
       await lockRooms(client, [reservation.room_id])
       await client.query(
@@ -381,20 +398,120 @@ async function checkOut(id, userId) {
       )
     }
     await client.query(
-      `UPDATE reservations SET status = 'CHECKED_OUT', updated_at = NOW() WHERE id = $1`,
+      `UPDATE reservations SET status = 'CHECKED_OUT', actual_checkout_at = NOW(), updated_at = NOW() WHERE id = $1`,
       [id],
     )
-    if (reservation.room_id) {
-      const { rows: room }=await client.query('SELECT status FROM rooms WHERE id=$1',[reservation.room_id])
-      if(room[0].status==='DIRTY') {
-       await client.query(`INSERT INTO hk_cleaning_tasks(room_id,task_type,priority,notes) VALUES($1,'CHECKOUT','NORMAL','Guest checked out')
-        ON CONFLICT(room_id) WHERE task_status <> 'INSPECTED' DO UPDATE SET task_type='CHECKOUT',
-         task_status=CASE WHEN hk_cleaning_tasks.staff_id IS NULL THEN 'PENDING' ELSE 'ASSIGNED' END, start_time=NULL,completion_time=NULL`,[reservation.room_id])
-      }
-    }
     await recordActivity(client, userId, 'RESERVATION_CHECKED_OUT', `Checked out reservation #${id}.`)
   })
   return getReservation(id)
+}
+
+async function moveStay(id, targetRoomId, userId) {
+  await transaction(async (client) => {
+    await client.query('SELECT pg_advisory_xact_lock(742915)')
+    const { rows: [stay] } = await client.query(
+      'SELECT room_id, status, check_out, CURRENT_DATE::text AS today FROM reservations WHERE id=$1 FOR UPDATE', [id],
+    )
+    if (!stay) throw notFound('Reservation')
+    if (stay.status !== 'CHECKED_IN' || !stay.room_id || stay.room_id === targetRoomId) {
+      throw appError(409, 'INVALID_ROOM_MOVE', 'Choose a different room for a checked-in guest.')
+    }
+    const rooms = await lockRooms(client, [stay.room_id, targetRoomId])
+    const source = rooms.find((room) => room.id === stay.room_id)
+    if (source.status !== 'OCCUPIED') throw appError(409, 'INVALID_ROOM_MOVE', 'The current room is not marked occupied.')
+    const { rows: [target] } = await client.query('SELECT room_type FROM rooms WHERE id=$1', [targetRoomId])
+    const { rows: [dates] } = await client.query('SELECT GREATEST($1::date,CURRENT_DATE+1)::text AS departure', [stay.check_out])
+    await ensureRoomAvailable(client, targetRoomId, target.room_type, stay.today, dates.departure, id)
+    await changeRoomStatus(client, { roomId: stay.room_id, newStatus: 'DIRTY', staffId: userId, remarks: 'Guest moved rooms', manual: false })
+    await changeRoomStatus(client, { roomId: targetRoomId, newStatus: 'OCCUPIED', staffId: userId, remarks: 'Guest moved into room', manual: false })
+    await client.query('UPDATE reservations SET room_id=$2,room_type=$3,updated_at=NOW() WHERE id=$1', [id,targetRoomId,target.room_type])
+    await client.query(
+      `INSERT INTO front_office_room_moves(reservation_id, from_room_id, to_room_id, moved_by)
+       VALUES($1,$2,$3,$4)`, [id,stay.room_id,targetRoomId,userId],
+    )
+    await client.query(
+      `INSERT INTO hk_cleaning_tasks(room_id,task_type,task_status,notes,reservation_reference)
+       SELECT $1,'CHECKOUT','PENDING','Guest moved rooms',confirmation_code FROM reservations WHERE id=$2
+       ON CONFLICT(room_id) WHERE task_status <> 'INSPECTED' DO UPDATE SET
+       task_type='CHECKOUT',task_status=CASE WHEN hk_cleaning_tasks.staff_id IS NULL THEN 'PENDING' ELSE 'ASSIGNED' END,
+       start_time=NULL,completion_time=NULL,notes=EXCLUDED.notes,reservation_reference=EXCLUDED.reservation_reference`,
+      [stay.room_id,id],
+    )
+    await client.query("UPDATE guest_requests SET room_id=$2,updated_at=NOW() WHERE reservation_id=$1 AND status<>'COMPLETED'", [id,targetRoomId])
+    await recordActivity(client,userId,'RESERVATION_ROOM_MOVED',`Moved reservation #${id} from room ${source.room_number} to ${rooms.find((room) => room.id === targetRoomId).room_number}.`)
+  })
+  return getReservation(id)
+}
+
+async function findStayLostItems(id) {
+  const { rows } = await pool.query(
+    `WITH stay AS (
+       SELECT * FROM reservations WHERE id=$1 AND status='CHECKED_OUT'
+     ), moves AS (
+       SELECT m.*, LAG(m.moved_at) OVER (ORDER BY m.moved_at,m.id) AS entered_at
+       FROM front_office_room_moves m JOIN stay s ON s.id=m.reservation_id
+     ), occupied_periods AS (
+       SELECT from_room_id AS room_id, COALESCE(entered_at::timestamp,s.check_in::timestamp) AS started_at,
+              moved_at::timestamp + INTERVAL '2 days' AS ends_at
+       FROM moves CROSS JOIN stay s
+       UNION ALL
+       SELECT s.room_id, COALESCE((SELECT MAX(moved_at)::timestamp FROM moves),s.check_in::timestamp),
+              COALESCE(s.actual_checkout_at::timestamp,s.check_out::timestamp + INTERVAL '1 day') + INTERVAL '2 days'
+       FROM stay s
+     )
+     SELECT f.item_description AS description, r.room_number AS room,
+            f.storage_label AS reference, f.item_status AS status, f.found_at AS "foundAt"
+     FROM hk_lost_found_items f JOIN rooms r ON r.id=f.room_id
+     WHERE EXISTS (
+       SELECT FROM occupied_periods p WHERE p.room_id=f.room_id AND f.found_at>=p.started_at AND f.found_at<p.ends_at
+     )
+     ORDER BY f.found_at DESC LIMIT 50`, [id],
+  )
+  return rows
+}
+
+async function extendStay(id, checkOut, userId) {
+  await transaction(async (client) => {
+    const { rows: [stay] } = await client.query(
+      'SELECT room_id, status, check_out, CURRENT_DATE::text AS today FROM reservations WHERE id=$1 FOR UPDATE', [id],
+    )
+    if (!stay) throw notFound('Reservation')
+    if (stay.status !== 'CHECKED_IN' || !stay.room_id) {
+      throw appError(409, 'INVALID_RESERVATION_STATUS', 'Only an occupied stay can be extended.')
+    }
+    if (checkOut <= stay.check_out || checkOut <= stay.today) {
+      throw appError(400, 'INVALID_STAY', 'Choose a checkout date after today and the current checkout date.')
+    }
+    await lockRooms(client, [stay.room_id])
+    const { rowCount } = await client.query(
+      `SELECT 1 FROM reservations WHERE room_id=$1 AND id<>$2
+        AND status IN ('CONFIRMED','CHECKED_IN') AND check_in < $3::date
+        AND check_out > LEAST($4::date,CURRENT_DATE)`,
+      [stay.room_id, id, checkOut, stay.check_out],
+    )
+    if (rowCount) throw appError(409, 'ROOM_CONFLICT', 'Another reservation overlaps the requested extension.')
+    await client.query('UPDATE reservations SET check_out=$2, quoted_promotion=NULL, updated_at=NOW() WHERE id=$1', [id, checkOut])
+    await recordActivity(client, userId, 'RESERVATION_EXTENDED', `Extended reservation #${id} to ${checkOut}.`)
+  })
+  return getReservation(id)
+}
+
+async function stayFolio(id, client = pool) {
+  const { rows: [folio] } = await client.query(
+    `SELECT r.id,
+       COALESCE(SUM(charges.balance),0)::numeric AS balance,
+       COALESCE(jsonb_agg(to_jsonb(charges) ORDER BY charges.id) FILTER (WHERE charges.id IS NOT NULL), '[]'::jsonb) AS invoices
+     FROM reservations r
+     LEFT JOIN LATERAL (
+       SELECT i.id, i.invoice_number AS "invoiceNumber", i.amount, i.status,
+         GREATEST(i.amount - COALESCE(SUM(p.amount),0),0)::numeric AS balance
+       FROM invoices i LEFT JOIN payments p ON p.invoice_id=i.id
+       WHERE i.reservation_id=r.id AND i.status <> 'VOID' GROUP BY i.id
+     ) charges ON true
+     WHERE r.id=$1 GROUP BY r.id`, [id],
+  )
+  if (!folio) throw notFound('Reservation')
+  return folio
 }
 
 const manualRoomHold = `(
@@ -411,13 +528,52 @@ async function listRooms(search = '') {
             status IN ('AVAILABLE', 'RESERVED') AND NOT EXISTS (
               SELECT FROM hk_cleaning_tasks WHERE room_id = rooms.id AND task_status <> 'INSPECTED'
             ) AND NOT ${manualRoomHold} AS "readyForAssignment",
-            ${manualRoomHold} AS "manualHold"
+            ${manualRoomHold} AS "manualHold",
+            (SELECT task_status FROM hk_cleaning_tasks WHERE room_id=rooms.id ORDER BY task_id DESC LIMIT 1) AS "cleaningStatus",
+            (SELECT jsonb_build_object('id', request_id, 'description', issue_description, 'status', status)
+             FROM hk_maintenance_requests WHERE room_id=rooms.id AND status <> 'CLOSED'
+             ORDER BY request_id DESC LIMIT 1) AS "maintenance"
      FROM rooms
      WHERE ($1 = '' OR room_number ILIKE $2 OR room_type ILIKE $2 OR floor ILIKE $2)
      ORDER BY room_number`,
     [search.trim(), term],
   )
   return rows
+}
+
+async function availableRooms(checkIn, checkOut) {
+  const { rows } = await pool.query(
+    `SELECT id, room_number AS "roomNumber", room_type AS "roomType", floor
+       FROM rooms
+      WHERE status <> 'OUT_OF_ORDER' AND NOT ${manualRoomHold}
+        AND ($1::date > CURRENT_DATE OR (
+          status IN ('AVAILABLE', 'RESERVED') AND NOT EXISTS (
+            SELECT FROM hk_cleaning_tasks WHERE room_id = rooms.id AND task_status <> 'INSPECTED'
+          )
+        ))
+        AND NOT EXISTS (
+          SELECT FROM reservations WHERE room_id = rooms.id
+            AND status IN ('CONFIRMED', 'CHECKED_IN')
+            AND check_in < $2::date
+            AND (check_out > $1::date OR (status = 'CHECKED_IN' AND check_out <= CURRENT_DATE))
+        )
+      ORDER BY room_number`,
+    [checkIn, checkOut],
+  )
+  return rows
+}
+
+async function reportRoomIssue(roomId, issue, userId) {
+  return transaction(async (client) => {
+    await lockRooms(client, [roomId])
+    const { rows: [request] } = await client.query(
+      `INSERT INTO hk_maintenance_requests (room_id, reported_by, issue_category, issue_description, priority, report_source)
+       VALUES ($1, $2, $3, $4, $5, 'Front Office') RETURNING request_id AS id`,
+      [roomId, userId, issue.category, issue.description, issue.priority],
+    )
+    await recordActivity(client, userId, 'ROOM_ISSUE_REPORTED', `Reported maintenance request #${request.id} for room #${roomId}.`)
+    return request
+  })
 }
 
 async function getRoom(id) {
@@ -463,8 +619,11 @@ async function listRequests(search = '') {
     `SELECT q.id, q.guest_id AS "guestId", q.guest_name AS guest,
             q.room_id AS "roomId", rm.room_number AS room,
             q.request_text AS request, q.priority, q.status,
-            q.created_at AS "createdAt"
+            q.created_at AS "createdAt", q.due_at::text AS "dueAt",
+            h.completion_notes AS "completionNotes", h.completed_at AS "completedAt",
+            q.status <> 'COMPLETED' AND q.due_at < LOCALTIMESTAMP AS "isLate"
      FROM guest_requests q
+     LEFT JOIN hk_guest_requests h ON h.front_office_request_id=q.id
      LEFT JOIN rooms rm ON rm.id = q.room_id
      WHERE ($1 = '' OR q.guest_name ILIKE $2 OR q.request_text ILIKE $2
        OR rm.room_number ILIKE $2 OR q.status ILIKE $2)
@@ -478,14 +637,24 @@ async function listRequests(search = '') {
 async function createRequest(request, userId) {
   return transaction(async (client) => {
     await client.query('SELECT pg_advisory_xact_lock(742915)')
+    if (request.reservationId) {
+      const { rows: [stay] } = await client.query(
+        `SELECT r.guest_id, r.room_id, CONCAT_WS(' ',g.first_name,g.last_name) AS guest
+         FROM reservations r JOIN guests g ON g.id=r.guest_id
+         WHERE r.id=$1 AND r.status='CHECKED_IN' AND r.room_id IS NOT NULL FOR SHARE OF r`,
+        [request.reservationId],
+      )
+      if (!stay) throw appError(409, 'STAY_NOT_ACTIVE', 'Choose a checked-in stay.')
+      request = { ...request, guestId: stay.guest_id, roomId: stay.room_id, guestName: stay.guest }
+    }
     const { rows } = await client.query(
       `INSERT INTO guest_requests
-         (guest_id, guest_name, room_id, request_text, priority, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (guest_id, guest_name, room_id, request_text, priority, created_by, reservation_id, due_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id, guest_id AS "guestId", guest_name AS guest,
                  room_id AS "roomId", request_text AS request, priority, status,
                  created_at AS "createdAt"`,
-      [request.guestId, request.guestName, request.roomId, request.request, request.priority, userId],
+      [request.guestId, request.guestName, request.roomId, request.request, request.priority, userId, request.reservationId, request.dueAt],
     )
     await recordActivity(client, userId, 'GUEST_REQUEST_CREATED', `Logged a guest request for ${request.guestName}.`)
     return rows[0]
@@ -522,7 +691,7 @@ async function listInvoices(search = '') {
   const { rows } = await pool.query(
     `SELECT i.id, i.invoice_number AS "invoiceNumber", i.guest_id AS "guestId",
             i.reservation_id AS "reservationId", i.amount, i.status,
-            i.issued_at::text AS date, i.notes,
+            i.issued_at::text AS date, i.notes, i.promotion,
             CONCAT_WS(' ', g.first_name, g.last_name) AS guest,
             rm.room_number AS room,
             COALESCE(SUM(p.amount), 0)::numeric(12, 2) AS "paidAmount"
@@ -545,7 +714,7 @@ async function getInvoice(id) {
   const { rows } = await pool.query(
     `SELECT i.id, i.invoice_number AS "invoiceNumber", i.guest_id AS "guestId",
             i.reservation_id AS "reservationId", i.amount, i.status,
-            i.issued_at::text AS date, i.notes,
+            i.issued_at::text AS date, i.notes, i.promotion,
             CONCAT_WS(' ', g.first_name, g.last_name) AS guest,
             rm.room_number AS room,
             COALESCE(SUM(p.amount), 0)::numeric(12, 2) AS "paidAmount"
@@ -562,23 +731,72 @@ async function getInvoice(id) {
   return rows[0]
 }
 
+const availablePromotions = `
+  SELECT p.id, p.details->>'name' AS name, (p.details->>'discount')::numeric AS percent
+    FROM sales_marketing_records p
+   WHERE p.kind = 'promotion' AND p.details->>'status' = 'Active'
+     AND p.details->>'start' <= $1::date::text
+     AND p.details->>'end' >= ($2::date - 1)::text
+     AND (CASE WHEN jsonb_typeof(p.details->'discount') = 'number'
+               THEN (p.details->>'discount')::numeric END) BETWEEN 0.01 AND 100`
+
+async function listStayPromotions(checkIn, checkOut, client = pool) {
+  const { rows } = await client.query(`${availablePromotions} ORDER BY name, p.id`, [checkIn, checkOut])
+  return rows
+}
+
+async function listInvoicePromotions(reservationId) {
+  const { rows: [stay] } = await pool.query(
+    'SELECT check_in, check_out, quoted_promotion, status FROM reservations WHERE id=$1', [reservationId],
+  )
+  if (!stay || stay.status === 'CANCELLED') return []
+  const offers = await listStayPromotions(stay.check_in, stay.check_out)
+  return stay.quoted_promotion
+    ? [stay.quoted_promotion, ...offers.filter((offer) => offer.id !== stay.quoted_promotion.id)]
+    : offers
+}
+
 async function createInvoice(invoice, userId) {
   const invoiceId = await transaction(async (client) => {
+    let stay
     if (invoice.reservationId) {
       const { rows: reservationRows } = await client.query(
-        'SELECT guest_id FROM reservations WHERE id = $1',
+        'SELECT guest_id, check_in, check_out, status, quoted_promotion FROM reservations WHERE id = $1 FOR UPDATE',
         [invoice.reservationId],
       )
-      if (!reservationRows[0]) throw notFound('Reservation')
+      stay = reservationRows[0]
+      if (!stay) throw notFound('Reservation')
       if (Number(reservationRows[0].guest_id) !== Number(invoice.guestId)) {
         throw appError(400, 'GUEST_RESERVATION_MISMATCH', 'The invoice guest must match the linked reservation guest.')
       }
     }
+    let promotion = null
+    if (invoice.promotionId) {
+      let eligible
+      if (stay && stay.status !== 'CANCELLED') {
+        if (stay.quoted_promotion?.id === invoice.promotionId) {
+          eligible = stay.quoted_promotion
+        } else {
+          const { rows } = await client.query(
+            `${availablePromotions} AND p.id=$3 FOR SHARE OF p`,
+            [stay.check_in, stay.check_out, invoice.promotionId],
+          )
+          eligible = rows[0]
+        }
+      }
+      if (!eligible) throw appError(409, 'PROMOTION_UNAVAILABLE', 'This promotion is no longer eligible for the selected stay.')
+      promotion = { ...eligible, originalAmount: invoice.amount }
+    }
     const number = `INV-${crypto.randomBytes(12).toString('hex').toUpperCase()}`
     const { rows } = await client.query(
-      `INSERT INTO invoices (invoice_number, guest_id, reservation_id, amount, notes, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [number, invoice.guestId, invoice.reservationId, invoice.amount, invoice.notes, userId],
+      `WITH charge AS (
+         SELECT round($4::numeric * (100 - COALESCE(($7::jsonb->>'percent')::numeric, 0)) / 100, 2) AS amount
+       )
+       INSERT INTO invoices (invoice_number, guest_id, reservation_id, amount, notes, created_by, promotion, status)
+       SELECT $1, $2, $3, charge.amount, $5, $6, $7::jsonb,
+              CASE WHEN charge.amount = 0 THEN 'PAID' ELSE 'UNPAID' END
+       FROM charge RETURNING id`,
+      [number, invoice.guestId, invoice.reservationId, invoice.amount, invoice.notes, userId, promotion],
     )
     await recordActivity(client, userId, 'INVOICE_CREATED', `Created invoice ${number}.`)
     return rows[0].id
@@ -788,13 +1006,21 @@ module.exports = {
   cancelReservation,
   checkIn,
   checkOut,
+  extendStay,
+  moveStay,
+  findStayLostItems,
+  stayFolio,
   listRooms,
+  availableRooms,
+  reportRoomIssue,
   getRoom,
   releaseRoom,
   listRequests,
   createRequest,
   updateRequest,
   listInvoices,
+  listInvoicePromotions,
+  listStayPromotions,
   getInvoice,
   createInvoice,
   updateInvoice,

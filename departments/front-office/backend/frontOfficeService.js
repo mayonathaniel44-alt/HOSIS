@@ -77,6 +77,7 @@ async function createReservation(body, userId) {
     roomId: body.roomId === undefined || body.roomId === null || body.roomId === ''
       ? null
       : positiveInteger(body.roomId, 'roomId'),
+    promotionId: optionalText(body.promotionId, 'promotionId', 100),
     roomType: text(body.roomType, 'roomType', 100),
     checkIn,
     checkOut,
@@ -112,8 +113,32 @@ async function checkOut(id, userId) {
   return model.checkOut(id, userId)
 }
 
+async function extendStay(id, body, userId) {
+  return model.extendStay(id, date(body.checkOut, 'checkOut'), userId)
+}
+
 async function listRooms(search) {
   return model.listRooms(search)
+}
+
+async function availableRooms(arrival, departure) {
+  const checkIn = date(arrival, 'checkIn')
+  const checkOut = date(departure, 'checkOut')
+  if (checkOut <= checkIn) throw badRequest('INVALID_STAY', 'Check-out must be later than check-in.')
+  return model.availableRooms(checkIn, checkOut)
+}
+
+async function reportRoomIssue(roomId, body, userId) {
+  const category = body.category
+  const priority = body.priority ?? 'NORMAL'
+  if (!['PLUMBING', 'ELECTRICAL', 'AIRCON', 'FURNITURE', 'APPLIANCE', 'OTHER'].includes(category)) {
+    throw badRequest('INVALID_FIELD', 'Choose a room issue category.')
+  }
+  if (!['LOW', 'NORMAL', 'HIGH', 'URGENT'].includes(priority)) {
+    throw badRequest('INVALID_FIELD', 'Choose a valid priority.')
+  }
+  const description = text(body.description, 'Description', 255)
+  return model.reportRoomIssue(roomId, { category, priority, description }, userId)
 }
 
 async function getRoom(id) {
@@ -132,7 +157,8 @@ async function listRequests(search) {
 }
 
 async function createRequest(body, userId) {
-  const guestName = text(body.guestName, 'guestName', 201)
+  const reservationId = body.reservationId == null ? null : positiveInteger(body.reservationId, 'reservationId')
+  const guestName = reservationId ? null : text(body.guestName, 'guestName', 201)
   const request = text(body.request, 'request', 2000)
   const priority = (optionalText(body.priority, 'priority', 20) || 'STANDARD').toUpperCase()
   if (!['STANDARD', 'URGENT'].includes(priority)) throw badRequest('INVALID_PRIORITY', 'Priority must be STANDARD or URGENT.')
@@ -142,7 +168,14 @@ async function createRequest(body, userId) {
   const roomId = body.roomId === undefined || body.roomId === null || body.roomId === ''
     ? null
     : positiveInteger(body.roomId, 'roomId')
-  return model.createRequest({ guestId, guestName, roomId, request, priority }, userId)
+  const dueAt = optionalText(body.dueAt, 'dueAt', 16)
+  if (dueAt) {
+    if (!/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/.test(dueAt)) {
+      throw badRequest('INVALID_DATE', 'Choose a valid request due date and time.')
+    }
+    date(dueAt.slice(0, 10), 'due date')
+  }
+  return model.createRequest({ reservationId, guestId, guestName, roomId, request, priority, dueAt }, userId)
 }
 
 async function updateRequest(id, body, userId) {
@@ -167,6 +200,17 @@ async function getInvoice(id) {
   return model.getInvoice(id)
 }
 
+async function listStayPromotions(arrival, departure) {
+  const checkIn = date(arrival, 'checkIn')
+  const checkOut = date(departure, 'checkOut')
+  if (checkOut <= checkIn) throw badRequest('INVALID_STAY', 'Check-out must be later than check-in.')
+  return model.listStayPromotions(checkIn, checkOut)
+}
+
+async function listInvoicePromotions(reservationId) {
+  return model.listInvoicePromotions(positiveInteger(reservationId, 'reservationId'))
+}
+
 async function createInvoice(body, userId) {
   const amount = money(body.amount, 'amount')
   if (Number(amount) <= 0) throw badRequest('INVALID_AMOUNT', 'Invoice amount must be greater than zero.')
@@ -176,6 +220,7 @@ async function createInvoice(body, userId) {
       ? null
       : positiveInteger(body.reservationId, 'reservationId'),
     amount,
+    promotionId: optionalText(body.promotionId, 'promotionId', 100),
     notes: optionalText(body.notes, 'notes', 2000),
   }, userId)
 }
@@ -259,7 +304,7 @@ function positiveInteger(value, field) {
 }
 
 function date(value, field) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000-')) {
     throw badRequest('INVALID_DATE', `${field} must be a date in YYYY-MM-DD format.`)
   }
   const parsed = new Date(`${value}T00:00:00.000Z`)
@@ -291,13 +336,21 @@ module.exports = {
   cancelReservation,
   checkIn,
   checkOut,
+  extendStay,
+  moveStay: (id, body, userId) => model.moveStay(id, positiveInteger(body.roomId, 'roomId'), userId),
+  findStayLostItems: model.findStayLostItems,
+  stayFolio: model.stayFolio,
   listRooms,
+  availableRooms,
+  reportRoomIssue,
   getRoom,
   releaseRoom,
   listRequests,
   createRequest,
   updateRequest,
   listInvoices,
+  listInvoicePromotions,
+  listStayPromotions,
   getInvoice,
   createInvoice,
   updateInvoice,

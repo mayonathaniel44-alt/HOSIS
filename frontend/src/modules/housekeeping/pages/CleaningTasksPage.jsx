@@ -78,7 +78,7 @@ export default function CleaningTasksPage({ user, search: topSearch }) {
               setSelectedId(t.task_id)
             }}
             columns={[
-              { key: 'room', title: 'Room / Task', render: (t) => <strong>{t.room_number} · {label(t.task_type)}</strong> },
+              { key: 'room', title: 'Room / Task', render: (t) => <span><strong>{t.room_number} · {label(t.task_type)}</strong>{t.next_arrival && <small className="hk-block">Next arrival: {t.next_arrival}</small>}</span> },
               { key: 'hk', title: 'Housekeeper', render: (t) => t.housekeeper?.trim() || 'Unassigned' },
               { key: 'priority', title: 'Priority', render: (t) => <Badge value={t.priority} /> },
               { key: 'status', title: 'Progress', render: (t) => <Badge value={t.task_status} /> },

@@ -35,11 +35,13 @@ function canManage(user) {
 }
 
 const REQUEST_SELECT = `
-  SELECT q.*, r.room_number,
+  SELECT q.*, r.room_number, desk.due_at::text AS due_at,
+         q.request_status <> 'COMPLETED' AND desk.due_at < LOCALTIMESTAMP AS is_late,
          CONCAT(g.first_name, ' ', g.last_name) AS guest_name,
          CONCAT(u.first_name, ' ', u.last_name) AS assigned_to,
          i.item_name, i.unit, i.category AS item_category, i.quantity AS on_hand, i.reorder_level
     FROM hk_guest_requests q
+    LEFT JOIN guest_requests desk ON desk.id=q.front_office_request_id
     LEFT JOIN hk_inventory_items i ON i.inv_item_id = q.inv_item_id
     JOIN hk_rooms r ON r.room_id = q.room_id
     LEFT JOIN hk_guests g ON g.guest_id = q.guest_id
@@ -63,7 +65,7 @@ router.get('/', async (req, res) => {
   const { rows } = await db.query(
     `${REQUEST_SELECT} ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY CASE q.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END,
-               q.requested_at`,
+               desk.due_at NULLS LAST, q.requested_at`,
     params
   );
   res.json({ requests: rows });

@@ -60,7 +60,7 @@ export default function RoomStatusPage({ search: topSearch = '', readOnly = fals
             selectedKey={activeId}
             onSelect={(r) => setSelectedId(r.room_id)}
             columns={[
-              { key: 'room', title: 'Room / Type', render: (r) => <strong>{r.room_number} · {r.room_type}</strong> },
+              { key: 'room', title: 'Room / Type', render: (r) => <span><strong>{r.room_number} · {r.room_type}</strong>{r.next_arrival && <small className="hk-block">Next arrival: {r.next_arrival}</small>}{r.scheduled_departure && <small className="hk-block">Scheduled departure: {r.scheduled_departure}</small>}</span> },
               { key: 'occupancy', title: 'Occupancy', render: (r) => OCCUPANCY[r.room_status] || 'Vacant' },
               { key: 'status', title: 'HK status', render: (r) => <Badge value={r.room_status} /> },
               { key: 'hk', title: 'Housekeeper', render: (r) => r.housekeeper?.trim() || (r.task_id ? 'Unassigned' : '-') },

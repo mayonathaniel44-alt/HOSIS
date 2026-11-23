@@ -14,10 +14,15 @@ const ACTIVE_STATUSES = ['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'RET
 
 const TASK_SELECT = `
   SELECT t.*, r.room_number, r.room_type, r.room_status,
-         CONCAT(u.first_name, ' ', u.last_name) AS housekeeper
+         CONCAT(u.first_name, ' ', u.last_name) AS housekeeper, arrival.check_in AS next_arrival
     FROM hk_cleaning_tasks t
     JOIN hk_rooms r ON r.room_id = t.room_id
-    LEFT JOIN hk_users u ON u.user_id = t.staff_id`;
+    LEFT JOIN hk_users u ON u.user_id = t.staff_id
+    LEFT JOIN LATERAL (
+      SELECT s.check_in FROM reservations s
+      WHERE s.room_id=t.room_id AND s.status='CONFIRMED' AND s.check_out>CURRENT_DATE
+      ORDER BY s.check_in, s.id LIMIT 1
+    ) arrival ON TRUE`;
 
 async function getTask(client, taskId, lock = false) {
   const { rows } = await client.query(
@@ -53,7 +58,11 @@ router.get('/', async (req, res) => {
   }
   const { rows } = await db.query(
     `${TASK_SELECT} WHERE ${where.join(' AND ')}
-      ORDER BY CASE t.priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2 ELSE 3 END,
+      ORDER BY CASE
+        WHEN t.priority='URGENT' THEN 0
+        WHEN arrival.check_in <= CURRENT_DATE THEN 1
+        WHEN t.priority='HIGH' THEN 2 WHEN t.priority='NORMAL' THEN 3 ELSE 4 END,
+               arrival.check_in NULLS LAST,
                t.due_time NULLS LAST, t.task_id`,
     params
   );

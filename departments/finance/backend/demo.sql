@@ -37,16 +37,3 @@ INSERT INTO finance_expenses (voucher_code, department, category, amount, status
 SELECT 'FIN-EXP-2026-001', 'Finance', 'Office supplies', 450, 'PENDING', 'Monthly office supply replenishment', id
 FROM users WHERE username = 'fin.bianca' AND role = 'FINANCE'
 ON CONFLICT (voucher_code) DO NOTHING;
-
-WITH paid AS (
-  UPDATE invoices i SET status = 'PAID', updated_at = NOW()
-  FROM food_service_orders o JOIN users u ON u.id = o.created_by
-  WHERE i.id = o.invoice_id AND i.invoice_number = 'INV-FB-2026-001'
-    AND u.username = 'fb.carlo' AND i.status = 'UNPAID'
-    AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.invoice_id = i.id)
-    AND EXISTS (SELECT 1 FROM users WHERE username = 'fo.sofia')
-  RETURNING i.id, i.amount
-)
-INSERT INTO payments (invoice_id, amount, payment_method, reference, recorded_by)
-SELECT p.id, p.amount, 'CASH', 'OR-FB-2026-001', u.id
-FROM paid p CROSS JOIN users u WHERE u.username = 'fo.sofia';

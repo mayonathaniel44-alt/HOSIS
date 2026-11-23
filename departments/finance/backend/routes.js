@@ -1,6 +1,8 @@
 const { express } = require('../../../backend/src/lib/departmentDependencies.js')
 const db = require('../../../backend/src/config/db.js')
 const authenticate = require('../../../backend/src/middleware/authenticate.js')
+const { requireBody, requireId } = require('../../../backend/src/middleware/validate.js')
+const frontOffice = require('../../front-office/backend/frontOfficeService.js')
 const authorize = require('../../../backend/src/middleware/authorize.js')
 
 const router = express.Router()
@@ -8,8 +10,8 @@ router.use(authenticate, authorize('FINANCE', 'ADMIN'))
 
 router.get('/overview', async (req, res) => {
   const [invoices, totals, expenses, staffing, sales] = await Promise.all([
-    db.query(`SELECT i.invoice_number, i.amount, i.status, i.issued_at,
-      CASE WHEN o.id IS NULL THEN 'Front Office' ELSE 'Food & Beverage' END AS source,
+    db.query(`SELECT i.id, i.invoice_number, i.amount, i.status, i.issued_at,
+      CASE WHEN o.id IS NULL THEN 'Front Office' ELSE 'Historical room charge' END AS source,
       COALESCE((SELECT sum(p.amount) FROM payments p WHERE p.invoice_id = i.id), 0) AS paid
       FROM invoices i LEFT JOIN food_service_orders o ON o.invoice_id = i.id
       ORDER BY i.id DESC LIMIT 100`),
@@ -33,12 +35,17 @@ router.get('/overview', async (req, res) => {
   res.json({ invoices: invoices.rows, totals: totals.rows[0], expenses: expenses.rows, staffing: staffing.rows, sales: sales.rows })
 })
 
+router.post('/shared-invoices/:id/payments', requireId, requireBody, async (req, res) => {
+  const payment = await frontOffice.createPayment(Number(req.params.id), req.body, req.user.id)
+  res.status(201).json({ data: payment })
+})
+
 router.get('/customer-payments', async (req, res) => {
   const { rows } = await db.query(`
     SELECT p.id, i.invoice_number AS "invoiceNumber", p.amount, p.payment_method AS "paymentMethod",
       p.paid_at AS "paidAt", concat_ws(' ', g.first_name, g.last_name) AS customer,
       r.confirmation_code AS reservation,
-      CASE WHEN o.id IS NULL THEN 'Front Office' ELSE 'Food & Beverage' END AS source
+      CASE WHEN o.id IS NULL THEN 'Front Office' ELSE 'Historical room charge' END AS source
     FROM payments p JOIN invoices i ON i.id = p.invoice_id
     JOIN guests g ON g.id = i.guest_id
     LEFT JOIN reservations r ON r.id = i.reservation_id
