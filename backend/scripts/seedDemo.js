@@ -13,6 +13,46 @@ const accounts = {
   technician: 'TECHNICIAN', finance: 'FINANCE', food: 'FOOD_BEVERAGE',
 }
 
+async function ensureHousekeepingInventory(db) {
+  const { rows: [staff] } = await db.query("SELECT id FROM users WHERE username = 'demo_housekeeping'")
+  if (!staff) return
+
+  const items = [
+    ['Demo Bath Towel', 'LINEN', 'pieces', 80, 30, 'Demo Linen Room A'],
+    ['Demo Guest Amenity Kit', 'AMENITY', 'kits', 60, 20, 'Demo Supply Cabinet'],
+    ['Demo Multi-surface Cleaner', 'CLEANING_SUPPLY', 'bottles', 24, 8, 'Demo Chemical Store'],
+  ]
+  for (const [name, category, unit, quantity, reorder, storage] of items) {
+    const { rows: inserted } = await db.query(`INSERT INTO hk_inventory_items
+      (item_name, category, unit, quantity, reorder_level, storage_area)
+      SELECT $1::text, $2::text, $3::text, $4::integer, $5::integer, $6::text
+       WHERE NOT EXISTS (SELECT 1 FROM hk_inventory_items WHERE item_name = $1::text)
+      RETURNING inv_item_id`, [name, category, unit, quantity, reorder, storage])
+    if (inserted[0]) {
+      await db.query(`INSERT INTO hk_inventory_movements
+        (inv_item_id, movement_type, quantity, balance_after, remarks, staff_id)
+        VALUES ($1, 'IN', $2, $2, 'Opening demo stock', $3)`,
+      [inserted[0].inv_item_id, quantity, staff.id])
+    }
+  }
+
+  const { rows: [towel] } = await db.query(
+    "SELECT inv_item_id, quantity FROM hk_inventory_items WHERE item_name = 'Demo Bath Towel'",
+  )
+  const { rows: [usage] } = await db.query(`SELECT 1 FROM hk_inventory_movements
+    WHERE inv_item_id = $1 AND remarks = 'Demo cleaning usage for room DEMO-101'`, [towel.inv_item_id])
+  if (!usage && towel.quantity >= 4) {
+    const { rows: [updated] } = await db.query(
+      'UPDATE hk_inventory_items SET quantity = quantity - 4 WHERE inv_item_id = $1 RETURNING quantity',
+      [towel.inv_item_id],
+    )
+    await db.query(`INSERT INTO hk_inventory_movements
+      (inv_item_id, movement_type, quantity, balance_after, remarks, staff_id)
+      VALUES ($1, 'OUT', 4, $2, 'Demo cleaning usage for room DEMO-101', $3)`,
+    [towel.inv_item_id, updated.quantity, staff.id])
+  }
+}
+
 async function credentials() {
   const entries = Object.keys(accounts).map((key) => [key, randomBytes(18).toString('base64url')])
   try {
@@ -47,6 +87,7 @@ async function main() {
       "SELECT 1 FROM front_office_activity WHERE action = 'DEMO_DATA_SEEDED' AND description = 'HOSIS demo dataset v1'",
     )
     if (previous) {
+      await ensureHousekeepingInventory(db)
       await db.query(financeSeed)
       await db.query('COMMIT')
       console.log('HOSIS base demo data already exists. Finance demo records are ready.')
@@ -84,6 +125,7 @@ async function main() {
     await db.query(`INSERT INTO hk_maintenance_requests
       (room_id, reported_by, issue_category, issue_description, room_set_ooo)
       VALUES ($1, $2, 'AIRCON', 'DEMO: Test air-conditioning handoff', true)`, [roomId(104), ids.housekeeping])
+    await ensureHousekeepingInventory(db)
     const { rows: [lodging] } = await db.query(`INSERT INTO invoices
       (invoice_number, guest_id, reservation_id, amount, status, notes, created_by)
       VALUES ('DEMO-ROOM-001', $1, $2, 2500, 'PAID', 'DEMO lodging charge', $3) RETURNING id`,
