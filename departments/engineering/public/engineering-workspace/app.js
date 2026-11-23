@@ -3045,27 +3045,6 @@ function accountsPage() {
         </section>`
     );
 }
-function userForm(id = '') {
-    const user = technicianUsers.find((u) => u.id === id);
-    openModal(
-        user ? 'Manage Technician' : 'Add Technician',
-        `
-        <form id="userForm" data-id="${escapeHtml(id)}">
-            <div class="modal-form-grid">
-                ${user ? `<p class="wide-field">${escapeHtml(user.name)} — ${escapeHtml(user.email)}</p>${select('Account Access', 'active', ['Active', 'Disabled'], user.active ? 'Active' : 'Disabled')}` : input('Full Name', 'name', '', 'text', true) + input('Email', 'email', '', 'email', true)}
-                ${input(user ? 'New Password (leave blank to keep current)' : 'Password (at least 12 characters)', 'password', '', 'password', !user)}
-            </div>
-            <div class="modal-footer">
-                <button class="secondary" type="button" data-action="close">Cancel</button>
-                <button class="primary" type="submit">Save Account</button>
-            </div>
-        </form>`
-    );
-    $('[name="password"]').minLength = 12;
-    $('[name="password"]').maxLength = 128;
-    $('[name="password"]').autocomplete = 'new-password';
-}
-
 let auditRows = [];
 let auditNext = null;
 async function auditTrail(more = false) {
@@ -3098,22 +3077,6 @@ async function auditTrail(more = false) {
             <button class="secondary" data-action="audit-export">Export Loaded Events</button>
         </div>`
     );
-}
-function passwordForm() {
-    if (currentAccount.integrated)
-        return showToast('Your central HOSIS Admin manages account passwords.');
-    $('#accountDialog').close();
-    openModal(
-        'Change My Password',
-        `
-        <form id="passwordForm">
-            ${input('Current Password', 'current', '', 'password', true)}
-            ${input('New Password (at least 12 characters)', 'password', '', 'password', true)}
-            <div class="modal-footer"><button class="primary" type="submit">Change Password</button></div>
-        </form>`
-    );
-    $('[name="password"]').minLength = 12;
-    $('[name="password"]').maxLength = 128;
 }
 function accountDate(timestamp) {
     if (!timestamp || !Number.isFinite(Date.parse(timestamp))) return '';
@@ -3184,9 +3147,6 @@ document.addEventListener('click', async (event) => {
     const { action, id } = target.dataset;
     try {
         if (action === 'tech-notes') repairProgressForm(id);
-        if (action === 'create-user') userForm();
-        if (action === 'manage-user') userForm(id);
-        if (action === 'change-password') passwordForm();
         if (action === 'refresh-records') await refreshRecords();
         if (action === 'backup-export') {
             const result = await apiRequest('/backup');
@@ -3219,42 +3179,22 @@ document.addEventListener('click', async (event) => {
 });
 document.addEventListener('submit', async (event) => {
     const form = event.target;
-    if (!['userForm', 'techNotesForm', 'passwordForm'].includes(form.id))
-        return;
+    if (form.id !== 'techNotesForm') return;
     event.preventDefault();
     const submit = form.querySelector('[type="submit"]');
     submit.disabled = true;
     try {
         const values = Object.fromEntries(new FormData(form).entries());
-        if (form.id === 'techNotesForm') {
-            await apiRequest(
-                '/orders/' + encodeURIComponent(form.dataset.id) + '/notes',
-                {
-                    method: 'PATCH',
-                    body: JSON.stringify({
-                        notes: values.notes,
-                        notesVersion: Number(form.dataset.version)
-                    })
-                }
-            );
-        } else if (form.id === 'userForm') {
-            const id = form.dataset.id;
-            const body = id
-                ? {
-                      active: values.active === 'Active',
-                      ...(values.password ? { password: values.password } : {})
-                  }
-                : values;
-            await apiRequest(
-                '/users' + (id ? '/' + encodeURIComponent(id) : ''),
-                { method: id ? 'PATCH' : 'POST', body: JSON.stringify(body) }
-            );
-        } else {
-            await apiRequest('/password', {
-                method: 'POST',
-                body: JSON.stringify(values)
-            });
-        }
+        await apiRequest(
+            '/orders/' + encodeURIComponent(form.dataset.id) + '/notes',
+            {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    notes: values.notes,
+                    notesVersion: Number(form.dataset.version)
+                })
+            }
+        );
         closeModal();
         await refreshRecords();
         showToast('Saved successfully.');
@@ -3722,51 +3662,6 @@ document.addEventListener('submit', async (event) => {
     }
 });
 
-function clearAuditForm() {
-    openModal(
-        'Clear Past Audit Events Only',
-        `
-        <form id="clearAuditForm">
-            <p>This maintenance action clears audit events only. Repair history, schedules, material usage, finance and accounts remain. A server-side backup is written first, and one cleanup event remains.</p>
-            ${input('Administrator Password', 'password', '', 'password', true)}
-            ${input('Type CLEAR AUDIT HISTORY', 'confirmation', '', 'text', true)}
-            ${textarea('Reason for Clearing Audit Events', 'reason')}
-            <div class="modal-footer"><button class="secondary" type="button" data-action="close">Cancel</button><button class="primary" type="submit">Clear Audit Only</button></div>
-        </form>`
-    );
-    $('[name="password"]').autocomplete = 'current-password';
-    $('[name="reason"]').required = true;
-}
-document.addEventListener('click', (event) => {
-    if (event.target.closest('[data-action="clear-audit"]') && isHead())
-        clearAuditForm();
-});
-document.addEventListener('submit', async (event) => {
-    if (event.target.id !== 'clearAuditForm') return;
-    event.preventDefault();
-    const form = event.target;
-    const submit = form.querySelector('[type="submit"]');
-    if (submit.disabled) return;
-    submit.disabled = true;
-    try {
-        const result = await apiRequest('/audit/clear', {
-            method: 'POST',
-            body: JSON.stringify(
-                Object.fromEntries(new FormData(form).entries())
-            )
-        });
-        closeModal();
-        auditRows = [];
-        auditNext = null;
-        await refreshRecords();
-        showToast(result.message);
-    } catch (error) {
-        showToast(error.message);
-    } finally {
-        submit.disabled = false;
-    }
-});
-
 const scopePages = [
     'Requests & Review',
     'Work Orders',
@@ -3875,11 +3770,7 @@ function stockNotificationsPage() {
 function financeIntegrationPanel() {
     if (financeOutbox.sharedRegister)
         return '<section class="panel"><h2>Finance Handoff</h2><p>Approved expenses appear automatically in the HOSIS Finance workspace. They are listed as unpaid until payment is handled.</p></section>';
-    if (!financeOutbox.enabled)
-        return '<section class="panel"><p>Approved expenses stay in the Engineering register. Finance payment handoff is unavailable.</p></section>';
-    return `<section class="panel"><h2>Finance Handoff</h2><p>Engineering approves the expense; Finance records payment. Accepted means received by the Finance inbox, not paid. Retry safely after an outage: the same source ID cannot create a second intake.</p>
-        <button class="primary" data-action="dispatch-finance">Send / Retry Pending Expenses</button>
-        ${table(['Source', 'Handoff', 'Attempts', 'Finance Receipt', 'Last Error'], financeOutbox.records, (r) => `<tr><td>${escapeHtml(r.id)}</td><td>${escapeHtml(r.state)}</td><td>${r.attempts}</td><td>${escapeHtml(r.receipt_id || 'Awaiting acknowledgement')}</td><td>${escapeHtml(r.last_error || '—')}</td></tr>`)}</section>`;
+    return '<section class="panel"><p>The shared Finance handoff is unavailable.</p></section>';
 }
 document.addEventListener('change', (event) => {
     if (event.target.id === 'consumptionStaff')
@@ -3910,20 +3801,6 @@ document.addEventListener('click', async (event) => {
             );
             await loadHeadIntegration();
             render();
-        }
-        if (target.dataset.action === 'dispatch-finance') {
-            target.disabled = true;
-            const result = await apiRequest('/integration/dispatch', {
-                method: 'POST',
-                body: '{}'
-            });
-            await loadHeadIntegration();
-            render();
-            showToast(
-                result.outcomes.length
-                    ? `${result.outcomes.filter((r) => r.accepted).length} accepted; ${result.outcomes.filter((r) => !r.accepted).length} waiting to retry.`
-                    : 'No pending expenses to send.'
-            );
         }
     } catch (error) {
         showToast(error.message);
