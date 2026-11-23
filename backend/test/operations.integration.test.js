@@ -58,7 +58,6 @@ test(
         ['sales', 'SALES_MARKETING', 'HOUSEKEEPER'],
         ['hr', 'HR', 'HOUSEKEEPER'],
         ['finance', 'FINANCE', 'HOUSEKEEPER'],
-        ['food', 'FOOD_BEVERAGE', 'HOUSEKEEPER'],
       ]) {
         const { rows } = await pool.query(
           `INSERT INTO users(username,password_hash,role,position,first_name,last_name) VALUES($1,$2,$3,$4,$5,'Tester') RETURNING id`,
@@ -407,6 +406,135 @@ test(
           )
         },
       )
+      await t.test('Front Office finds rooms for stay dates and prevents concurrent conflicts', async () => {
+        const { rows: [available] } = await pool.query(
+          "INSERT INTO rooms(room_number,room_type,floor) VALUES($1,'Suite','2') RETURNING id",
+          [prefix.slice(-10) + 'search'],
+        )
+        const endpoint = `/front-office/rooms/availability?checkIn=${dates.today}&checkOut=${dates.tomorrow}`
+        await api('GET', endpoint, null, undefined, 401)
+        await api('GET', '/front-office/rooms/availability?checkIn=0000-01-01', 'fo', undefined, 400)
+        assert.ok((await api('GET', endpoint, 'fo')).some((item) => item.id === available.id))
+        const stay = { guestId: guest.id, roomId: available.id, roomType: 'Suite', checkIn: dates.today, checkOut: dates.tomorrow }
+        const responses = await Promise.all([1, 2].map(() => fetch(base + '/front-office/reservations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + sessions.fo.token },
+          body: JSON.stringify(stay),
+        })))
+        assert.deepEqual(responses.map((response) => response.status).sort(), [201, 409])
+        assert.ok(!(await api('GET', endpoint, 'fo')).some((item) => item.id === available.id))
+        const nextNight = `/front-office/rooms/availability?checkIn=${dates.tomorrow}&checkOut=${dates.later}`
+        assert.ok((await api('GET', nextNight, 'fo')).some((item) => item.id === available.id))
+      })
+
+      await t.test('Overdue rooms stay unavailable and guest requests link to the active stay', async () => {
+        const { rows: [occupied] } = await pool.query(
+          "INSERT INTO rooms(room_number,room_type,floor,status) VALUES($1,'Suite','2','OCCUPIED') RETURNING id",
+          [prefix.slice(-10) + 'overdue'],
+        )
+        const { rows: [overdue] } = await pool.query(`
+          INSERT INTO reservations(confirmation_code,guest_id,room_id,room_type,check_in,check_out,status)
+          VALUES($1,$2,$3,'Suite',CURRENT_DATE-2,CURRENT_DATE-1,'CHECKED_IN') RETURNING id`,
+        [prefix + '-overdue', guest.id, occupied.id])
+        const endpoint = `/front-office/rooms/availability?checkIn=${dates.tomorrow}&checkOut=${dates.later}`
+        assert.ok(!(await api('GET', endpoint, 'fo')).some((item) => item.id === occupied.id))
+        await api('POST','/front-office/reservations','fo',{
+          checkIn: dates.tomorrow, checkOut: dates.later, guestId: guest.id, roomId: occupied.id, roomType:'Suite',
+        },409)
+        const request = await api('POST','/front-office/guest-requests','fo',{
+          reservationId: overdue.id, request: 'Extra pillows',
+        },201)
+        assert.equal(request.roomId,occupied.id)
+        const { rows: [linked] } = await pool.query(
+          'SELECT reservation_reference FROM hk_guest_requests WHERE front_office_request_id=$1', [request.id],
+        )
+        assert.equal(linked.reservation_reference,prefix + '-overdue')
+        const extended = await api('POST',`/front-office/reservations/${overdue.id}/extend`,'fo',{checkOut:dates.tomorrow})
+        assert.equal(extended.checkOut,dates.tomorrow)
+        assert.ok((await api('GET',endpoint,'fo')).some((item) => item.id === occupied.id))
+      })
+
+      await t.test('A room move updates housekeeping, request deadlines, and lost item lookup', async () => {
+        const { rows: [source, target] } = await pool.query(
+          "INSERT INTO rooms(room_number,room_type,floor,status) VALUES($1,'Suite','2','OCCUPIED'),($2,'Suite','2','AVAILABLE') RETURNING id",
+          [prefix.slice(-10)+'move1',prefix.slice(-10)+'move2'],
+        )
+        const { rows: [stay] } = await pool.query(`
+          INSERT INTO reservations(confirmation_code,guest_id,room_id,room_type,check_in,check_out,status)
+          VALUES($1,$2,$3,'Suite',CURRENT_DATE,CURRENT_DATE+2,'CHECKED_IN') RETURNING id`,
+          [prefix+'-move', guest.id, source.id])
+        const request = await api('POST','/front-office/guest-requests','fo',{
+          reservationId:stay.id, request:'Extra pillow', dueAt:dates.today+'T00:00',
+        },201)
+        const { rows: [found] } = await pool.query(`
+          INSERT INTO hk_lost_found_items(room_id,found_by,item_description,found_location,storage_label,storage_location)
+          VALUES($1,$2,'Test umbrella','Room',$3,'Cabinet') RETURNING storage_label`,
+          [source.id,accounts.sup,prefix+'-move'])
+        const url = `/front-office/reservations/${stay.id}`
+        await api('POST',url+'/move-room','sup',{roomId:target.id},403)
+        const moved = await api('POST',url+'/move-room','fo',{roomId:target.id})
+        assert.equal(moved.roomId,target.id)
+        const tasks = (await api('GET','/housekeeping/tasks','sup')).tasks
+        assert.ok(tasks.some((task) => task.room_id===source.id && task.task_type==='CHECKOUT'))
+        const hkRooms = (await api('GET','/housekeeping/rooms','sup')).rooms
+        assert.equal(hkRooms.find((room) => room.room_id===target.id).scheduled_departure,dates.later)
+        const requests = (await api('GET','/housekeeping/guest-requests','sup')).requests
+        const linked = requests.find((item) => item.front_office_request_id===request.id)
+        assert.equal(linked.room_id,target.id)
+        assert.ok(linked.due_at)
+        await api('POST',`/housekeeping/guest-requests/${linked.request_id}/complete`,'sup',{completionNotes:'Delivered'})
+        const deskRequests = await api('GET','/front-office/guest-requests','fo')
+        assert.equal(deskRequests.find((item)=>item.id===request.id).completionNotes,'Delivered')
+        await api('POST',url+'/check-out','fo')
+        const items=await api('GET',url+'/lost-items','fo')
+        assert.ok(items.some((item)=>item.reference===found.storage_label))
+        await api('GET',url+'/lost-items','sup',undefined,403)
+      })
+
+      await t.test('Front Office reports room issues to Engineering', async () => {
+        const endpoint = `/front-office/rooms/${room.id}/maintenance-requests`
+        const issue = { category: 'PLUMBING', description: 'Sink leaking', priority: 'HIGH' }
+        await api('POST', endpoint, 'engineer', issue, 403)
+        await api('POST', endpoint, 'fo', { ...issue, description: '' }, 400)
+        const request = await api('POST', endpoint, 'fo', issue, 201)
+        const engineering = await api('GET', '/engineering/data', 'engineer')
+        const handoff = engineering.requests.find((item) => String(item.externalRequestId) === String(request.id))
+        assert.equal(handoff?.source, 'Front Office')
+        assert.equal(handoff.description, issue.description)
+        await pool.query('DELETE FROM engineering.engineering_audit WHERE record_id = $1', ['HK-MR-' + request.id])
+        await pool.query("DELETE FROM engineering.engineering_records WHERE collection = 'requests' AND record_id = $1", ['HK-MR-' + request.id])
+        await pool.query('DELETE FROM hk_maintenance_requests WHERE request_id = $1', [request.id])
+      })
+
+      await t.test('Front Office applies an eligible promotion when billing a reservation', async () => {
+        const stay = await api('POST', '/front-office/reservations', 'fo', {
+          guestId: guest.id, roomType: 'Suite', checkIn: dates.today, checkOut: dates.tomorrow,
+        }, 201)
+        const promotionId = require('node:crypto').randomUUID()
+        await pool.query("INSERT INTO sales_marketing_records(kind,id,details) VALUES('promotion',$1,$2)", [
+          promotionId, { name: 'Test Stay', discount: 12.5, start: dates.today, end: dates.today, status: 'Active' },
+        ])
+        const endpoint = `/front-office/invoices/promotions?reservationId=${stay.id}`
+        const offers = await api('GET', endpoint, 'fo')
+        assert.equal(offers.find((item) => item.id === promotionId)?.name, 'Test Stay')
+        const charge = { guestId: guest.id, reservationId: stay.id, amount: '100.00', promotionId }
+        const invoice = await api('POST', '/front-office/invoices', 'fo', charge, 201)
+        assert.equal(invoice.amount, '87.50')
+        assert.equal(invoice.promotion.originalAmount, '100.00')
+        await pool.query('DELETE FROM sales_marketing_records WHERE id = $1', [promotionId])
+        await api('POST', '/front-office/invoices', 'fo', charge, 409)
+        await pool.query("INSERT INTO sales_marketing_records(kind,id,details) VALUES('promotion',$1,$2)", [
+          promotionId, { name: 'Frozen Quote', discount: 20, start: dates.today, end: dates.today, status: 'Active' },
+        ])
+        const quoted = await api('POST','/front-office/reservations','fo',{
+          guestId: guest.id, roomType: 'Suite', checkIn: dates.today, checkOut: dates.tomorrow, promotionId,
+        },201)
+        assert.equal(quoted.quotedPromotion.id,promotionId)
+        await pool.query('DELETE FROM sales_marketing_records WHERE id = $1', [promotionId])
+        const frozen = await api('POST','/front-office/invoices','fo',{...charge,reservationId:quoted.id},201)
+        assert.equal(frozen.amount,'80.00')
+      })
+
       await t.test('booking preserves room readiness and a checked-in stay supports shared room charges',async()=>{
         for (const status of ['CLEAN','INSPECTED']) {
           const beforeReady=(await api('GET','/front-office/dashboard','fo')).arrivals.ready
@@ -427,32 +555,21 @@ test(
         await pool.query("UPDATE hk_cleaning_tasks SET task_status='INSPECTED' WHERE task_id=$1",[task.task.task_id])
         await api('POST',`/front-office/reservations/${booking.id}/check-in`,'fo')
 
-        const order = { id: require('node:crypto').randomUUID(), reservationId: String(booking.id),
-          item: 'Test room service', quantity: 2, unitPrice: '25.50' }
-        await api('POST', '/food-beverage/orders', 'fo', order, 403)
-        await api('GET', '/finance/overview', 'food', undefined, 403)
         await api('GET', '/hr/bootstrap', 'finance', undefined, 403)
-        assert.ok((await api('GET', '/food-beverage/overview', 'food')).stays.some((stay) => stay.id === booking.id))
-        const responses = await Promise.all([
-          api('POST', '/food-beverage/orders', 'food', order, 201),
-          api('POST', '/food-beverage/orders', 'food', order, 201),
-        ])
-        const invoiceId = responses[0].order.invoice_id
-        assert.equal(responses[1].order.invoice_id, invoiceId)
-        await api('POST', '/food-beverage/orders', 'food', { ...order, quantity: 3 }, 409)
-        const invoice = await api('GET', '/front-office/invoices/' + invoiceId, 'fo')
-        assert.equal(Number(invoice?.amount), 51)
-        const finance = await api('GET', '/finance/overview', 'finance')
-        assert.equal(finance.invoices.find((record) => record.invoice_number === invoice.invoiceNumber).source, 'Food & Beverage')
-        await api('POST', '/front-office/invoices/' + invoiceId + '/payments', 'fo', {
-          amount: '10.25', paymentMethod: 'CASH', reference: 'TEST-FOOD',
-        }, 201)
-        const shared = await api('GET', '/finance/customer-payments', 'finance')
-        const receipt = shared.payments.find((record) => record.invoiceNumber === invoice.invoiceNumber)
-        assert.equal(receipt.source, 'Food & Beverage')
-        assert.equal(receipt.amount, '10.25')
+        await api('GET', '/food-beverage/overview', 'fo', undefined, 404)
+        const invoice = await api('POST','/front-office/invoices','fo',{
+          guestId: guest.id, reservationId: booking.id, amount: '51.00',
+        },201)
+        const folio = `/front-office/reservations/${booking.id}/folio`
+        assert.equal(Number((await api('GET',folio,'fo')).balance),51)
+        await api('POST', `/front-office/reservations/${booking.id}/check-out`, 'fo',undefined,409)
+        await api('POST',`/finance/shared-invoices/${invoice.id}/payments`,'finance',{
+          amount: '51.00', paymentMethod: 'CASH', reference: 'TEST-STAY',
+        },201)
+        assert.equal(Number((await api('GET',folio,'fo')).balance),0)
+        const shared = await api('GET','/finance/customer-payments','finance')
+        assert.equal(shared.payments.find((record) => record.invoiceNumber === invoice.invoiceNumber).amount,'51.00')
         await api('POST', `/front-office/reservations/${booking.id}/check-out`, 'fo')
-        await api('POST', '/food-beverage/orders', 'food', { ...order, id: require('node:crypto').randomUUID() }, 409)
       })
       await t.test('reservation guest names obey field length validation',async()=>{
         await api('POST','/front-office/reservations','fo',{guest:{name:'A'.repeat(101)+' Guest'},roomType:'Suite',checkIn:dates.today,checkOut:dates.tomorrow},400)
@@ -576,6 +693,12 @@ test(
             `/housekeeping/tasks/${task.task_id}/complete`,
             'cleaner',
           )
+          const upcoming = await api('POST','/front-office/reservations','fo',{
+            guestId: guest.id, roomId: room.id, roomType: 'Suite',
+            checkIn: dates.tomorrow, checkOut: dates.later,
+          },201)
+          const upcomingTask = (await api('GET','/housekeeping/tasks','sup')).tasks.find((item) => item.task_id===task.task_id)
+          assert.equal(upcomingTask.next_arrival,dates.tomorrow)
           const failed = await api(
             'POST',
             '/housekeeping/inspections',
@@ -588,6 +711,10 @@ test(
             201,
           )
           assert.equal(failed.room.room_status, 'DIRTY')
+          const delays = (await api('GET','/housekeeping/notifications?unread=1','fo')).notifications
+          assert.ok(delays.some((notice) => notice.room_id===room.id && notice.notice_type==='ROOM_CONDITION'))
+          await api('DELETE',`/front-office/reservations/${upcoming.id}`,'fo',undefined,204)
+
           await api(
             'POST',
             `/housekeeping/tasks/${task.task_id}/start`,

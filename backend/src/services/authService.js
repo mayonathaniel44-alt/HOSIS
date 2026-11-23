@@ -16,7 +16,7 @@ async function login(username, password, requestedRole) {
   if (
     !user ||
     !user.is_active ||
-    !['FRONT_OFFICE', 'ADMIN', 'HOUSEKEEPING', 'ENGINEERING', 'TECHNICIAN', 'SALES_MARKETING', 'HR', 'FINANCE', 'FOOD_BEVERAGE'].includes(
+    !['FRONT_OFFICE', 'ADMIN', 'HOUSEKEEPING', 'ENGINEERING', 'TECHNICIAN', 'SALES_MARKETING', 'HR', 'FINANCE'].includes(
       user.role,
     )
   ) {

@@ -10,7 +10,7 @@ const credentialsPath = path.join(backend, '.env.demo')
 const accounts = {
   admin: 'ADMIN', front_office: 'FRONT_OFFICE', housekeeping: 'HOUSEKEEPING',
   sales: 'SALES_MARKETING', hr: 'HR', engineering: 'ENGINEERING',
-  technician: 'TECHNICIAN', finance: 'FINANCE', food: 'FOOD_BEVERAGE',
+  technician: 'TECHNICIAN', finance: 'FINANCE',
 }
 const hotelAccounts = {
   admin: ['gh.admin', 'Adrian', 'Villanueva'],
@@ -21,7 +21,6 @@ const hotelAccounts = {
   engineering: ['eng.roberto', 'Roberto', 'Cruz'],
   technician: ['eng.miguel', 'Miguel', 'Torres'],
   finance: ['fin.bianca', 'Bianca', 'Ramos'],
-  food: ['fb.carlo', 'Carlo', 'Garcia'],
 }
 
 async function upgradeHotelPresentation(db) {
@@ -29,8 +28,9 @@ async function upgradeHotelPresentation(db) {
     await db.query(`UPDATE users SET username = $1, first_name = $2, last_name = $3
       WHERE username = $4`, [username, firstName, lastName, 'demo_' + key])
   }
-  await db.query(`UPDATE rooms SET room_number = REPLACE(room_number, 'DEMO-', ''), floor = '1'
-    WHERE room_number IN ('DEMO-101','DEMO-102','DEMO-103','DEMO-104')`)
+  await db.query(`UPDATE rooms legacy SET room_number = REPLACE(legacy.room_number, 'DEMO-', ''), floor = '1'
+    WHERE legacy.room_number IN ('DEMO-101','DEMO-102','DEMO-103','DEMO-104')
+      AND NOT EXISTS (SELECT 1 FROM rooms current_room WHERE current_room.room_number=REPLACE(legacy.room_number,'DEMO-',''))`)
   await db.query(`UPDATE guests SET first_name='Elena', last_name='Garcia',
     email='elena.garcia@grandhorizon.ph' WHERE email='guest@hosis.example.invalid'`)
   await db.query(`UPDATE reservations SET confirmation_code='GHH-2026-1123-001'
@@ -74,13 +74,7 @@ async function upgradeHotelPresentation(db) {
     WHERE remarks IN ('Opening demo stock','Demo cleaning usage for room DEMO-101')`)
   await db.query(`UPDATE invoices SET invoice_number='INV-RM-2026-001', notes='Standard room accommodation charge'
     WHERE invoice_number='DEMO-ROOM-001'`)
-  await db.query(`UPDATE invoices SET invoice_number='INV-FB-2026-001', notes='Breakfast service charge'
-    WHERE invoice_number='DEMO-FOOD-001'`)
-  await db.query(`UPDATE payments SET reference=CASE reference
-      WHEN 'DEMO-PAYMENT-001' THEN 'OR-2026-001'
-      WHEN 'DEMO-FOOD-PAY-001' THEN 'OR-FB-2026-001' ELSE reference END
-    WHERE reference IN ('DEMO-PAYMENT-001','DEMO-FOOD-PAY-001')`)
-  await db.query(`UPDATE food_service_orders SET item='Continental breakfast' WHERE item='DEMO breakfast'`)
+  await db.query(`UPDATE payments SET reference='OR-2026-001' WHERE reference='DEMO-PAYMENT-001'`)
   await db.query(`UPDATE users SET email=REPLACE(email, '@grandhorizon.demo', '@grandhorizon.ph')
     WHERE email LIKE '%@grandhorizon.demo'`)
   await db.query(`UPDATE front_office_activity SET
@@ -196,6 +190,47 @@ async function ensureHousekeepingInventory(db) {
   }
 }
 
+async function seedDeskScenarios(db) {
+  const { rows: [staff] } = await db.query(
+    `SELECT (SELECT id FROM users WHERE username='fo.sofia') AS front,
+            (SELECT id FROM users WHERE username='hk.leah') AS housekeeping`,
+  )
+  if (!staff.front || !staff.housekeeping) throw new Error('Demo Front Office and Housekeeping accounts are required.')
+  const { rowCount } = await db.query("SELECT 1 FROM front_office_activity WHERE action='DEMO_DESK_SCENARIOS_SEEDED'")
+  if (rowCount) return
+
+  for (const [number, status] of [['MOCK-201', 'RESERVED'], ['MOCK-202', 'INSPECTED'], ['MOCK-203', 'OCCUPIED']]) {
+    await db.query("INSERT INTO rooms(room_number,room_type,floor,status) VALUES($1,'Deluxe','2',$2)", [number, status])
+  }
+  const { rows: [arrival] } = await db.query("INSERT INTO guests(first_name,last_name,email,loyalty_tier) VALUES('Maya','Santos','maya.santos@example.test','Gold') RETURNING id")
+  const { rows: [overstay] } = await db.query("INSERT INTO guests(first_name,last_name,email) VALUES('Noah','Reyes','noah.reyes@example.test') RETURNING id")
+  await db.query(`INSERT INTO reservations(confirmation_code,guest_id,room_id,room_type,check_in,check_out,created_by)
+                  SELECT 'MOCK-ARRIVAL-201',$1,id,room_type,CURRENT_DATE,CURRENT_DATE+2,$2 FROM rooms WHERE room_number='MOCK-201'`,
+  [arrival.id, staff.front])
+  const { rows: [stay] } = await db.query(`INSERT INTO reservations(confirmation_code,guest_id,room_id,room_type,check_in,check_out,status,created_by)
+       SELECT 'MOCK-OVERDUE-203',$1,id,room_type,CURRENT_DATE-3,CURRENT_DATE-1,'CHECKED_IN',$2
+       FROM rooms WHERE room_number='MOCK-203' RETURNING id,room_id`, [overstay.id, staff.front])
+  await db.query(`INSERT INTO guest_requests(guest_id, guest_name, room_id, reservation_id, request_text, priority, created_by)
+                  VALUES($1,'Noah Reyes',$2,$3,'Deliver an extra pillow','STANDARD',$4)`,
+  [overstay.id, stay.room_id, stay.id, staff.front])
+  await db.query(`INSERT INTO hk_front_office_notifications(room_id,notice_type,message,created_by)
+                  SELECT id,'ROOM_READY','Room MOCK-202 passed inspection and can be released.', $1
+                  FROM rooms WHERE room_number='MOCK-202'`, [staff.housekeeping])
+  const { rows: [task] } = await db.query(`INSERT INTO hk_cleaning_tasks(room_id,task_type,task_status,staff_id,notes)
+                    SELECT id,'CHECKOUT','INSPECTED',$1,'Mock inspected room' FROM rooms WHERE room_number='MOCK-202' RETURNING task_id`, [staff.housekeeping])
+  await db.query("INSERT INTO hk_inspections(task_id,inspected_by,inspection_result,remarks) VALUES($1,$2,'PASSED','Ready for release')", [task.task_id, staff.housekeeping])
+  await db.query(`INSERT INTO hk_schedules(staff_id,shift_date,shift,start_time,end_time,assigned_area)
+                  VALUES($1,CURRENT_DATE,'MORNING','07:00','15:00','Second floor')
+                  ON CONFLICT (staff_id,shift_date,shift) DO NOTHING`, [staff.housekeeping])
+  await db.query(`INSERT INTO hk_lost_found_items(found_by,item_description,found_location,storage_label,storage_location)
+                  VALUES($1,'Mock blue travel umbrella','Lobby','MOCK-LF-01','Cabinet A')
+                  ON CONFLICT(storage_label) DO NOTHING`, [staff.housekeeping])
+  await db.query(`INSERT INTO hk_maintenance_requests(room_id,reported_by,issue_category,issue_description,priority,report_source)
+                  SELECT id,$1,'ELECTRICAL','Mock bedside lamp flickers','HIGH','Front Office'
+                  FROM rooms WHERE room_number='MOCK-203'`, [staff.front])
+  await db.query("INSERT INTO front_office_activity(user_id,action,description) VALUES($1,'DEMO_DESK_SCENARIOS_SEEDED','Added local synthetic desk scenarios')", [staff.front])
+}
+
 async function credentials() {
   const entries = Object.keys(accounts).map((key) => [key, randomBytes(18).toString('base64url')])
   try {
@@ -227,11 +262,14 @@ async function main() {
     await db.query('SELECT pg_advisory_xact_lock(742913)')
     const financeSeed = await fs.readFile(path.resolve(backend, '../departments/finance/backend/demo.sql'), 'utf8')
     const { rows: [previous] } = await db.query(
-      "SELECT 1 FROM front_office_activity WHERE action IN ('DEMO_DATA_SEEDED', 'HOTEL_DATA_SEEDED')",
+      `SELECT action FROM front_office_activity
+       WHERE action IN ('DEMO_DATA_SEEDED', 'HOTEL_DATA_SEEDED')
+       ORDER BY (action = 'HOTEL_DATA_SEEDED') DESC LIMIT 1`,
     )
     if (previous) {
-      await upgradeHotelPresentation(db)
+      if (previous.action === 'DEMO_DATA_SEEDED') await upgradeHotelPresentation(db)
       await ensureHousekeepingInventory(db)
+      await seedDeskScenarios(db)
       await db.query(financeSeed)
       await db.query('COMMIT')
       console.log('Grand Horizon operational records are ready.')
@@ -277,13 +315,10 @@ async function main() {
     [guest.id, stay.id, ids.front_office])
     await db.query(`INSERT INTO payments (invoice_id, amount, payment_method, reference, recorded_by)
       VALUES ($1, 2500, 'CASH', 'OR-2026-001', $2)`, [lodging.id, ids.front_office])
-    const { rows: [foodInvoice] } = await db.query(`INSERT INTO invoices
+    await db.query(`INSERT INTO invoices
       (invoice_number, guest_id, reservation_id, amount, notes, created_by)
-      VALUES ('INV-FB-2026-001', $1, $2, 550, 'Breakfast service charge', $3) RETURNING id`,
-    [guest.id, stay.id, ids.food])
-    await db.query(`INSERT INTO food_service_orders (id, reservation_id, invoice_id, item, quantity, unit_price, created_by)
-      VALUES ('d3300000-0000-4000-8000-000000000001', $1, $2, 'Continental breakfast', 2, 275, $3)`,
-    [stay.id, foodInvoice.id, ids.food])
+      VALUES ('INV-LATE-2026-001', $1, $2, 550, 'Late checkout service charge', $3)`,
+    [guest.id, stay.id, ids.front_office])
 
     for (const [key, employeeId, department, title, assignment, contact] of [
       ['front_office', 'EMP-FO-001', 'frontdesk', 'Front Desk Associate', 'Reception', 'sofia.mendoza@grandhorizon.ph'],
@@ -328,6 +363,7 @@ async function main() {
     await db.query('UPDATE engineering.engineering_state SET revision = revision + 1 WHERE id = 1')
     await db.query(`INSERT INTO front_office_activity (user_id, action, description)
       VALUES ($1, 'HOTEL_DATA_SEEDED', 'Grand Horizon operational dataset v2')`, [ids.admin])
+    await seedDeskScenarios(db)
     await db.query(financeSeed)
     await db.query('COMMIT')
     console.log('Seeded Grand Horizon operational records for all departments. Local credentials are in backend/.env.demo.')

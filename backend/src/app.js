@@ -43,7 +43,12 @@ app.use((req,res,next) => {
 
 api.get('/health', async (req, res, next) => {
   try {
-    await pool.query('SELECT 1')
+    await pool.query(`SELECT
+      (SELECT attempts FROM auth_attempts LIMIT 0),
+      (SELECT user_id FROM hk_password_must_change LIMIT 0),
+      (SELECT session_version FROM users LIMIT 0),
+      (SELECT promotion FROM invoices LIMIT 0),
+      (SELECT report_source FROM hk_maintenance_requests LIMIT 0)`)
     res.json({ data: { status: 'ok' } })
   } catch (error) {
     const unavailable = new Error('The database is not available.')
@@ -65,7 +70,6 @@ api.use('/hr', require('../../departments/hr/backend/hrRoutes.js'))
 api.use('/engineering', require('../../departments/engineering/backend/routes.js'))
 api.use('/sales-marketing', require('../../departments/sales-marketing/backend/routes.js'))
 api.use('/finance', require('../../departments/finance/backend/routes.js'))
-api.use('/food-beverage', require('../../departments/food-and-beverage/backend/routes.js'))
 app.use('/api/v1', api)
 
 if (tlsEnabled) {
