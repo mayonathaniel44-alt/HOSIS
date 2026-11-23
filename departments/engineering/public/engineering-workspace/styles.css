@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap');
+
 /* Grand Horizon Hotel - Original Figma colors and layout preserved */
 
 :root {
@@ -201,11 +203,11 @@ button.secondary {
 }
 
 .green {
-    background: #00652b !important;
+    background: #00652b;
 }
 
 .secondary {
-    background: #6e6a9b !important;
+    background: #6e6a9b;
     min-width: 0 !important;
 }
 
@@ -402,7 +404,7 @@ textarea {
 
 .search-bottom {
     margin-top: 40px;
-    max-width: 700px;
+    max-width: 767px;
 }
 
 .search-bottom input {
@@ -518,7 +520,7 @@ body:not(.dashboard) .topbar .filter-button {
         grid-template-columns: repeat(2, 1fr);
     }
 }
-@media (max-width: 700px) {
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
     .sidebar {
         position: relative;
         width: 100%;
@@ -1017,7 +1019,7 @@ textarea:focus-visible {
     }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
     .modal-form-grid,
     .detail-grid {
         grid-template-columns: 1fr;
@@ -1127,7 +1129,7 @@ textarea:focus-visible {
 .sidebar-collapsed .sidebar nav .nav-icon {
     font-size: 24px;
 }
-@media (max-width: 700px) {
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
     .sidebar-collapsed .sidebar {
         width: 100%;
         padding: 10px;
@@ -1152,7 +1154,7 @@ textarea:focus-visible {
 :root {
     --sidebar-width: 373px;
 }
-@media (min-width: 701px) {
+@media (min-width: 768px) {
     .sidebar {
         width: var(--sidebar-width) !important;
         padding-left: clamp(10px, calc(var(--sidebar-width) * 0.08), 30px);
@@ -1217,86 +1219,10 @@ textarea:focus-visible {
 .sidebar-collapsed .sidebar nav .nav-icon {
     font-size: 24px;
 }
-@media (max-width: 700px) {
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
     .sidebar-resize-handle {
         display: none;
     }
-}
-
-/* Account controls: original site typography and palette retained */
-.account-container {
-    position: relative;
-    margin-left: auto;
-}
-.account-toggle {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-    border: 1px solid #e3dff2;
-    border-radius: 30px;
-    padding: 6px 12px;
-    background: #fff;
-    color: #302064;
-    font: inherit;
-}
-.account-avatar,
-.account-large-avatar {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: #4328b5;
-    color: white;
-    width: 34px;
-    height: 34px;
-}
-.account-menu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 8px);
-    min-width: 190px;
-    padding: 6px;
-    border-radius: 12px;
-    background: white;
-    border: 1px solid #e3dff2;
-    box-shadow: 0 8px 24px #17112e22;
-    z-index: 100;
-}
-.account-menu[hidden] {
-    display: none;
-}
-.account-menu button {
-    display: block;
-    width: 100%;
-    border: 0;
-    background: transparent;
-    padding: 12px;
-    text-align: left;
-    cursor: pointer;
-    color: #302064;
-    font: inherit;
-    border-radius: 8px;
-}
-.account-menu button:hover {
-    background: #f2effd;
-}
-.account-dialog {
-    border: 0;
-    border-radius: 16px;
-    padding: 28px;
-    min-width: min(360px, 90vw);
-    box-shadow: 0 12px 45px #0003;
-    font: inherit;
-}
-.account-dialog::backdrop {
-    background: #0006;
-}
-.account-large-avatar {
-    width: 60px;
-    height: 60px;
-    font-size: 26px;
-    margin: 12px 0;
 }
 
 /* Responsive page headings, search tools and record controls. */
@@ -1361,10 +1287,7 @@ button,
     max-width: calc(100vw - 24px);
     max-height: calc(100dvh - 24px);
 }
-.account-toggle {
-    max-width: 100%;
-}
-@media (max-width: 1000px) and (min-width: 701px) {
+@media (max-width: 1000px) and (min-width: 768px) {
     .topbar {
         padding: 16px 20px;
         height: auto;
@@ -1372,7 +1295,7 @@ button,
         flex-wrap: wrap;
     }
 }
-@media (max-width: 700px) {
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
     body {
         width: 100%;
         overflow-x: hidden;
@@ -1430,10 +1353,6 @@ button,
         gap: 12px;
         flex-wrap: wrap;
     }
-    .account-container {
-        margin-left: auto;
-        max-width: 100%;
-    }
     #accountName {
         max-width: 170px;
         overflow: hidden;
@@ -1461,7 +1380,7 @@ button,
     }
 }
 
-/* Keep the account dock at the bottom-left while navigation scrolls above it. */
+/* Keep navigation scrollable below the logo. */
 .sidebar {
     display: flex;
     flex-direction: column;
@@ -1476,48 +1395,6 @@ button,
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-}
-.sidebar .account-container {
-    flex: 0 0 auto;
-    width: 100%;
-    margin: 12px 0 0;
-    padding-top: 14px;
-    border-top: 1px solid #a9a1c9;
-}
-.sidebar .account-toggle {
-    width: 100%;
-    border-radius: 10px;
-    padding: 10px;
-    text-align: left;
-}
-.sidebar #accountName {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.sidebar .account-menu {
-    top: auto;
-    bottom: calc(100% + 8px);
-    right: 0;
-    left: 0;
-    min-width: 0;
-}
-.sidebar-collapsed .account-toggle {
-    justify-content: center;
-    padding: 8px 2px;
-}
-.sidebar-collapsed #accountName,
-.sidebar-collapsed .account-toggle > span:last-child {
-    display: none;
-}
-.sidebar-collapsed .account-menu button {
-    padding: 10px 3px;
-    overflow-wrap: anywhere;
-    font-size: 12px;
-}
-.cards {
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 .dashboard-link {
     color: inherit;
@@ -1562,7 +1439,7 @@ button:disabled {
     opacity: 0.55;
     cursor: not-allowed;
 }
-@media (max-width: 700px) {
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
     .sidebar,
     .sidebar-collapsed .sidebar {
         height: auto;
@@ -1573,21 +1450,6 @@ button:disabled {
         flex: initial;
         overflow-x: auto;
         overflow-y: hidden;
-    }
-    .sidebar .account-container {
-        margin-top: 4px;
-        padding-top: 8px;
-    }
-    .sidebar .account-toggle {
-        max-width: 100%;
-        justify-content: flex-start;
-    }
-    .sidebar-collapsed #accountName,
-    .sidebar-collapsed .account-toggle > span:last-child {
-        display: inline;
-    }
-    .cards {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .card {
         min-width: 0;
@@ -1661,7 +1523,6 @@ textarea {
     max-width: 100%;
 }
 button,
-.account-toggle,
 nav a {
     touch-action: manipulation;
 }
@@ -1683,7 +1544,7 @@ select:focus-visible {
         flex: 1;
     }
 }
-@media (max-width: 700px) {
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
     html,
     body {
         width: 100%;
@@ -1759,14 +1620,2094 @@ select:focus-visible {
         min-width: 0;
         width: 100%;
     }
-    .table-wrap table {
-        min-width: 760px;
-    }
-    .table-wrap td:first-child {
-        min-width: 170px;
-    }
 }
 
 [hidden] {
     display: none !important;
+}
+/* Engineering shell tokens sampled from the Housekeeping reference. */
+:root {
+    --hotel-font: 'Lato', Arial, sans-serif;
+    --hotel-navy: #181364;
+    --hotel-ink: #181340;
+    --hotel-indigo-start: #19138b;
+    --hotel-indigo-end: #3b31e5;
+    --hotel-nav-start: #291fa1;
+    --hotel-nav-end: #3a2fd8;
+    --hotel-gold: #fbbc0e;
+    --hotel-gold-dark: #907107;
+    --hotel-canvas: #f3f2e6;
+    --hotel-surface: #fafbf8;
+    --hotel-white: #fff;
+    --hotel-muted: #514f69;
+    --hotel-line: #dfded8;
+    --hotel-warning: #fef4cb;
+    --hotel-divider: #6d64ab;
+    --hotel-blue: #426db4;
+    --hotel-red: #b62836;
+    --hotel-radius: 9px;
+    --hotel-radius-small: 6px;
+    --hotel-round: 50%;
+    --hotel-shadow: 0 2px 5px rgb(24 19 64 / 12%);
+    --hotel-space-xs: 6px;
+    --hotel-space-sm: 10px;
+    --hotel-space-md: 16px;
+    --hotel-space-lg: 24px;
+    --hotel-font-small: 12px;
+    --hotel-font-base: 14px;
+    --hotel-font-title: clamp(22px, 2vw, 28px);
+    --hotel-font-metric: 26px;
+    --hotel-bar-height: 60px;
+    --hotel-nav-height: 39px;
+    --hotel-logo-height: 135px;
+    --hotel-icon-size: 26px;
+    --hotel-control-size: 40px;
+    --hotel-nav-gradient: linear-gradient(100deg, var(--hotel-nav-start), var(--hotel-nav-end));
+    --hotel-active-gradient: linear-gradient(100deg, var(--hotel-gold), var(--hotel-gold-dark));
+    --sidebar-width: 246px;
+    font-family: var(--hotel-font);
+    font-size: var(--hotel-font-base);
+    color: var(--hotel-ink);
+    background: var(--hotel-canvas);
+}
+
+body[data-page] .sidebar {
+    background: var(--hotel-navy);
+    padding: var(--hotel-space-md) var(--hotel-space-md) 0;
+}
+
+body[data-page] .brand {
+    height: var(--hotel-logo-height);
+    border-bottom: 1px solid var(--hotel-divider);
+}
+
+body[data-page] .sidebar .brand img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+body[data-page] .sidebar-toggle {
+    top: auto;
+    bottom: calc(-1 * (var(--hotel-icon-size) + var(--hotel-space-sm)));
+    width: var(--hotel-icon-size);
+    height: var(--hotel-icon-size);
+    border-color: var(--hotel-divider);
+    border-radius: var(--hotel-radius-small);
+    background: var(--hotel-nav-start);
+    color: var(--hotel-white);
+}
+
+body[data-page] .sidebar nav {
+    padding: calc(var(--hotel-icon-size) + var(--hotel-space-lg)) 0 var(--hotel-space-md);
+}
+
+body[data-page] .sidebar nav a {
+    min-height: var(--hotel-nav-height);
+    height: auto;
+    margin: 0 0 var(--hotel-space-xs);
+    padding: var(--hotel-space-xs) var(--hotel-space-md);
+    gap: var(--hotel-space-sm);
+    border-radius: var(--hotel-radius);
+    background: var(--hotel-nav-gradient);
+    box-shadow: var(--hotel-shadow);
+    color: var(--hotel-white);
+    font-size: var(--hotel-font-base);
+    line-height: 1.2;
+}
+
+body[data-page] .sidebar nav a:hover {
+    filter: brightness(1.15);
+}
+
+body[data-page] .sidebar nav a.active {
+    background: var(--hotel-active-gradient);
+    color: var(--hotel-ink);
+}
+
+body[data-page].sidebar-collapsed .sidebar nav a {
+    justify-content: center;
+    padding-inline: var(--hotel-space-xs);
+}
+
+body[data-page] .topbar {
+    min-height: var(--hotel-bar-height);
+    height: auto;
+    padding: var(--hotel-space-sm) var(--hotel-space-lg);
+    gap: var(--hotel-space-sm);
+    flex-wrap: nowrap;
+    color: var(--hotel-white);
+    background: linear-gradient(100deg, var(--hotel-indigo-start), var(--hotel-indigo-end));
+}
+
+.session-bell,
+.session-avatar {
+    display: grid;
+    place-items: center;
+    flex: 0 0 var(--hotel-control-size);
+    width: var(--hotel-control-size);
+    height: var(--hotel-control-size);
+    border-radius: var(--hotel-round);
+    color: var(--hotel-white);
+}
+
+.session-bell {
+    position: relative;
+    background: var(--hotel-nav-start);
+    text-decoration: none;
+}
+
+.session-bell[hidden],
+.session-bell .notification-badge[hidden] {
+    display: none;
+}
+
+.session-bell .notification-badge {
+    position: absolute;
+    right: 0;
+    top: 0;
+    min-width: var(--hotel-space-md);
+    margin: 0;
+    padding: 2px 4px;
+    background: var(--hotel-gold);
+    color: var(--hotel-ink);
+    font-size: var(--hotel-font-small);
+    line-height: 1;
+}
+
+.session-user,
+.session-identity {
+    display: flex;
+    min-width: 0;
+}
+
+.session-user {
+    align-items: center;
+    gap: var(--hotel-space-sm);
+    margin-left: auto;
+}
+
+.session-avatar {
+    background: var(--hotel-navy);
+    font-weight: 700;
+}
+
+.session-identity {
+    flex-direction: column;
+}
+
+.session-identity strong,
+.session-identity span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.session-identity span {
+    font-size: var(--hotel-font-small);
+}
+
+#signOut {
+    border: 1px solid rgb(255 255 255 / 55%);
+    border-radius: var(--hotel-radius-small);
+    padding: var(--hotel-space-xs) var(--hotel-space-sm);
+    min-height: var(--hotel-control-size);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+#signOut:hover {
+    background: rgb(255 255 255 / 15%);
+}
+
+.page-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--hotel-space-md);
+    margin-bottom: var(--hotel-space-md);
+}
+
+.page-title {
+    color: var(--hotel-ink);
+    font-size: var(--hotel-font-title);
+    font-weight: 700;
+    margin: 0 0 var(--hotel-space-xs);
+}
+
+.page-heading .sub {
+    color: var(--hotel-muted);
+    margin: 0;
+}
+
+.page-clock {
+    display: grid;
+    flex-shrink: 0;
+    color: var(--hotel-ink);
+    font-size: var(--hotel-font-small);
+    text-align: right;
+}
+
+body[data-page] .panel,
+.dashboard-cards .card {
+    border-radius: var(--hotel-radius);
+    background: var(--hotel-surface);
+    box-shadow: var(--hotel-shadow);
+}
+
+.dashboard-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: var(--hotel-space-md);
+    gap: var(--hotel-space-sm);
+}
+
+.dashboard-cards .card {
+    padding: var(--hotel-space-md);
+}
+
+.dashboard-card-label {
+    display: flex;
+    align-items: center;
+    gap: var(--hotel-space-xs);
+}
+
+.dashboard-card-label .label {
+    color: var(--hotel-ink);
+    font-size: var(--hotel-font-small);
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.dashboard-card-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 var(--hotel-icon-size);
+    height: var(--hotel-icon-size);
+    border-radius: var(--hotel-round);
+    color: var(--hotel-white);
+    background: var(--hotel-navy);
+}
+
+.dashboard-cards .card:nth-child(4n + 2) .dashboard-card-icon {
+    background: var(--hotel-gold-dark);
+}
+
+.dashboard-cards .card:nth-child(4n + 3) .dashboard-card-icon {
+    background: var(--hotel-blue);
+}
+
+.dashboard-cards .card:nth-child(4n) .dashboard-card-icon {
+    background: var(--hotel-red);
+}
+
+.dashboard-cards .card strong {
+    color: var(--hotel-ink);
+    font-size: var(--hotel-font-metric);
+    overflow-wrap: anywhere;
+}
+
+.dashboard-cards .card small {
+    color: var(--hotel-muted);
+    font-size: var(--hotel-font-small);
+}
+
+.dashboard-panel {
+    min-height: 0;
+    margin-bottom: var(--hotel-space-md);
+}
+
+.dashboard-panel h2 {
+    margin-bottom: var(--hotel-space-sm);
+}
+
+.pending-list {
+    list-style: none;
+    margin: 0 0 var(--hotel-space-md);
+    padding: 0;
+}
+
+.pending-list li {
+    padding: var(--hotel-space-xs) 0;
+    border-bottom: 1px solid var(--hotel-line);
+}
+
+.stock-warning {
+    display: grid;
+    gap: var(--hotel-space-xs);
+    margin-bottom: var(--hotel-space-md);
+    padding: var(--hotel-space-sm) var(--hotel-space-md);
+    border-left: 4px solid var(--hotel-gold);
+    border-radius: var(--hotel-radius-small);
+    background: var(--hotel-warning);
+}
+
+body[data-page='Account'] #pageTools {
+    display: none;
+}
+
+
+
+
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
+    body[data-page] .brand {
+        height: 72px;
+    }
+
+    body[data-page] .sidebar nav {
+        padding: var(--hotel-space-sm) 0;
+    }
+
+    body[data-page] .sidebar nav a {
+        margin: 0;
+    }
+
+    body[data-page] .topbar {
+        padding-inline: var(--hotel-space-sm);
+    }
+
+    .page-heading {
+        gap: var(--hotel-space-sm);
+    }
+}
+
+.dashboard-panel a {
+    color: var(--hotel-nav-start);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+
+@media (min-width: 1720px) {
+    .dashboard-cards {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .dashboard-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Shared Engineering components */
+:root {
+    --hotel-space-2xs: 4px;
+    --hotel-space-xs: 8px;
+    --hotel-space-sm: 12px;
+    --hotel-space-xl: 32px;
+    --hotel-heading-size: 20px;
+    --hotel-control-size: 44px;
+    --hotel-small-control-size: 34px;
+    --hotel-icon-inline: 18px;
+    --hotel-control-border: #8985a4;
+    --hotel-focus: #735800;
+    --hotel-primary: #3022a8;
+    --hotel-primary-hover: #211582;
+    --hotel-danger: #a42031;
+    --hotel-danger-hover: #801528;
+    --hotel-positive: #205e40;
+    --hotel-positive-bg: #e6f4e9;
+    --hotel-pending: #614a03;
+    --hotel-pending-bg: #fff2c4;
+    --hotel-progress: #254e82;
+    --hotel-progress-bg: #e8f0fb;
+    --hotel-danger-bg: #fae8ec;
+    --hotel-neutral-bg: #efedf7;
+    --hotel-row-alt: #f9f8fc;
+    --hotel-row-hover: #f0edff;
+    --hotel-overlay: rgb(24 19 64 / 62%);
+    --hotel-dialog-shadow: 0 18px 55px rgb(24 19 64 / 28%);
+    --hotel-motion: 180ms ease;
+}
+
+body {
+    line-height: 1.45;
+    scrollbar-color: var(--hotel-divider) var(--hotel-neutral-bg);
+}
+
+body[data-page] main {
+    padding: var(--hotel-space-lg) var(--hotel-space-lg) var(--hotel-space-xl);
+}
+
+body[data-page] .panel,
+.login-card,
+.detail-dialog {
+    background: var(--hotel-white);
+    border-radius: var(--hotel-radius);
+    box-shadow: var(--hotel-shadow);
+}
+
+body[data-page] .panel {
+    padding: var(--hotel-space-lg);
+    min-height: 0;
+}
+
+.panel + .panel {
+    margin-top: var(--hotel-space-md);
+}
+
+.panel h2,
+.modal-header h2 {
+    font-size: var(--hotel-heading-size);
+    line-height: 1.25;
+}
+
+.panel-head {
+    gap: var(--hotel-space-xs);
+    margin-bottom: var(--hotel-space-md);
+}
+
+.panel .section {
+    margin-top: var(--hotel-space-lg);
+}
+
+.panel p,
+.modal-scroll p {
+    overflow-wrap: anywhere;
+}
+
+.ui-icon {
+    display: inline-block;
+    vertical-align: middle;
+    width: var(--hotel-icon-inline);
+    height: var(--hotel-icon-inline);
+    flex: none;
+}
+
+.nav-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+}
+
+:is(.shell, .detail-modal, .login-card) :is(.primary, .secondary, .green, .danger, .gold, .action-btn, .filter-button, .modal-close),
+.login-card a.primary {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--hotel-space-2xs);
+    min-height: var(--hotel-control-size);
+    min-width: 0;
+    padding: var(--hotel-space-xs) var(--hotel-space-md);
+    border: 1px solid transparent;
+    border-radius: var(--hotel-radius-small);
+    font: inherit;
+    font-weight: 700;
+    line-height: 1.25;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--hotel-motion), border-color var(--hotel-motion), color var(--hotel-motion);
+}
+
+:is(.shell, .detail-modal, .login-card) .primary {
+    background: var(--hotel-primary);
+    color: var(--hotel-white);
+}
+
+:is(.shell, .detail-modal, .login-card) .primary:hover {
+    background: var(--hotel-primary-hover);
+}
+
+:is(.shell, .detail-modal) :is(.secondary, .action-btn, .filter-button, .modal-close) {
+    color: var(--hotel-primary-hover);
+    background: var(--hotel-white);
+    border-color: var(--hotel-control-border);
+}
+
+:is(.shell, .detail-modal) :is(.secondary, .action-btn, .filter-button, .modal-close):hover {
+    background: var(--hotel-neutral-bg);
+    border-color: var(--hotel-primary);
+}
+
+:is(.shell, .detail-modal) :is(.gold, .green) {
+    color: var(--hotel-ink);
+    background: var(--hotel-gold);
+}
+
+:is(.shell, .detail-modal) :is(.gold, .green):hover {
+    background: #e5a90a;
+}
+
+:is(.shell, .detail-modal) :is(.danger, .action-delete) {
+    background: var(--hotel-danger);
+    color: var(--hotel-white);
+}
+
+:is(.shell, .detail-modal) :is(.danger, .action-delete):hover {
+    background: var(--hotel-danger-hover);
+}
+
+:is(.shell, .detail-modal) :is(.action-btn, .modal-close) {
+    min-height: var(--hotel-small-control-size);
+    padding: var(--hotel-space-2xs) var(--hotel-space-xs);
+}
+
+:is(.shell, .detail-modal, .login-card) button:disabled {
+    opacity: .65;
+    cursor: not-allowed;
+}
+
+:is(button, input, select, textarea, a, summary, .table-wrap):focus-visible {
+    outline: 2px solid var(--hotel-focus);
+    outline-offset: 3px;
+}
+
+.sidebar a:focus-visible,
+.topbar :is(a, button):focus-visible {
+    outline-color: var(--hotel-gold);
+}
+
+.table-wrap {
+    max-height: 540px;
+    overflow: auto;
+    border: 1px solid var(--hotel-line);
+    border-radius: var(--hotel-radius-small);
+}
+
+.table-wrap table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    color: var(--hotel-ink);
+}
+
+.table-wrap th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: var(--hotel-space-sm) var(--hotel-space-md);
+    color: var(--hotel-white);
+    background: var(--hotel-navy);
+    font-size: var(--hotel-font-small);
+    font-weight: 700;
+    text-align: left;
+}
+
+.table-wrap td {
+    padding: var(--hotel-space-sm) var(--hotel-space-md);
+    border-bottom: 1px solid var(--hotel-line);
+    vertical-align: middle;
+    background: transparent;
+}
+
+.table-wrap tr:last-child td {
+    border-bottom: 0;
+}
+
+.table-wrap tbody tr:nth-child(even) {
+    background: var(--hotel-row-alt);
+}
+
+.table-wrap tbody tr:is(:hover, :focus-within) {
+    background: var(--hotel-row-hover);
+}
+
+.table-wrap-empty {
+    border-radius: var(--hotel-radius-small) var(--hotel-radius-small) 0 0;
+}
+
+.table-empty {
+    border: 1px solid var(--hotel-line);
+    border-top: 0;
+    border-radius: 0 0 var(--hotel-radius-small) var(--hotel-radius-small);
+}
+
+.table-wrap :is(th, td)[data-cell="nowrap"] {
+    white-space: nowrap;
+}
+
+.table-wrap td:last-child > :is(button, a) {
+    margin-block: 2px;
+}
+
+.table-wrap [data-align="number"] {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.status-badge {
+    display: inline-block;
+    margin-block: 2px;
+    padding: var(--hotel-space-2xs) var(--hotel-space-xs);
+    border-radius: 999px;
+    color: var(--hotel-muted);
+    background: var(--hotel-neutral-bg);
+    font-size: var(--hotel-font-small);
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.status-positive { color: var(--hotel-positive); background: var(--hotel-positive-bg); }
+.status-pending { color: var(--hotel-pending); background: var(--hotel-pending-bg); }
+.status-progress { color: var(--hotel-progress); background: var(--hotel-progress-bg); }
+.status-danger { color: var(--hotel-danger); background: var(--hotel-danger-bg); }
+
+.empty-state,
+.loading-state {
+    display: grid;
+    justify-items: center;
+    gap: var(--hotel-space-xs);
+    padding: var(--hotel-space-xl) var(--hotel-space-md);
+    color: var(--hotel-ink);
+    text-align: center;
+}
+
+.empty-state p {
+    margin: 0;
+    color: var(--hotel-muted);
+}
+
+.state-icon {
+    display: grid;
+    place-items: center;
+    width: var(--hotel-control-size);
+    height: var(--hotel-control-size);
+    border-radius: var(--hotel-round);
+    color: var(--hotel-primary);
+    background: var(--hotel-neutral-bg);
+}
+
+.spinner {
+    width: var(--hotel-icon-size);
+    height: var(--hotel-icon-size);
+    border: 3px solid var(--hotel-neutral-bg);
+    border-top-color: var(--hotel-primary);
+    border-radius: var(--hotel-round);
+    animation: loading-spin .8s linear infinite;
+}
+
+@keyframes loading-spin { to { transform: rotate(1turn); } }
+
+:is(.shell, .detail-modal, .login-card) :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
+    min-height: var(--hotel-control-size);
+    padding: var(--hotel-space-xs) var(--hotel-space-sm);
+    border: 1px solid var(--hotel-control-border);
+    border-radius: var(--hotel-radius-small);
+    background: var(--hotel-white);
+    color: var(--hotel-ink);
+    font: inherit;
+    transition: border-color var(--hotel-motion);
+}
+
+:is(.shell, .detail-modal, .login-card) :is(input, textarea)::placeholder {
+    color: var(--hotel-muted);
+    opacity: 1;
+}
+
+:is(.shell, .detail-modal, .login-card) :is(label, .field) {
+    color: var(--hotel-ink);
+    font-weight: 700;
+}
+
+:is(.shell, .detail-modal) :is(.form-grid, .modal-form-grid, .detail-grid) {
+    gap: var(--hotel-space-md);
+}
+
+:is(.shell, .detail-modal) textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+:is(.shell, .detail-modal, .login-card) :is([aria-invalid='true'], :user-invalid) {
+    border-color: var(--hotel-danger);
+}
+
+.field-error,
+#loginError {
+    color: var(--hotel-danger);
+    font-size: var(--hotel-font-small);
+    font-weight: 700;
+}
+
+.page-tools {
+    margin-bottom: var(--hotel-space-md);
+}
+
+.page-tools .top-actions {
+    align-items: end;
+    gap: var(--hotel-space-xs);
+}
+
+.page-tools .filter-panel {
+    top: calc(100% + var(--hotel-space-xs));
+    padding: var(--hotel-space-md);
+    border: 1px solid var(--hotel-control-border);
+    border-radius: var(--hotel-radius);
+    background: var(--hotel-white);
+    box-shadow: var(--hotel-dialog-shadow);
+}
+
+.filter-panel label:not([hidden]) {
+    display: grid;
+    gap: var(--hotel-space-2xs);
+}
+
+.detail-modal {
+    background: var(--hotel-overlay);
+}
+
+.detail-dialog {
+    padding: var(--hotel-space-lg);
+    box-shadow: var(--hotel-dialog-shadow);
+}
+
+.modal-header {
+    padding-bottom: var(--hotel-space-sm);
+    margin-bottom: var(--hotel-space-md);
+    border-bottom: 1px solid var(--hotel-line);
+}
+
+.modal-footer {
+    gap: var(--hotel-space-xs);
+    padding-top: var(--hotel-space-md);
+    margin-top: var(--hotel-space-md);
+    border-top: 1px solid var(--hotel-line);
+}
+
+#toast {
+    z-index: 2100;
+    inset: auto max(var(--hotel-space-md), var(--hotel-safe-right))
+        max(var(--hotel-space-md), var(--hotel-safe-bottom)) auto;
+    max-width: min(440px, calc(100vw - max(var(--hotel-space-md), var(--hotel-safe-right))
+        - max(var(--hotel-space-md), var(--hotel-safe-left))));
+    max-height: calc(100dvh - var(--hotel-safe-top) - var(--hotel-safe-bottom) - var(--hotel-space-xl));
+    overflow: auto;
+    overflow-wrap: anywhere;
+    color: var(--hotel-white);
+    background: var(--hotel-navy);
+    border-radius: var(--hotel-radius);
+    box-shadow: var(--hotel-dialog-shadow);
+    padding: var(--hotel-space-sm) var(--hotel-space-md);
+}
+
+#toast[data-tone='success'] { background: var(--hotel-positive); }
+#toast[data-tone='error'] { background: var(--hotel-danger); }
+
+.login-page {
+    display: grid;
+    place-items: center;
+    min-height: 100dvh;
+    padding: var(--hotel-space-lg);
+    background: linear-gradient(140deg, var(--hotel-navy), var(--hotel-primary));
+}
+
+.login-card {
+    width: min(100%, 420px);
+    min-height: 0;
+    padding: var(--hotel-space-xl);
+}
+
+.login-brand {
+    display: grid;
+    place-items: center;
+    margin-bottom: var(--hotel-space-lg);
+    border-radius: var(--hotel-radius);
+    background: var(--hotel-navy);
+}
+
+.login-brand img {
+    width: 195px;
+    height: 122px;
+    object-fit: contain;
+}
+
+.login-card h1 {
+    margin-bottom: var(--hotel-space-lg);
+    font-size: var(--hotel-font-title);
+    text-align: center;
+}
+
+.login-form,
+.login-form label {
+    display: grid;
+    gap: var(--hotel-space-xs);
+}
+
+.login-form {
+    gap: var(--hotel-space-md);
+}
+
+#loginError {
+    margin: 0;
+}
+
+#loginError:empty {
+    display: none;
+}
+
+.not-found {
+    text-align: center;
+}
+
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
+    body[data-page] main,
+    body[data-page] .panel,
+    .detail-dialog,
+    .login-card {
+        padding: var(--hotel-space-md);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+    :is(.shell, .detail-modal, .login-card) :is(button, a, input, select, textarea) { transition: none; }
+}
+
+body[data-page] .sidebar nav a {
+    margin-bottom: var(--hotel-space-2xs);
+    padding-inline: var(--hotel-space-sm);
+}
+
+body[data-page] .sidebar nav .nav-icon {
+    width: var(--hotel-icon-inline);
+}
+
+body[data-page] .sidebar nav a.active {
+    background: linear-gradient(100deg, var(--hotel-gold), #b58c12);
+}
+
+
+
+.modal-scroll form > .field + .field {
+    margin-top: var(--hotel-space-md);
+}
+
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
+    body[data-page] .sidebar nav a {
+        margin-bottom: 0;
+    }
+}
+
+/* Read-only Account cards and top bar popups */
+:root {
+    --hotel-popup-motion: 150ms ease;
+    --hotel-popup-border: #dfdced;
+    --hotel-popup-width: 420px;
+    --hotel-account-popup-width: 310px;
+    --hotel-notification-height: 360px;
+    --hotel-unread: #235ec6;
+}
+
+body[data-page] .topbar {
+    position: relative;
+    z-index: 180;
+}
+
+.topbar-popup-anchor {
+    position: relative;
+    min-width: 0;
+}
+
+button.session-bell,
+.session-trigger {
+    border: 0;
+    cursor: pointer;
+    transition: background-color var(--hotel-popup-motion);
+}
+
+button.session-bell {
+    padding: 0;
+}
+
+.session-trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--hotel-space-xs);
+    max-width: 100%;
+    padding: var(--hotel-space-2xs) var(--hotel-space-xs);
+    border-radius: var(--hotel-radius);
+    background: transparent;
+    color: var(--hotel-white);
+    font: inherit;
+    text-align: left;
+}
+
+.session-trigger:hover,
+.session-trigger[aria-expanded="true"],
+button.session-bell:hover,
+button.session-bell[aria-expanded="true"] {
+    background: rgb(255 255 255 / 15%);
+}
+
+.session-trigger > .ui-icon {
+    width: 14px;
+    height: 14px;
+    transition: transform var(--hotel-popup-motion);
+}
+
+.session-trigger[aria-expanded="true"] > .ui-icon {
+    transform: rotate(180deg);
+}
+
+.session-user .session-avatar,
+.account-avatar-large {
+    color: var(--hotel-gold);
+}
+
+.topbar-popup {
+    position: absolute;
+    top: calc(100% + var(--hotel-space-sm));
+    max-width: calc(100vw - 2 * var(--hotel-space-sm));
+    overflow: hidden;
+    border: 1px solid var(--hotel-popup-border);
+    border-radius: var(--hotel-radius);
+    background: var(--hotel-white);
+    box-shadow: var(--hotel-dialog-shadow);
+    color: var(--hotel-ink);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity var(--hotel-popup-motion), transform var(--hotel-popup-motion),
+        visibility var(--hotel-popup-motion);
+}
+
+.topbar-popup[aria-hidden="false"] {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+    transition: opacity var(--hotel-popup-motion), transform var(--hotel-popup-motion);
+}
+
+.notification-popup {
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    width: var(--hotel-popup-width);
+    max-height: calc(100dvh - var(--hotel-bar-height) - var(--hotel-safe-top)
+        - var(--hotel-safe-bottom) - var(--hotel-space-xl));
+}
+
+.notification-popup > :is(.popup-header, .popup-footer) {
+    flex: none;
+}
+
+.account-popup {
+    right: 0;
+    width: var(--hotel-account-popup-width);
+}
+
+.popup-header,
+.popup-profile {
+    display: flex;
+    align-items: center;
+    gap: var(--hotel-space-xs);
+    padding: var(--hotel-space-sm) var(--hotel-space-md);
+    border-bottom: 1px solid var(--hotel-popup-border);
+}
+
+.popup-profile {
+    gap: var(--hotel-space-sm);
+}
+
+.popup-header h2,
+.popup-profile h2 {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.25;
+}
+
+.popup-profile-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.popup-profile p {
+    margin: var(--hotel-space-2xs) 0 0;
+    color: var(--hotel-muted);
+    font-size: var(--hotel-font-small);
+    overflow-wrap: anywhere;
+}
+
+.popup-actions {
+    display: grid;
+    padding: var(--hotel-space-xs);
+}
+
+.popup-actions a,
+.account-popup #signOut,
+.popup-text-button,
+.popup-footer a {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--hotel-space-xs);
+    min-height: var(--hotel-control-size);
+    padding: var(--hotel-space-2xs) var(--hotel-space-xs);
+    border: 0;
+    border-radius: var(--hotel-radius-small);
+    background: transparent;
+    color: var(--hotel-primary);
+    font: inherit;
+    font-weight: 700;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--hotel-popup-motion);
+}
+
+.account-popup #signOut {
+    color: var(--hotel-danger);
+}
+
+.popup-text-button {
+    margin-left: auto;
+    white-space: nowrap;
+    font-size: var(--hotel-font-small);
+}
+
+.popup-actions a:hover,
+.account-popup #signOut:hover,
+.popup-footer a:hover,
+.popup-text-button:hover:not(:disabled) {
+    background: var(--hotel-neutral-bg);
+}
+
+.topbar-popup :is(button, a):focus-visible {
+    outline-color: var(--hotel-primary);
+    outline-offset: -3px;
+}
+
+.popup-unread,
+.account-access-list li {
+    padding: var(--hotel-space-2xs) var(--hotel-space-xs);
+    border-radius: 999px;
+    color: var(--hotel-progress);
+    background: var(--hotel-progress-bg);
+    font-size: var(--hotel-font-small);
+    font-weight: 700;
+}
+
+.popup-unread {
+    white-space: nowrap;
+}
+
+.popup-footer {
+    padding: var(--hotel-space-2xs) var(--hotel-space-xs);
+    border-top: 1px solid var(--hotel-popup-border);
+}
+
+.notification-list {
+    min-height: 0;
+    max-height: var(--hotel-notification-height);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.notification-list .empty-state p:empty {
+    display: none;
+}
+
+.notification-item {
+    display: grid;
+    grid-template-columns: var(--hotel-control-size) minmax(0, 1fr) var(--hotel-space-xs);
+    align-items: center;
+    gap: var(--hotel-space-sm);
+    width: 100%;
+    padding: var(--hotel-space-sm) var(--hotel-space-md);
+    border: 0;
+    border-bottom: 1px solid var(--hotel-popup-border);
+    background: transparent;
+    color: var(--hotel-ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--hotel-popup-motion);
+}
+
+.notification-item:last-child {
+    border-bottom: 0;
+}
+
+.notification-item:hover {
+    background: var(--hotel-row-hover);
+}
+
+.notification-icon {
+    display: grid;
+    place-items: center;
+    width: var(--hotel-control-size);
+    height: var(--hotel-control-size);
+    border-radius: var(--hotel-round);
+}
+
+.notification-icon.status-neutral {
+    color: var(--hotel-primary);
+    background: var(--hotel-neutral-bg);
+}
+
+.notification-copy {
+    display: grid;
+    gap: 2px;
+}
+
+.notification-message,
+.notification-copy time {
+    color: var(--hotel-muted);
+    font-size: var(--hotel-font-small);
+}
+
+.notification-message {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.notification-dot {
+    width: var(--hotel-space-xs);
+    height: var(--hotel-space-xs);
+    border-radius: var(--hotel-round);
+    background: var(--hotel-unread);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.account-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--hotel-space-md);
+}
+
+.account-grid .panel + .panel {
+    margin-top: 0;
+}
+
+.account-grid h2,
+.account-grid h3 {
+    margin: 0 0 var(--hotel-space-xs);
+}
+
+.account-grid h3 {
+    font-size: var(--hotel-font-base);
+}
+
+.account-caption,
+.account-profile-row p {
+    margin: 0;
+    color: var(--hotel-muted);
+}
+
+.account-profile-row {
+    overflow-wrap: anywhere;
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--hotel-space-sm);
+    padding: var(--hotel-space-md) 0;
+    border-bottom: 1px solid var(--hotel-popup-border);
+}
+
+.account-avatar-large {
+    width: 48px;
+    height: 48px;
+    font-size: 16px;
+}
+
+.account-fields {
+    display: grid;
+    grid-template-columns: minmax(100px, 1fr) minmax(0, 1.4fr);
+    align-items: baseline;
+    gap: var(--hotel-space-xs) var(--hotel-space-sm);
+    margin: var(--hotel-space-md) 0;
+}
+
+.account-fields dt {
+    color: var(--hotel-muted);
+    font-weight: 700;
+}
+
+.account-fields dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.account-info {
+    margin: var(--hotel-space-md) 0 0;
+    padding: var(--hotel-space-sm);
+    border-left: 4px solid var(--hotel-primary);
+    border-radius: var(--hotel-radius-small);
+    background: var(--hotel-neutral-bg);
+}
+
+.account-access-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--hotel-space-xs);
+    margin: 0 0 var(--hotel-space-md);
+    padding: 0;
+    list-style: none;
+}
+
+.account-access-list li {
+    color: var(--hotel-primary);
+    background: var(--hotel-neutral-bg);
+}
+
+@media (max-width: 960px) {
+    .account-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 479px) {
+    .topbar-popup-anchor {
+        position: static;
+    }
+
+    .topbar-popup {
+        inset-inline: 0;
+        top: 100%;
+        width: 100%;
+        max-width: none;
+        border-radius: 0 0 var(--hotel-radius) var(--hotel-radius);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .topbar-popup,
+    .topbar-popup[aria-hidden="false"],
+    .session-trigger > .ui-icon {
+        transition: none;
+    }
+}
+
+/* Responsive navigation and safe areas */
+:root {
+    --hotel-drawer-width: min(80vw, 300px);
+    --hotel-rail-item-height: 44px;
+    --hotel-mobile-bar-height: 56px;
+    --hotel-drawer-backdrop: rgb(15 12 42 / 60%);
+    --hotel-safe-top: env(safe-area-inset-top, 0px);
+    --hotel-safe-right: env(safe-area-inset-right, 0px);
+    --hotel-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --hotel-safe-left: env(safe-area-inset-left, 0px);
+}
+
+body[data-page] .sidebar {
+    overflow: hidden;
+    padding: calc(var(--hotel-space-md) + var(--hotel-safe-top))
+        var(--hotel-space-md) var(--hotel-safe-bottom)
+        max(var(--hotel-space-md), var(--hotel-safe-left));
+}
+
+body[data-page] .sidebar nav {
+    display: block;
+    padding: var(--hotel-space-2xs) 0 var(--hotel-space-md);
+    overflow: hidden auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+body[data-page] .sidebar nav::-webkit-scrollbar {
+    display: none;
+}
+
+.sidebar-controls {
+    display: flex;
+    justify-content: flex-end;
+    flex: none;
+    padding: var(--hotel-space-xs) 0;
+}
+
+body[data-page] .sidebar-toggle {
+    position: static;
+    width: var(--hotel-control-size);
+    min-height: var(--hotel-control-size);
+    height: var(--hotel-control-size);
+    padding: 0;
+}
+
+body[data-page] .sidebar nav a {
+    width: 100%;
+    height: var(--hotel-rail-item-height);
+    min-height: var(--hotel-rail-item-height);
+    margin: 0 0 var(--hotel-space-2xs);
+    padding-block: var(--hotel-space-2xs);
+    font-size: 13px;
+    line-height: 1.2;
+    white-space: normal;
+}
+
+body[data-page] .sidebar nav a:hover {
+    transform: none;
+}
+
+.sidebar .nav-label {
+    min-width: 0;
+}
+
+.sidebar nav:focus-visible,
+.sidebar nav a:focus-visible {
+    outline: 2px solid var(--hotel-gold);
+    outline-offset: -3px;
+}
+
+.sidebar-resize-handle::after {
+    content: none;
+}
+
+.sidebar-resize-handle:focus-visible {
+    outline: 2px solid var(--hotel-gold);
+    outline-offset: -3px;
+}
+
+.drawer-open,
+.drawer-close,
+.drawer-backdrop,
+.sidebar-tooltip {
+    display: none;
+}
+
+.sidebar-collapsed .sidebar-tooltip {
+    position: fixed;
+    z-index: 190;
+    display: block;
+    transform: translateY(-50%);
+    padding: var(--hotel-space-2xs) var(--hotel-space-xs);
+    border-radius: var(--hotel-radius-small);
+    background: var(--hotel-navy);
+    box-shadow: var(--hotel-shadow);
+    color: var(--hotel-white);
+    font-size: var(--hotel-font-small);
+    font-weight: 700;
+    pointer-events: none;
+}
+
+.login-page {
+    padding-top: max(var(--hotel-space-lg), var(--hotel-safe-top));
+    padding-right: max(var(--hotel-space-lg), var(--hotel-safe-right));
+    padding-bottom: max(var(--hotel-space-lg), var(--hotel-safe-bottom));
+    padding-left: max(var(--hotel-space-lg), var(--hotel-safe-left));
+}
+
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
+    body[data-page] {
+        overflow-x: clip;
+    }
+
+    html:has(body.drawer-opened),
+    body[data-page].drawer-opened {
+        overflow: hidden;
+    }
+
+    body[data-page] .shell,
+    body[data-page].sidebar-collapsed .shell {
+        width: 100%;
+        margin-left: 0 !important;
+    }
+
+    body[data-page] .sidebar,
+    body[data-page].sidebar-collapsed .sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 202;
+        width: var(--hotel-drawer-width) !important;
+        max-width: none;
+        height: 100dvh;
+        transform: translateX(-100%);
+        visibility: hidden;
+        transition: transform 180ms ease, visibility 180ms ease;
+    }
+
+    body[data-page].drawer-opened .sidebar {
+        transform: translateX(0);
+        visibility: visible;
+        transition: transform 180ms ease;
+    }
+
+    body[data-page] .brand,
+    body[data-page].sidebar-collapsed .brand {
+        height: 104px;
+        padding-top: 0;
+    }
+
+    body[data-page] .sidebar nav {
+        flex: 1 1 auto;
+    }
+
+    body[data-page].sidebar-collapsed .sidebar nav a {
+        justify-content: flex-start;
+        padding-inline: var(--hotel-space-sm);
+    }
+
+    body[data-page].sidebar-collapsed .sidebar nav .nav-label {
+        display: inline;
+    }
+
+    .drawer-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 201;
+        visibility: hidden;
+        opacity: 0;
+        background: var(--hotel-drawer-backdrop);
+        transition: opacity 180ms ease, visibility 180ms ease;
+    }
+
+    .drawer-opened .drawer-backdrop {
+        visibility: visible;
+        opacity: 1;
+        transition: opacity 180ms ease;
+    }
+
+    .drawer-open,
+    .drawer-close {
+        display: grid;
+        place-items: center;
+        flex: 0 0 var(--hotel-control-size);
+        width: var(--hotel-control-size);
+        height: var(--hotel-control-size);
+        padding: 0;
+        border: 0;
+        border-radius: var(--hotel-radius-small);
+        background: transparent;
+        color: var(--hotel-white);
+        cursor: pointer;
+    }
+
+    .drawer-close:focus-visible {
+        outline-color: var(--hotel-gold);
+        outline-offset: -3px;
+    }
+
+    .drawer-open:hover,
+    .drawer-close:hover {
+        background: rgb(255 255 255 / 15%);
+    }
+
+    body[data-page] .topbar {
+        justify-content: flex-start;
+        min-height: calc(var(--hotel-mobile-bar-height) + var(--hotel-safe-top));
+        padding: calc(var(--hotel-space-2xs) + var(--hotel-safe-top))
+            max(var(--hotel-space-xs), var(--hotel-safe-right))
+            var(--hotel-space-2xs)
+            max(var(--hotel-space-xs), var(--hotel-safe-left));
+        gap: var(--hotel-space-2xs);
+    }
+
+    .session-trigger {
+        padding-block: 0;
+    }
+
+    .session-bell,
+    .session-trigger .session-avatar {
+        min-width: var(--hotel-control-size);
+    }
+
+    body[data-page] main {
+        padding-inline: max(var(--hotel-space-md), var(--hotel-safe-left))
+            max(var(--hotel-space-md), var(--hotel-safe-right));
+        padding-bottom: max(var(--hotel-space-xl), var(--hotel-safe-bottom));
+    }
+
+    .page-heading {
+        display: grid;
+        gap: var(--hotel-space-2xs);
+    }
+
+    .page-heading .sub {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+    }
+
+    .page-clock {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--hotel-space-xs);
+        text-align: left;
+    }
+
+    .dashboard-cards .card {
+        min-width: 0;
+        min-height: 106px;
+        padding: var(--hotel-space-sm);
+    }
+
+    .dashboard-card-label .label {
+        font-size: 10px;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+    }
+
+    .dashboard-cards .card strong {
+        font-size: clamp(22px, 6vw, var(--hotel-font-metric));
+    }
+
+    .page-tools .top-actions {
+        align-items: end;
+        justify-content: flex-start;
+    }
+
+    .page-tools #topSearch {
+        flex: 1 1 100%;
+    }
+
+    .panel-head {
+        flex-direction: row;
+        justify-content: flex-start;
+    }
+
+    .panel-head h2 {
+        flex-basis: 100%;
+    }
+
+    .page-tools .filter-panel {
+        top: 100%;
+        z-index: 30;
+    }
+
+    .table-wrap {
+        width: 100%;
+        overflow: auto;
+    }
+
+    :is(.shell, .detail-modal, .login-card) :is(button, input, select, summary),
+    :is(.shell, .detail-modal, .login-card) a:is(.button-link, .primary, .secondary, .gold) {
+        min-height: var(--hotel-control-size);
+    }
+
+    .detail-modal {
+        align-items: flex-end;
+        padding: max(var(--hotel-space-xs), var(--hotel-safe-top)) 0 0;
+    }
+
+    .detail-dialog {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        min-height: min(82dvh, 660px);
+        max-height: calc(100dvh - max(var(--hotel-space-xs), var(--hotel-safe-top)));
+        padding: var(--hotel-space-md)
+            max(var(--hotel-space-md), var(--hotel-safe-right))
+            max(var(--hotel-space-md), var(--hotel-safe-bottom))
+            max(var(--hotel-space-md), var(--hotel-safe-left));
+        border-radius: var(--hotel-radius) var(--hotel-radius) 0 0;
+    }
+
+    .modal-header {
+        flex: none;
+    }
+
+    .modal-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    .detail-modal .modal-close {
+        flex: 0 0 var(--hotel-control-size);
+        width: var(--hotel-control-size);
+        height: var(--hotel-control-size);
+    }
+
+    .detail-modal .modal-close,
+    .shell .action-btn {
+        min-height: var(--hotel-control-size);
+    }
+}
+
+@media (max-width: 900px) {
+    .table-wrap table {
+        min-width: 640px;
+    }
+}
+
+@media (max-width: 479px) {
+    .topbar-popup {
+        padding-inline: var(--hotel-safe-left) var(--hotel-safe-right);
+        max-height: calc(100dvh - var(--hotel-mobile-bar-height) - var(--hotel-safe-top));
+        overflow-y: auto;
+    }
+}
+
+@media (max-width: 339px) {
+    .dashboard-cards {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body[data-page] .sidebar,
+    body[data-page].drawer-opened .sidebar,
+    .drawer-backdrop,
+    .drawer-opened .drawer-backdrop {
+        transition: none;
+    }
+}
+
+/* Page filters */
+.filter-anchor {
+    position: relative;
+    flex: none;
+}
+
+.filter-count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 22px;
+    padding: 2px 5px;
+    border-radius: 999px;
+    background: var(--hotel-primary);
+    color: var(--hotel-white);
+    font-size: var(--hotel-font-small);
+    font-weight: 700;
+}
+
+.filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--hotel-space-xs);
+    margin-top: var(--hotel-space-xs);
+}
+
+.filter-chip,
+.filter-clear {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--hotel-space-2xs);
+    max-width: 100%;
+    padding: var(--hotel-space-2xs) var(--hotel-space-xs);
+    border: 0;
+    border-radius: 999px;
+    background: var(--hotel-neutral-bg);
+    color: var(--hotel-primary-hover);
+    font: inherit;
+    font-size: var(--hotel-font-small);
+    font-weight: 700;
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.filter-clear {
+    background: transparent;
+    text-decoration: underline;
+}
+
+.filter-chip:hover,
+.filter-clear:hover {
+    background: var(--hotel-row-hover);
+}
+
+.filter-chip .ui-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.page-tools .filter-anchor .filter-panel {
+    inset: calc(100% + var(--hotel-space-xs)) 0 auto auto;
+    z-index: 191;
+    width: min(520px, calc(100vw - 2 * var(--hotel-space-md)));
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    overflow: hidden;
+}
+
+.page-tools .filter-anchor .filter-panel.filter-above {
+    inset: auto 0 calc(100% + var(--hotel-space-xs)) auto;
+}
+
+.filter-panel form {
+    display: flex;
+    flex-direction: column;
+    max-height: min(70dvh, 620px, var(--filter-available-height, 620px));
+}
+
+.filter-heading,
+.filter-footer {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--hotel-space-xs);
+    padding: var(--hotel-space-xs) var(--hotel-space-md);
+}
+
+.filter-heading {
+    justify-content: space-between;
+    border-bottom: 1px solid var(--hotel-line);
+}
+
+.filter-heading h2 {
+    margin: 0;
+    font-size: var(--hotel-heading-size);
+}
+
+.filter-panel .filter-heading .filter-close {
+    width: var(--hotel-control-size);
+    padding: 0;
+}
+
+.filter-footer {
+    justify-content: flex-end;
+    border-top: 1px solid var(--hotel-line);
+}
+
+.filter-fields {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: var(--hotel-space-md);
+}
+
+.filter-fields h3 {
+    margin: 0 0 var(--hotel-space-xs);
+    font-size: var(--hotel-font-base);
+}
+
+.filter-grid + h3 {
+    margin-top: var(--hotel-space-lg);
+    padding-top: var(--hotel-space-md);
+    border-top: 1px solid var(--hotel-line);
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--hotel-space-md);
+}
+
+.filter-fields .field {
+    display: grid;
+    min-width: 0;
+    gap: var(--hotel-space-2xs);
+    margin: 0;
+    font-size: var(--hotel-font-small);
+}
+
+.filter-fields .field select,
+.page-tools .filter-fields .field input {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+
+.filter-fieldset {
+    grid-column: 1 / -1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.filter-fieldset legend {
+    margin-bottom: var(--hotel-space-2xs);
+    font-size: var(--hotel-font-small);
+    font-weight: 700;
+}
+
+.filter-options,
+.filter-range-inputs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--hotel-space-xs);
+}
+
+.filter-range-inputs > label {
+    flex: 1 1 110px;
+}
+
+.filter-panel .filter-fields .filter-choice {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--hotel-space-xs);
+    min-height: var(--hotel-control-size);
+    margin: 0;
+    padding: 0 var(--hotel-space-xs);
+    border: 1px solid var(--hotel-popup-border);
+    border-radius: var(--hotel-radius-small);
+    font-size: var(--hotel-font-small);
+    cursor: pointer;
+}
+
+.page-tools .filter-fields input[type='checkbox'] {
+    flex: 0 0 16px;
+    width: 16px;
+    min-width: 0;
+    height: 16px;
+    min-height: 0;
+    margin: 0;
+    accent-color: var(--hotel-primary);
+}
+
+.filter-choice:has(:checked) {
+    background: var(--hotel-neutral-bg);
+    border-color: var(--hotel-control-border);
+}
+
+.filter-error {
+    margin: var(--hotel-space-2xs) 0 0;
+}
+
+.filter-error:empty {
+    display: none;
+}
+
+.filter-scope-note {
+    color: var(--hotel-muted);
+    font-size: var(--hotel-font-small);
+}
+
+.table-empty:has(button) {
+    padding-bottom: var(--hotel-space-lg);
+    text-align: center;
+}
+
+.table-empty:has(button) .empty-state {
+    padding-bottom: var(--hotel-space-sm);
+}
+
+.filter-backdrop {
+    display: none;
+}
+
+@media (max-width: 767px), (max-width: 900px) and (max-height: 499px) {
+    html:has(body.filter-opened),
+    body.filter-opened {
+        overflow: hidden;
+    }
+
+    .filter-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 205;
+        background: var(--hotel-drawer-backdrop);
+    }
+
+    .page-tools .filter-anchor .filter-panel {
+        position: fixed;
+        inset: auto 0 0;
+        z-index: 206;
+        width: 100%;
+        border-radius: var(--hotel-radius) var(--hotel-radius) 0 0;
+        padding-inline: var(--hotel-safe-left) var(--hotel-safe-right);
+    }
+
+    .filter-panel form {
+        max-height: min(87dvh, calc(100dvh - var(--hotel-safe-top) - var(--hotel-space-md)));
+    }
+
+    .filter-footer {
+        padding-bottom: max(var(--hotel-space-xs), var(--hotel-safe-bottom));
+    }
+
+    .filter-footer > button {
+        flex: 1 1 0;
+    }
+}
+
+/* Keep compact controls usable when browser zoom or touch is used on desktop. */
+:is(.shell, .detail-modal) :is(.action-btn, .modal-close, .export-menu button) {
+    min-width: var(--hotel-control-size);
+    min-height: var(--hotel-control-size);
+}
+
+.detail-modal .modal-close {
+    flex: 0 0 var(--hotel-control-size);
+    width: var(--hotel-control-size);
+    height: var(--hotel-control-size);
+}
+
+@media (max-width: 900px) and (max-height: 499px) {
+    body[data-page] .brand,
+    body[data-page].sidebar-collapsed .brand {
+        height: 68px;
+    }
+
+    .sidebar-controls {
+        padding-block: var(--hotel-space-2xs);
+    }
+
+    .notification-popup {
+        max-height: calc(100dvh - var(--hotel-mobile-bar-height) - var(--hotel-safe-top)
+            - var(--hotel-safe-bottom) - var(--hotel-space-md));
+    }
+
+    .detail-modal .modal-form-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Shared record details and modal form fields */
+.modal-heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--hotel-space-xs) var(--hotel-space-sm);
+    min-width: 0;
+}
+
+.record-id-chip {
+    display: block;
+    max-inline-size: min(15ch, 100%);
+    padding: 3px var(--hotel-space-xs);
+    border-radius: var(--hotel-round);
+    background: var(--hotel-neutral-bg);
+    color: var(--hotel-navy);
+    font: .75rem ui-monospace, Consolas, monospace;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.record-section + .record-section {
+    margin-top: var(--hotel-space-md);
+}
+
+.record-section h3 {
+    margin: 0 0 var(--hotel-space-xs);
+    color: var(--hotel-navy);
+    font-size: .875rem;
+}
+
+.record-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--hotel-space-sm);
+    margin: 0;
+}
+
+.record-field,
+.detail-modal form label.field {
+    display: grid;
+    align-content: start;
+    min-width: 0;
+    gap: var(--hotel-space-xs);
+    padding: var(--hotel-space-md);
+    border: 1px solid var(--hotel-line);
+    border-radius: var(--hotel-radius);
+    background: var(--hotel-neutral-bg);
+    color: var(--hotel-muted);
+}
+
+.record-field-wide {
+    grid-column: 1 / -1;
+}
+
+.record-field dt,
+.detail-modal form label.field {
+    font-size: .8125rem;
+    font-weight: 700;
+}
+
+.record-field dd {
+    min-width: 0;
+    margin: 0;
+    color: var(--hotel-navy);
+    font-size: 1rem;
+    font-weight: 400;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.record-id-value {
+    display: flex;
+    align-items: center;
+    gap: var(--hotel-space-xs);
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.record-id-value code {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: .875rem;
+}
+
+.detail-modal .record-copy {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    padding: 0;
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+    border-radius: var(--hotel-radius-small);
+}
+
+.record-copy-buffer {
+    position: fixed;
+    inset: 0 auto auto 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.detail-modal .modal-scroll {
+    min-width: 0;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--hotel-muted) var(--hotel-neutral-bg);
+}
+
+.detail-modal .modal-scroll > form:not(:first-child) {
+    margin-block-start: var(--hotel-space-md);
+}
+
+.detail-modal form label.field :is(input, select, textarea) {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--hotel-muted);
+    color: var(--hotel-navy);
+    background: var(--hotel-white);
+    font-size: 1rem;
+    font-weight: 400;
+}
+
+.detail-modal form label.field :is(input, select, textarea):focus-visible {
+    outline: 2px solid var(--hotel-primary);
+    outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+    .detail-modal .record-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .detail-modal .record-copy {
+        width: var(--hotel-control-size);
+        height: var(--hotel-control-size);
+        min-height: var(--hotel-control-size);
+    }
+}
+
+.record-fields + .record-section,
+.record-section .record-fields + .record-fields {
+    margin-block-start: var(--hotel-space-md);
+}
+
+.detail-modal .modal-heading h2 {
+    margin: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    color: var(--hotel-navy);
+}
+
+.detail-modal .record-id-chip {
+    border-radius: var(--hotel-radius-small);
+}
+
+.detail-modal .modal-scroll {
+    scrollbar-gutter: stable;
 }
