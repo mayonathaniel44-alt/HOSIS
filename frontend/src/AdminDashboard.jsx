@@ -3,7 +3,9 @@ import { adminApi } from './services/api'
 import './AdminDashboard.css'
 
 const staffRoles = [
-  ['ADMIN', 'Administrator'],
+  ['FINANCE_ADMIN', 'Finance Admin'],
+  ['FINANCE_STAFF', 'Finance Staff'],
+  ['DEPARTMENT_HEAD', 'Department Head'],
   ['FRONT_OFFICE', 'Front Office'],
   ['HOUSEKEEPING', 'Housekeeping'],
   ['ENGINEERING', 'Engineering'],
@@ -44,7 +46,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenFina
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [showNewStaff, setShowNewStaff] = useState(false)
-  const [newStaff, setNewStaff] = useState({ username: '', password: '', role: 'FRONT_OFFICE' })
+  const [newStaff, setNewStaff] = useState({ username: '', password: '', role: 'FINANCE_STAFF' })
   const [staffSearch, setStaffSearch] = useState('')
   const [staffRoleFilter, setStaffRoleFilter] = useState('ALL')
   const [staffStatusFilter, setStaffStatusFilter] = useState('ALL')

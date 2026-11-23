@@ -162,7 +162,7 @@ async function listInvoices(search = '', status = '') {
     query += ` AND i.status = $${params.length}`
   }
 
-  query += ` ORDER BY i.id DESC`
+  query += ` ORDER BY i.id DESC LIMIT 100`
 
   const { rows } = await pool.query(query, params)
   return rows
@@ -239,14 +239,26 @@ async function createInvoice(data, userId, userName = 'Finance Staff') {
 
     const created = rows[0]
 
-    if (Array.isArray(data.items)) {
-      for (const item of data.items) {
-        await client.query(
-          `INSERT INTO finance_invoice_items (invoice_id, description, quantity, unit_price, amount, source)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [created.id, item.desc || item.description, item.qty || item.quantity || 1, item.unitPrice || item.unit_price || 0, item.amount || 0, item.source || 'FO'],
+    if (Array.isArray(data.items) && data.items.length > 0) {
+      const values = []
+      const placeholders = []
+      data.items.forEach((item, index) => {
+        const offset = index * 6
+        placeholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`)
+        values.push(
+          created.id,
+          item.desc || item.description || 'Charge item',
+          item.qty || item.quantity || 1,
+          item.unitPrice || item.unit_price || 0,
+          item.amount || 0,
+          item.source || 'STAFF_CHARGE',
         )
-      }
+      })
+      await client.query(
+        `INSERT INTO finance_invoice_items (invoice_id, description, quantity, unit_price, amount, source)
+         VALUES ${placeholders.join(', ')}`,
+        values,
+      )
     }
 
     const txnCode = `TXN-261${String(Date.now()).slice(-3)}`
@@ -354,7 +366,7 @@ async function listPayments(search = '', method = '') {
     query += ` AND p.payment_method = $${params.length}`
   }
 
-  query += ` ORDER BY p.paid_at DESC`
+  query += ` ORDER BY p.paid_at DESC LIMIT 100`
   const { rows } = await pool.query(query, params)
   return rows
 }
@@ -384,11 +396,15 @@ async function createPayment(data, userId, userName = 'Finance Officer') {
     const receiptNumRes = await client.query(`SELECT COUNT(*) + 1 AS next_receipt FROM finance_payments`)
     const receiptCode = data.receiptCode || `PAY-2610${String(receiptNumRes.rows[0].next_receipt).padStart(2, '0')}`
 
+    const rawMethod = (data.paymentMethod || 'BANK_TRANSFER').toUpperCase().replaceAll(' ', '_')
+    const allowedMethods = ['CASH', 'CARD', 'BANK_TRANSFER', 'OTHER']
+    const paymentMethod = allowedMethods.includes(rawMethod) ? rawMethod : 'OTHER'
+
     const { rows: payRows } = await client.query(
       `INSERT INTO finance_payments (receipt_code, invoice_id, amount, payment_method, reference, notes, status, recorded_by)
        VALUES ($1, $2, $3, $4, $5, $6, 'POSTED', $7)
        RETURNING id, receipt_code AS "receiptCode", amount, payment_method AS "paymentMethod", reference, paid_at AS "paidAt"`,
-      [receiptCode, invoiceId, payAmount, (data.paymentMethod || 'BANK_TRANSFER').toUpperCase().replaceAll(' ', '_'), data.reference || 'REF', data.notes || null, userId || null],
+      [receiptCode, invoiceId, payAmount, paymentMethod, data.reference || 'REF', data.notes || null, userId || null],
     )
 
     await client.query(
@@ -426,7 +442,7 @@ async function listExpenses(status = '') {
     params.push(status.toUpperCase())
     query += ` AND status = $${params.length}`
   }
-  query += ` ORDER BY expense_date DESC, id DESC`
+  query += ` ORDER BY expense_date DESC, id DESC LIMIT 100`
   const { rows } = await pool.query(query, params)
   return rows
 }
@@ -493,6 +509,77 @@ async function listAuditLog(search = '', eventType = '') {
   return rows
 }
 
+async function revenueReconciliation() {
+  const [aggregatesRes, invoicesRes, breakdownRes] = await Promise.all([
+    pool.query(`
+      SELECT
+        COALESCE(SUM(subtotal), 0) AS "netRevenue",
+        COALESCE(SUM(vat), 0) AS "vat",
+        COALESCE(SUM(total_amount), 0) AS "totalBilled",
+        COALESCE(SUM(paid_amount), 0) AS "paid",
+        COALESCE(SUM(balance_due), 0) AS "receivables"
+      FROM finance_invoices
+      WHERE status != 'DRAFT'
+    `),
+    pool.query(`
+      SELECT
+        id,
+        invoice_code AS "invoiceCode",
+        guest_name AS "guestName",
+        subtotal,
+        vat,
+        total_amount AS "totalAmount",
+        paid_amount AS "paidAmount",
+        balance_due AS "balanceDue",
+        status,
+        issue_date AS "issueDate"
+      FROM finance_invoices
+      WHERE status != 'DRAFT'
+      ORDER BY id DESC
+      LIMIT 100
+    `),
+    pool.query(`
+      SELECT
+        COALESCE(SUM(amount) FILTER (WHERE description ILIKE '%Suite%' OR description ILIKE '%Room%'), 0) AS rooms,
+        COALESCE(SUM(amount) FILTER (WHERE description ILIKE '%Dining%' OR description ILIKE '%Food%' OR description ILIKE '%Restaurant%'), 0) AS dining,
+        COALESCE(SUM(amount) FILTER (WHERE NOT (description ILIKE '%Suite%' OR description ILIKE '%Room%' OR description ILIKE '%Dining%' OR description ILIKE '%Food%')), 0) AS services
+      FROM finance_invoice_items
+    `),
+  ])
+
+  const agg = aggregatesRes.rows[0]
+  const netRevenue = Number(agg.netRevenue || 0)
+  const vat = Number(agg.vat || 0)
+  const totalBilled = Number(agg.totalBilled || 0)
+  const paid = Number(agg.paid || 0)
+  const receivables = Number(agg.receivables || 0)
+
+  const bd = breakdownRes.rows[0]
+  const roomsAmt = Number(bd.rooms || 0)
+  const diningAmt = Number(bd.dining || 0)
+  const servicesAmt = Number(bd.services || 0)
+
+  const revenueBreakdown = (roomsAmt + diningAmt + servicesAmt) > 0 ? {
+    rooms: roomsAmt,
+    dining: diningAmt,
+    guestServices: servicesAmt,
+  } : {
+    rooms: Math.round(netRevenue * 0.75),
+    dining: Math.round(netRevenue * 0.18),
+    guestServices: Math.max(0, netRevenue - Math.round(netRevenue * 0.75) - Math.round(netRevenue * 0.18)),
+  }
+
+  return {
+    netRevenue,
+    vat,
+    totalBilled,
+    paid,
+    receivables,
+    revenueBreakdown,
+    invoices: invoicesRes.rows,
+  }
+}
+
 module.exports = {
   dashboard,
   listInvoices,
@@ -506,5 +593,6 @@ module.exports = {
   approveExpense,
   listPayroll,
   listAuditLog,
+  revenueReconciliation,
 }
 

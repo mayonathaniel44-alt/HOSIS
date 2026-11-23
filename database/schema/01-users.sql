@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
             'HOUSEKEEPING',
             'HR',
             'FINANCE',
+            'FINANCE_ADMIN',
+            'FINANCE_STAFF',
+            'DEPARTMENT_HEAD',
             'SALES_MARKETING',
             'ENGINEERING'
         )

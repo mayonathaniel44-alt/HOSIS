@@ -23,3 +23,24 @@ test('administrator role passes the role guard', () => {
 
   assert.equal(nextCalled, true)
 })
+
+test('finance roles pass the finance role guard', () => {
+  const requireFinance = authorize('FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD', 'ADMIN')
+  const allowed = ['FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD', 'ADMIN']
+
+  for (const role of allowed) {
+    let nextCalled = false
+    requireFinance({ user: { role } }, {}, (error) => {
+      assert.equal(error, undefined)
+      nextCalled = true
+    })
+    assert.equal(nextCalled, true, `Role ${role} should pass finance guard`)
+  }
+
+  let rejected = false
+  requireFinance({ user: { role: 'HOUSEKEEPING' } }, {}, (error) => {
+    assert.equal(error.status, 403)
+    rejected = true
+  })
+  assert.equal(rejected, true)
+})

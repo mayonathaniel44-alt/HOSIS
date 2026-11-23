@@ -17,6 +17,375 @@
   --fin-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
+/* Fullscreen Isolated System Layout */
+.finance-root-fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--fin-bg);
+  color: var(--fin-text);
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  z-index: 999;
+}
+
+/* Top Navbar for Financial Tasks */
+.finance-top-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 24px;
+  background: linear-gradient(90deg, #090e2b 0%, #0d1238 40%, #151b4d 100%);
+  border-bottom: 2px solid #d4af37;
+  box-shadow: 0 4px 20px rgba(7, 10, 36, 0.25);
+  flex-shrink: 0;
+  z-index: 100;
+  user-select: none;
+}
+
+.finance-navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.finance-navbar-brand .finance-brand-crest {
+  width: 38px;
+  height: 34px;
+}
+
+.finance-brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.finance-brand-name {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #eed69b;
+  letter-spacing: 0.04em;
+  margin: 0;
+  line-height: 1.1;
+}
+
+.finance-subsystem-badge {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #c9ab57;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* Central Financial Task Navigation */
+.finance-tasks-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(8, 12, 38, 0.6);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.finance-task-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #c5d2e8;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.finance-task-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.finance-task-tab.active {
+  background: linear-gradient(180deg, #f7b731 0%, #db9513 100%);
+  color: #0b0f2a;
+  font-weight: 800;
+  border-color: #f7b731;
+  box-shadow: 0 2px 10px rgba(247, 183, 49, 0.35);
+}
+
+.task-tab-icon {
+  font-size: 14px;
+}
+
+/* Navbar Meta / User & Role */
+.finance-navbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.finance-role-pill {
+  padding: 4px 10px;
+  background: rgba(245, 183, 41, 0.15);
+  border: 1px solid rgba(245, 183, 41, 0.4);
+  color: #fce79a;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.finance-user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.finance-user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d4af37, #996515);
+  color: #0d1238;
+  font-weight: 800;
+  font-size: 10.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.finance-user-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.finance-user-info strong {
+  color: #f1f5f9;
+  font-size: 11.5px;
+}
+
+.finance-user-info small {
+  color: #94a3b8;
+  font-size: 9.5px;
+}
+
+.finance-signout-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.finance-signout-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+/* Fullscreen Content Area */
+.finance-fullscreen-main {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 24px 32px 48px;
+  background: var(--fin-bg);
+}
+
+.finance-fullscreen-container {
+  max-width: 1560px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Clickable Table Rows with Smooth Hover */
+.clickable-row {
+  cursor: pointer !important;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.clickable-row:hover {
+  background-color: #f1f5f9 !important;
+}
+
+.clickable-row:active {
+  background-color: #e2e8f0 !important;
+}
+
+/* Modal Popup Window Styles */
+.fin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 18, 56, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+  animation: finFadeIn 0.2s ease-out;
+}
+
+.fin-modal-window {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(13, 18, 56, 0.28);
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  animation: finSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fin-modal-window.wide {
+  max-width: 860px;
+}
+
+.fin-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fafaf8;
+}
+
+.fin-modal-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 19px;
+  font-weight: 700;
+  color: #0d1238;
+  margin: 0;
+}
+
+.fin-modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.fin-modal-close-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.fin-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.fin-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+@keyframes finFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes finSlideUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Payslip / Receipt Paper Display */
+.fin-paper-document {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 28px 32px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+}
+
+.fin-paper-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid #0d1238;
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+}
+
+.fin-paper-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0d1238;
+  margin: 0;
+}
+
+.fin-paper-subtitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #947120;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* Radio button toggle pill for Fully Paid / Half */
+.fin-pill-toggle {
+  display: inline-flex;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 3px;
+  border: 1px solid #e2e8f0;
+}
+
+.fin-pill-toggle button {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fin-pill-toggle button.active {
+  background: #ffffff;
+  color: #0d1238;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+
 .finance-root {
   display: flex;
   position: fixed;

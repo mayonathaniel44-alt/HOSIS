@@ -143,6 +143,9 @@ function Status({ children, tone = 'blue' }) {
   return <span className={`status status-${tone}`}><i />{children}</span>
 }
 
+const isFinanceRole = (role) => ['FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD'].includes(role)
+const isAdminRole = (role) => ['ADMIN', 'FINANCE_ADMIN'].includes(role)
+
 function App() {
   const [signedIn, setSignedIn] = useState(false)
   const [user, setUser] = useState(null)
@@ -150,7 +153,7 @@ function App() {
   const [showFinanceConsole, setShowFinanceConsole] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [accessRole, setAccessRole] = useState('FRONT_OFFICE')
+  const [accessRole, setAccessRole] = useState('FINANCE_ADMIN')
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(false)
   const [activePage, setActivePage] = useState('Dashboard')
@@ -200,7 +203,8 @@ function App() {
       if (!active) return
       setUser(result.user)
       setSignedIn(true)
-      setShowAdminConsole(result.user.role === 'ADMIN')
+      setShowAdminConsole(isAdminRole(result.user.role))
+      setShowFinanceConsole(isFinanceRole(result.user.role))
     }).catch((error) => {
       if (!active) return
       authApi.clearSession()
@@ -220,7 +224,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!signedIn) return
+    if (!signedIn || isFinanceRole(user?.role)) return
     let active = true
     setLoadingWorkspace(true)
     refreshData().catch((error) => {
@@ -229,7 +233,7 @@ function App() {
       if (active) setLoadingWorkspace(false)
     })
     return () => { active = false }
-  }, [refreshData, signedIn])
+  }, [refreshData, signedIn, user?.role])
 
   const filteredReservations = useMemo(() => reservations.filter((item) =>
     `${item.code} ${item.guest} ${item.room} ${item.type} ${item.statusLabel}`.toLowerCase().includes(search.toLowerCase())
@@ -264,7 +268,8 @@ function App() {
       authApi.saveSession(session, remember)
       setUser(session.user)
       setSignedIn(true)
-      setShowAdminConsole(session.user.role === 'ADMIN')
+      setShowAdminConsole(isAdminRole(session.user.role))
+      setShowFinanceConsole(isFinanceRole(session.user.role))
       setPassword('')
       setActivePage('Dashboard')
     } catch (error) {
@@ -324,6 +329,7 @@ function App() {
       authApi.clearSession()
       setSignedIn(false)
       setShowAdminConsole(false)
+      setShowFinanceConsole(false)
       setUser(null)
       setDashboard(null)
       setReservations([])
@@ -432,11 +438,20 @@ function App() {
   const displayName = user?.username
     ? user.username.replace(/[._-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
     : 'Front Office'
-  const accessLabel = user?.role === 'ADMIN' ? 'Administrator' : 'Front Office'
+  const roleDisplayNames = {
+    FINANCE_ADMIN: 'Finance Admin',
+    FINANCE_STAFF: 'Finance Staff',
+    DEPARTMENT_HEAD: 'Department Head',
+    ADMIN: 'Finance Admin',
+    FRONT_OFFICE: 'Front Office',
+    FINANCE: 'Accounting & Finance',
+  }
+  const accessLabel = roleDisplayNames[user?.role] || 'Staff'
 
-  if (signedIn && (user?.role === 'FINANCE' || showFinanceConsole)) {
+  if (signedIn && (isFinanceRole(user?.role) || showFinanceConsole)) {
     return (
       <FinanceDashboard
+        user={user}
         onOpenFrontOffice={() => {
           setShowFinanceConsole(false)
           setShowAdminConsole(false)
@@ -450,7 +465,7 @@ function App() {
     )
   }
 
-  if (signedIn && user?.role === 'ADMIN' && showAdminConsole) {
+  if (signedIn && (user?.role === 'ADMIN' || user?.role === 'FINANCE_ADMIN') && showAdminConsole) {
     return (
       <AdminDashboard
         username={user.username}
@@ -488,7 +503,17 @@ function App() {
                 <span className="login-icon"><Icon name="lock" size={18} /></span>
                 <span className="eyebrow">TEAM PORTAL</span>
                 <h2>Welcome back</h2>
-                <p>{accessRole === 'ADMIN' ? 'Sign in with your administrator account.' : accessRole === 'FINANCE' ? 'Sign in to the accounting & finance workspace.' : 'Sign in to your front office workspace.'}</p>
+                <p>
+                  {accessRole === 'FINANCE_ADMIN'
+                    ? 'Sign in to the finance administration workspace.'
+                    : accessRole === 'FINANCE_STAFF'
+                    ? 'Sign in to the finance & accounting workspace.'
+                    : accessRole === 'DEPARTMENT_HEAD'
+                    ? 'Sign in as department head for approvals and financial oversight.'
+                    : accessRole === 'ADMIN'
+                    ? 'Sign in with your administrator account.'
+                    : 'Sign in to your front office workspace.'}
+                </p>
               </div>
               <form className="login-form" onSubmit={signIn}>
                 <label htmlFor="username">Username</label>
@@ -496,17 +521,69 @@ function App() {
                 <label htmlFor="password">Password</label>
                 <div className="input-wrap"><Icon name="lock" size={17} /><input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" autoComplete="current-password" /><button className="input-action" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword((value) => !value)}><Icon name="eye" size={17} /></button></div>
                 <label htmlFor="accessRole">Access type</label>
-                <div className="select-wrap"><select id="accessRole" value={accessRole} onChange={(event) => setAccessRole(event.target.value)}><option value="FRONT_OFFICE">Front Office</option><option value="ADMIN">Administrator</option><option value="FINANCE">Accounting &amp; Finance</option></select><Icon name="chevron" size={15} /></div>
+                <div className="select-wrap">
+                  <select id="accessRole" value={accessRole} onChange={(event) => setAccessRole(event.target.value)}>
+                    <option value="FINANCE_ADMIN">Finance Admin</option>
+                    <option value="FINANCE_STAFF">Finance Staff</option>
+                    <option value="DEPARTMENT_HEAD">Department Head</option>
+                    <option value="FRONT_OFFICE">Front Office</option>
+                  </select>
+                  <Icon name="chevron" size={15} />
+                </div>
                 <div className="form-options">
                   <label className="remember-label"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Remember me</label>
-                  <button type="button" className="text-button" onClick={() => { setUser({ username: 'finance.officer', role: 'FINANCE' }); setSignedIn(true); setShowFinanceConsole(true); }}>Preview Finance UI →</button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      const role = ['FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD'].includes(accessRole)
+                        ? accessRole
+                        : 'FINANCE_ADMIN'
+                      const nameMap = {
+                        FINANCE_ADMIN: 'finance.admin',
+                        FINANCE_STAFF: 'finance.staff',
+                        DEPARTMENT_HEAD: 'dept.head',
+                      }
+                      setUser({ username: nameMap[role] || 'finance.officer', role })
+                      setSignedIn(true)
+                      setShowFinanceConsole(true)
+                    }}
+                  >
+                    Preview Finance UI →
+                  </button>
                 </div>
                 <button className="login-submit" type="submit" disabled={loginLoading}>{loginLoading ? 'Signing in…' : 'Sign in'} <Icon name="arrow" size={16} /></button>
               </form>
-              <div className="login-footer"><span>{accessRole === 'ADMIN' ? 'ADMINISTRATOR ACCESS' : accessRole === 'FINANCE' ? 'FINANCE ACCESS' : 'FRONT OFFICE ACCESS'}</span><span><i /> SECURE API SIGN-IN</span></div>
+              <div className="login-footer">
+                <span>
+                  {accessRole === 'FINANCE_ADMIN'
+                    ? 'FINANCE ADMIN ACCESS'
+                    : accessRole === 'FINANCE_STAFF'
+                    ? 'FINANCE STAFF ACCESS'
+                    : accessRole === 'DEPARTMENT_HEAD'
+                    ? 'DEPARTMENT HEAD ACCESS'
+                    : accessRole === 'FRONT_OFFICE'
+                    ? 'FRONT OFFICE ACCESS'
+                    : 'FINANCE ACCESS'}
+                </span>
+                <span><i /> SECURE API SIGN-IN</span>
+              </div>
             </section>
           </div>
-          <footer className="login-bottom"><span>© {today.getFullYear()} Grand Horizon Hotel</span><span>Secure staff access · {accessRole === 'ADMIN' ? 'Administrator' : 'Front Office'}</span></footer>
+          <footer className="login-bottom">
+            <span>© {today.getFullYear()} Grand Horizon Hotel</span>
+            <span>
+              Secure staff access · {accessRole === 'FINANCE_ADMIN'
+                ? 'Finance Admin'
+                : accessRole === 'FINANCE_STAFF'
+                ? 'Finance Staff'
+                : accessRole === 'DEPARTMENT_HEAD'
+                ? 'Department Head'
+                : accessRole === 'FRONT_OFFICE'
+                ? 'Front Office'
+                : 'Finance'}
+            </span>
+          </footer>
         </div>
         {toast && <div className="toast"><Icon name="message" size={17} />{toast}</div>}
       </main>
@@ -618,7 +695,7 @@ function App() {
         <div className="sidebar-brand"><Brand /></div>
         <div className="sidebar-label">FRONT OFFICE</div>
         <nav className="side-nav" aria-label="Workspace navigation">
-          {user?.role === 'ADMIN' && <button className="nav-item" onClick={() => setShowAdminConsole(true)}><Icon name="lock" size={18} /><span>Admin console</span></button>}
+          {(user?.role === 'ADMIN' || user?.role === 'FINANCE_ADMIN') && <button className="nav-item" onClick={() => setShowAdminConsole(true)}><Icon name="lock" size={18} /><span>Admin console</span></button>}
           <button className="nav-item" onClick={() => setShowFinanceConsole(true)}><Icon name="receipt" size={18} /><span>Finance workspace</span></button>
           {navigation.map((item) => <button key={item.id} className={`nav-item ${activePage === item.id ? 'nav-active' : ''}`} onClick={() => { setActivePage(item.id); setSearch(''); setArrivalFilter('All arrivals') }}><Icon name={item.icon} size={18} /><span>{item.id}</span>{item.id === 'Guest requests' && requests.filter((request) => request.status === 'NEW').length > 0 && <span className="nav-count">{requests.filter((request) => request.status === 'NEW').length}</span>}</button>)}
         </nav>

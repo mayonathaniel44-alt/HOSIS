@@ -1,6 +1,17 @@
 const { appError } = require('./errors')
 
-const staffRoles = new Set(['ADMIN', 'FRONT_OFFICE', 'HOUSEKEEPING', 'HR', 'FINANCE', 'SALES_MARKETING', 'ENGINEERING'])
+const staffRoles = new Set([
+  'ADMIN',
+  'FRONT_OFFICE',
+  'HOUSEKEEPING',
+  'HR',
+  'FINANCE',
+  'FINANCE_ADMIN',
+  'FINANCE_STAFF',
+  'DEPARTMENT_HEAD',
+  'SALES_MARKETING',
+  'ENGINEERING',
+])
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function requiredText(value, field, maxLength) {

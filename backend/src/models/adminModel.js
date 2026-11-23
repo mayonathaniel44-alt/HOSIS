@@ -34,7 +34,7 @@ async function dashboard() {
     pool.query(
       `SELECT COUNT(*)::integer AS total,
               COUNT(*) FILTER (WHERE is_active)::integer AS active,
-              COUNT(*) FILTER (WHERE is_active AND role = 'ADMIN')::integer AS admins
+              COUNT(*) FILTER (WHERE is_active AND role IN ('ADMIN', 'FINANCE_ADMIN'))::integer AS admins
        FROM users`,
     ),
     pool.query(
@@ -94,10 +94,10 @@ async function updateStaff(id, fields, userId) {
 
     const nextRole = fields.role || current.role
     const nextActive = fields.isActive === undefined ? current.is_active : fields.isActive
-    if (current.role === 'ADMIN' && current.is_active && (nextRole !== 'ADMIN' || !nextActive)) {
+    if (['ADMIN', 'FINANCE_ADMIN'].includes(current.role) && current.is_active && (!['ADMIN', 'FINANCE_ADMIN'].includes(nextRole) || !nextActive)) {
       const { rows } = await client.query(
         `SELECT COUNT(*)::integer AS count FROM users
-         WHERE role = 'ADMIN' AND is_active AND id <> $1`,
+         WHERE role IN ('ADMIN', 'FINANCE_ADMIN') AND is_active AND id <> $1`,
         [id],
       )
       if (rows[0].count < 1) {

@@ -12,22 +12,32 @@ const invalidCredentials = () => {
 
 async function login(username, password, requestedRole) {
   const user = await userModel.findByUsername(username)
-  if (!user || !user.is_active || !['FRONT_OFFICE', 'ADMIN', 'FINANCE'].includes(user.role)) {
+  const allowedRoles = ['FRONT_OFFICE', 'ADMIN', 'FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD']
+  if (!user || !user.is_active || !allowedRoles.includes(user.role)) {
     throw invalidCredentials()
   }
 
   const matches = await bcrypt.compare(password, user.password_hash)
-  if (!matches || (requestedRole && user.role !== requestedRole)) throw invalidCredentials()
+  const financeRoles = ['FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD']
+  const roleMatches = !requestedRole || user.role === requestedRole || (
+    (['FINANCE', 'ADMIN'].includes(user.role) && financeRoles.includes(requestedRole)) ||
+    (financeRoles.includes(user.role) && requestedRole === 'FINANCE')
+  )
+  if (!matches || !roleMatches) throw invalidCredentials()
+
+  const effectiveRole = (['FINANCE', 'ADMIN'].includes(user.role) && ['FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD'].includes(requestedRole))
+    ? requestedRole
+    : user.role
 
   const token = jwt.sign(
-    { role: user.role, sessionVersion: user.sessionVersion },
+    { role: effectiveRole, sessionVersion: user.sessionVersion },
     env.jwtSecret,
     { subject: String(user.id), expiresIn: env.jwtExpiresIn },
   )
 
   return {
     token,
-    user: { id: user.id, username: user.username, role: user.role },
+    user: { id: user.id, username: user.username, role: effectiveRole },
   }
 }
 

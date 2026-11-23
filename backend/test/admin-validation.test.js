@@ -10,6 +10,9 @@ test('staff usernames are normalized and restricted to safe characters', () => {
 
 test('staff roles and account update values are validated', () => {
   assert.equal(validation.staffRole('FINANCE'), 'FINANCE')
+  assert.equal(validation.staffRole('FINANCE_ADMIN'), 'FINANCE_ADMIN')
+  assert.equal(validation.staffRole('FINANCE_STAFF'), 'FINANCE_STAFF')
+  assert.equal(validation.staffRole('DEPARTMENT_HEAD'), 'DEPARTMENT_HEAD')
   assert.throws(() => validation.staffRole('ACCOUNTING'), { codeName: 'INVALID_ROLE' })
   assert.deepEqual(validation.staffUpdate({ role: 'HR', isActive: false }), { role: 'HR', isActive: false })
   assert.throws(() => validation.staffUpdate({ isActive: 'false' }), { codeName: 'INVALID_ACTIVE_STATUS' })

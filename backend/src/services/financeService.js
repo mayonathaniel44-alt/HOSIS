@@ -55,28 +55,12 @@ async function listAuditLog(search, eventType) {
 }
 
 async function revenueReconciliation() {
-  const invoices = await model.listInvoices()
-  const issuedInvoices = invoices.filter((i) => i.status !== 'DRAFT')
-
-  const netRevenue = issuedInvoices.reduce((sum, i) => sum + Number(i.subtotal), 0)
-  const vat = issuedInvoices.reduce((sum, i) => sum + Number(i.vat), 0)
-  const totalBilled = issuedInvoices.reduce((sum, i) => sum + Number(i.totalAmount), 0)
-  const paid = issuedInvoices.reduce((sum, i) => sum + Number(i.paidAmount), 0)
-  const receivables = issuedInvoices.reduce((sum, i) => sum + Number(i.balanceDue), 0)
-
-  return {
-    netRevenue,
-    vat,
-    totalBilled,
-    paid,
-    receivables,
-    invoices: issuedInvoices,
-  }
+  return model.revenueReconciliation()
 }
 
 async function generateReport(reportType = 'Income & expenditure') {
   const [rev, expenses, payroll] = await Promise.all([
-    revenueReconciliation(),
+    model.revenueReconciliation(),
     model.listExpenses('APPROVED'),
     model.listPayroll(),
   ])
@@ -92,11 +76,7 @@ async function generateReport(reportType = 'Income & expenditure') {
     netRevenue: rev.netRevenue,
     approvedCosts: totalApprovedCosts,
     operatingSurplus,
-    revenueBreakdown: {
-      rooms: 44000,
-      dining: 8500,
-      guestServices: 3000,
-    },
+    revenueBreakdown: rev.revenueBreakdown,
     expenses,
     payrollTotal: payroll.reduce((s, p) => s + Number(p.grossPay), 0),
   }

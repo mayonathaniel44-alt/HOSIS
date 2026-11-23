@@ -6,8 +6,8 @@ const { requireBody, requireId } = require('../middleware/validate')
 
 const router = express.Router()
 
-// Allow FINANCE and ADMIN (and FRONT_OFFICE read access where permitted)
-router.use(authenticate, authorize('FINANCE', 'ADMIN', 'FRONT_OFFICE'))
+// Allow FINANCE, FINANCE_ADMIN, FINANCE_STAFF, DEPARTMENT_HEAD, and ADMIN (and FRONT_OFFICE read access where permitted)
+router.use(authenticate, authorize('FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD', 'ADMIN', 'FRONT_OFFICE'))
 
 router.get('/dashboard', controller.dashboard)
 

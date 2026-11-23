@@ -1,773 +1,285 @@
-import { useEffect, useState } from 'react'
-import { initialInvoiceRecords, reservationLookupPool } from '../financeData'
+import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
 
-export default function InvoicesView({ showToast }) {
-  const [subMode, setSubMode] = useState('list') // 'list' | 'create' | 'edit-draft'
-  const [invoices, setInvoices] = useState(initialInvoiceRecords)
+export default function InvoicesView({ user, showToast }) {
+  const [invoices, setInvoices] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [staffList, setStaffList] = useState([])
+
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
+  const [departmentFilter, setDepartmentFilter] = useState('All')
 
-  // Selected draft for editing (Image 3)
-  const [draftInvoice, setDraftInvoice] = useState(
-    invoices.find((i) => i.id === 'INV-261005') || invoices[4]
+  // Modals state
+  const [selectedInvoice, setSelectedInvoice] = useState(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+
+  // Create Staff Invoice form state
+  const [staffName, setStaffName] = useState('')
+  const [empId, setEmpId] = useState('')
+  const [department, setDepartment] = useState('Front Office')
+  const [email, setEmail] = useState('')
+  const [purpose, setPurpose] = useState('Staff Uniform & Grooming Replacement')
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10))
+  const [dueDate, setDueDate] = useState(
+    new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
   )
-
-  useEffect(() => {
-    let active = true
-    financeApi.invoices()
-      .then((records) => {
-        if (!active || !records || !records.length) return
-        const mapped = records.map((r) => ({
-          id: r.invoiceCode || `INV-${r.id}`,
-          dbId: r.id,
-          date: r.issueDate || 'Draft',
-          guest: r.guestName,
-          reservation: r.reservationCode || '—',
-          room: r.roomNumber || '—',
-          total: Number(r.totalAmount || 0),
-          paid: Number(r.paidAmount || 0),
-          balance: Number(r.balanceDue || 0),
-          status: r.status === 'PART_PAID' ? 'Part-paid' : r.status === 'ISSUED' ? 'Issued' : r.status === 'PAID' ? 'Paid' : 'Draft',
-          email: r.guestEmail || '',
-          dueDate: r.dueDate || '',
-        }))
-        setInvoices(mapped)
-      })
-      .catch(() => {})
-    return () => { active = false }
-  }, [])
-
-  // Create invoice form states (Image 2)
-  const [lookupQuery, setLookupQuery] = useState('RES-261006 · Miguel Dela Cruz')
-  const [matchedReservation, setMatchedReservation] = useState(reservationLookupPool[0])
-  const [createBillTo, setCreateBillTo] = useState('Miguel Dela Cruz')
-  const [createEmail, setCreateEmail] = useState('miguel.dc@example.com')
-  const [createDate, setCreateDate] = useState('2026-10-15')
-  const [createDueDate, setCreateDueDate] = useState('2026-10-16')
-  const [createLines, setCreateLines] = useState([
-    { desc: 'Deluxe King · FO-1006', qty: 2, unitPrice: 4000, amount: 8000 },
-    { desc: 'Dining · POS-1006', qty: 1, unitPrice: 1500, amount: 1500 },
-    { desc: 'Airport transfer · FO-1006', qty: 1, unitPrice: 500, amount: 500 },
+  const [lines, setLines] = useState([
+    { desc: 'Front Desk Uniform & Blazer Set', qty: 1, unitPrice: 2800, amount: 2800 },
+    { desc: 'Engraved Hotel Crest Nameplate', qty: 1, unitPrice: 350, amount: 350 },
   ])
 
-  // Calculations for create invoice
-  const createSubtotal = createLines.reduce((sum, item) => sum + item.amount, 0)
-  const createVat = Math.round(createSubtotal * 0.12)
-  const createTotal = createSubtotal + createVat
+  async function loadInvoices() {
+    setLoading(true)
+    try {
+      const [invRes, payrRes] = await Promise.all([
+        financeApi.invoices('', ''),
+        financeApi.payroll().catch(() => []),
+      ])
 
-  function handleRetrieveCharges() {
-    const found = reservationLookupPool.find(
-      (r) =>
-        r.resId.toLowerCase().includes(lookupQuery.toLowerCase()) ||
-        r.guest.toLowerCase().includes(lookupQuery.toLowerCase())
-    )
+      const rawInvoices = invRes.data || invRes || []
+      const rawPayroll = payrRes.data || payrRes || []
+
+      if (rawPayroll.length > 0) {
+        const staffMap = rawPayroll.map((p) => ({
+          name: p.employeeName,
+          empId: p.employeeId,
+          department: p.department,
+          email: `${p.employeeName.toLowerCase().replace(/\s+/g, '.')}@grandhorizon.com`,
+        }))
+        setStaffList(staffMap)
+        if (!staffName && staffMap.length > 0) {
+          setStaffName(staffMap[0].name)
+          setEmpId(staffMap[0].empId)
+          setDepartment(staffMap[0].department)
+          setEmail(staffMap[0].email)
+        }
+      }
+
+      const mapped = rawInvoices.map((inv) => ({
+        id: inv.invoiceCode || `INV-${inv.id}`,
+        dbId: inv.id,
+        date: inv.issueDate
+          ? new Date(inv.issueDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+          : inv.createdAt
+          ? new Date(inv.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+          : '—',
+        staffName: inv.guestName || 'Staff Member',
+        guest: inv.guestName || 'Staff Member',
+        empId: inv.reservationCode || `EMP-${String(inv.id).padStart(3, '0')}`,
+        department: inv.roomNumber || 'Hotel Staff',
+        purpose: inv.notes || 'Staff Charges',
+        total: Number(inv.totalAmount || 0),
+        paid: Number(inv.paidAmount || 0),
+        balance: Number(inv.balanceDue || 0),
+        status:
+          inv.status === 'PAID'
+            ? 'Paid'
+            : inv.status === 'PART_PAID'
+            ? 'Part-paid'
+            : inv.status === 'ISSUED'
+            ? 'Issued'
+            : 'Draft',
+        rawStatus: inv.status,
+        email: inv.guestEmail || '',
+        dueDate: inv.dueDate
+          ? new Date(inv.dueDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+          : '—',
+        items: [],
+      }))
+
+      setInvoices(mapped)
+    } catch (err) {
+      console.error('Failed to load invoices from database:', err)
+      showToast('Error connecting to database. Please retry.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadInvoices()
+  }, [])
+
+  function handleStaffChange(empIdSelected) {
+    const found = staffList.find((s) => s.empId === empIdSelected)
     if (found) {
-      setMatchedReservation(found)
-      setCreateBillTo(found.guest)
-      setCreateEmail(found.email)
-      setCreateLines(found.charges)
-      showToast(`Front Office folio charges retrieved for ${found.guest}.`)
+      setStaffName(found.name)
+      setEmpId(found.empId)
+      setDepartment(found.department)
+      setEmail(found.email)
+    }
+  }
+
+  async function handleOpenInvoice(inv) {
+    setSelectedInvoice(inv)
+    try {
+      const details = await financeApi.invoice(inv.dbId)
+      const data = details.data || details
+      if (data && data.items) {
+        setSelectedInvoice((prev) => ({
+          ...prev,
+          items: data.items.map((it) => ({
+            desc: it.description,
+            qty: Number(it.quantity || 1),
+            unitPrice: Number(it.unitPrice || 0),
+            amount: Number(it.amount || 0),
+          })),
+          payments: data.payments || [],
+        }))
+      }
+    } catch (err) {
+      console.warn('Could not fetch line items for invoice:', err)
+    }
+  }
+
+  const subtotal = lines.reduce((sum, item) => sum + item.amount, 0)
+  const vat = Math.round(subtotal * 0.12)
+  const total = subtotal + vat
+
+  function addLineItem() {
+    setLines([...lines, { desc: 'Standard Staff Charge', qty: 1, unitPrice: 500, amount: 500 }])
+  }
+
+  function updateLine(index, field, value) {
+    const updated = [...lines]
+    if (field === 'qty') {
+      const q = Math.max(1, parseInt(value, 10) || 1)
+      updated[index].qty = q
+      updated[index].amount = q * updated[index].unitPrice
+    } else if (field === 'unitPrice') {
+      const p = Math.max(0, parseFloat(value) || 0)
+      updated[index].unitPrice = p
+      updated[index].amount = updated[index].qty * p
     } else {
-      showToast('Reservation not found in Front Office sync pool.')
+      updated[index][field] = value
+    }
+    setLines(updated)
+  }
+
+  function removeLine(index) {
+    if (lines.length <= 1) {
+      showToast('At least one charge line is required.')
+      return
+    }
+    setLines(lines.filter((_, idx) => idx !== index))
+  }
+
+  async function handleCreateStaffInvoice(e) {
+    e.preventDefault()
+    if (!staffName.trim()) {
+      showToast('Please specify the staff personnel name.')
+      return
+    }
+
+    try {
+      await financeApi.createInvoice({
+        guestName: staffName.trim(),
+        guestEmail: email || null,
+        reservationCode: empId || null,
+        roomNumber: department,
+        notes: purpose,
+        subtotal,
+        discount: 0,
+        vat,
+        totalAmount: total,
+        issueNow: true,
+        issueDate,
+        dueDate,
+        items: lines.map((l) => ({
+          desc: l.desc,
+          qty: l.qty,
+          unitPrice: l.unitPrice,
+          amount: l.amount,
+          source: 'STAFF_CHARGE',
+        })),
+      })
+
+      showToast(`Staff invoice issued for ${staffName} (${department}) and stored in database.`)
+      setShowCreateModal(false)
+      await loadInvoices()
+    } catch (err) {
+      console.error('Failed to create invoice:', err)
+      showToast(err.message || 'Failed to create invoice in database.')
     }
   }
 
-  function handleIssueNewInvoice() {
-    const newId = `INV-26100${invoices.length + 1}`
-    const newInv = {
-      id: newId,
-      date: '15 Oct 2026',
-      guest: createBillTo,
-      reservation: matchedReservation?.resId || 'RES-261006',
-      room: matchedReservation?.room || 'Room 306',
-      total: createTotal,
-      paid: 0,
-      balance: createTotal,
-      status: 'Issued',
-      email: createEmail,
-      dueDate: createDueDate,
-      items: createLines,
-    }
-    setInvoices([newInv, ...invoices])
-    financeApi.createInvoice({
-      invoiceCode: newId,
-      guestName: createBillTo,
-      guestEmail: createEmail,
-      reservationCode: matchedReservation?.resId,
-      roomNumber: matchedReservation?.room,
-      subtotal: createSubtotal,
-      vat: createVat,
-      items: createLines,
-      issueNow: true,
-    }).catch(() => {})
-    setSubMode('list')
-    showToast(`Invoice ${newId} issued successfully for ₱${createTotal.toLocaleString()}.00.`)
-  }
-
-  function handleSaveNewDraft() {
-    const newId = `INV-26100${invoices.length + 1}`
-    const newInv = {
-      id: newId,
-      date: 'Not yet issued',
-      guest: createBillTo,
-      reservation: matchedReservation?.resId || 'RES-261006',
-      room: matchedReservation?.room || 'Room 306',
-      total: createTotal,
-      paid: 0,
-      balance: createTotal,
-      status: 'Draft',
-      email: createEmail,
-      dueDate: createDueDate,
-      items: createLines,
-    }
-    setInvoices([...invoices, newInv])
-    financeApi.createInvoice({
-      invoiceCode: newId,
-      guestName: createBillTo,
-      guestEmail: createEmail,
-      reservationCode: matchedReservation?.resId,
-      roomNumber: matchedReservation?.room,
-      subtotal: createSubtotal,
-      vat: createVat,
-      items: createLines,
-      issueNow: false,
-    }).catch(() => {})
-    setSubMode('list')
-    showToast(`Invoice ${newId} saved as draft. Excluded from revenue.`)
-  }
-
-  function handleSaveDraftChanges() {
-    setInvoices((prev) =>
-      prev.map((inv) => (inv.id === draftInvoice.id ? draftInvoice : inv))
-    )
-    showToast(`Draft ${draftInvoice.id} changes saved.`)
-  }
-
-  function handleIssueDraft() {
-    setInvoices((prev) =>
-      prev.map((inv) =>
-        inv.id === draftInvoice.id
-          ? { ...draftInvoice, status: 'Issued', date: '15 Oct 2026' }
-          : inv
-      )
-    )
-    setSubMode('list')
-    showToast(`Invoice ${draftInvoice.id} officially issued to ${draftInvoice.guest}.`)
-  }
-
-  // Filtered invoices
-  const filtered = invoices.filter((item) => {
-    const matchesSearch =
-      item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.guest.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.reservation.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === 'All' || item.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
-
-  // ================= VIEW: CREATE INVOICE (Image 2) =================
-  if (subMode === 'create') {
-    return (
-      <>
-        <div className="finance-breadcrumb">Finance &amp; Accounting / Invoices</div>
-        <header className="finance-header">
-          <div className="finance-header-titles">
-            <h1>Create invoice</h1>
-            <p>
-              <button
-                type="button"
-                onClick={() => setSubMode('list')}
-                style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0 }}
-              >
-                ← Back to invoice records
-              </button>{' '}
-              · New billing preview INV-261006
-            </p>
-          </div>
-          <span className="fin-badge fin-badge-yellow" style={{ fontSize: '12px', padding: '4px 12px' }}>
-            Unsaved invoice
-          </span>
-        </header>
-
-        <div className="fin-grid-2-1">
-          {/* Left Column */}
-          <div>
-            {/* Lookup Card */}
-            <div className="fin-surface">
-              <div className="fin-surface-header">
-                <h3 className="fin-surface-title">Reservation &amp; guest lookup</h3>
-                <span className="fin-badge fin-badge-blue">Front Office source</span>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                <input
-                  type="text"
-                  value={lookupQuery}
-                  onChange={(e) => setLookupQuery(e.target.value)}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '8px',
-                    fontSize: '12.5px',
-                  }}
-                />
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-primary"
-                  onClick={handleRetrieveCharges}
-                  style={{ borderRadius: '8px' }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                  Retrieve charges
-                </button>
-              </div>
-
-              {matchedReservation && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px', background: '#f8fafc', padding: '10px 14px', borderRadius: '8px' }}>
-                  <div>
-                    <strong>{matchedReservation.guest} · {matchedReservation.guestId}</strong>
-                    <div style={{ color: '#64748b', marginTop: '2px' }}>{matchedReservation.roomType} · {matchedReservation.room}</div>
-                  </div>
-                  <div>
-                    <strong>{matchedReservation.stayDates}</strong>
-                    <div style={{ color: '#64748b', marginTop: '2px' }}>{matchedReservation.folio}</div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Billing Information Card */}
-            <div className="fin-surface">
-              <h3 className="fin-surface-title" style={{ marginBottom: '12px' }}>Billing information</h3>
-              <div className="fin-form-row">
-                <div className="fin-form-group">
-                  <label>Bill to</label>
-                  <input
-                    type="text"
-                    value={createBillTo}
-                    onChange={(e) => setCreateBillTo(e.target.value)}
-                  />
-                </div>
-                <div className="fin-form-group">
-                  <label>Email</label>
-                  <input
-                    type="email"
-                    value={createEmail}
-                    onChange={(e) => setCreateEmail(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="fin-form-row">
-                <div className="fin-form-group">
-                  <label>Invoice date</label>
-                  <input
-                    type="date"
-                    value={createDate}
-                    onChange={(e) => setCreateDate(e.target.value)}
-                  />
-                </div>
-                <div className="fin-form-group">
-                  <label>Due date</label>
-                  <input
-                    type="date"
-                    value={createDueDate}
-                    onChange={(e) => setCreateDueDate(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Retrieved Charges Table */}
-            <div className="fin-surface">
-              <div className="fin-surface-header">
-                <div>
-                  <h3 className="fin-surface-title">Retrieved charges</h3>
-                  <p className="fin-surface-subtitle">Editable before issue · Amounts below exclude VAT</p>
-                </div>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-secondary"
-                  onClick={() => {
-                    const desc = prompt('Enter charge description (e.g. Minibar · FO-1006):', 'Room Service · POS-1006')
-                    const amount = parseFloat(prompt('Enter amount (exclude VAT):', '800') || '0')
-                    if (desc && amount) {
-                      setCreateLines([...createLines, { desc, qty: 1, unitPrice: amount, amount }])
-                    }
-                  }}
-                  style={{ fontSize: '11.5px', padding: '5px 12px' }}
-                >
-                  + Add line item
-                </button>
-              </div>
-
-              <table className="fin-table">
-                <thead>
-                  <tr>
-                    <th>Description / source</th>
-                    <th>Qty</th>
-                    <th>Unit price</th>
-                    <th>Amount</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {createLines.map((line, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: 600 }}>{line.desc}</td>
-                      <td>{line.qty}</td>
-                      <td>₱{line.unitPrice.toLocaleString()}.00</td>
-                      <td style={{ fontWeight: 700 }}>₱{line.amount.toLocaleString()}.00</td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => setCreateLines(createLines.filter((_, i) => i !== idx))}
-                          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '11px' }}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '10px' }}>
-                {createLines.length} charge lines retrieved · No duplicate charge references
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Invoice Summary & Before You Issue */}
-          <div>
-            <div className="fin-surface">
-              <h3 className="fin-surface-title" style={{ marginBottom: '14px' }}>Invoice summary</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Subtotal</span>
-                  <strong>₱{createSubtotal.toLocaleString()}.00</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Discount</span>
-                  <span>₱0.00</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>VAT - 12%</span>
-                  <span>₱{createVat.toLocaleString()}.00</span>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: '17px',
-                    fontWeight: 800,
-                    color: '#0d1238',
-                    borderTop: '1px solid #e2e8f0',
-                    paddingTop: '10px',
-                    marginTop: '6px',
-                  }}
-                >
-                  <span>Invoice total</span>
-                  <span>₱{createTotal.toLocaleString()}.00</span>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '10px 12px',
-                  fontSize: '11.5px',
-                  color: '#64748b',
-                  margin: '16px 0',
-                }}
-              >
-                ⓘ Illustrative VAT calculation. Confirm billing and tax details before issuing.
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-primary"
-                  onClick={handleIssueNewInvoice}
-                  style={{ justifyContent: 'center', width: '100%', padding: '9px 0', borderRadius: '8px' }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                  Issue invoice
-                </button>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-secondary"
-                  onClick={handleSaveNewDraft}
-                  style={{ justifyContent: 'center', width: '100%', padding: '9px 0', borderRadius: '8px' }}
-                >
-                  Save as draft
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubMode('list')}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#64748b',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    marginTop: '4px',
-                  }}
-                >
-                  Cancel / back to records
-                </button>
-              </div>
-            </div>
-
-            <div className="fin-surface">
-              <h3 className="fin-surface-title" style={{ marginBottom: '10px' }}>Before you issue</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: '#16a34a' }}>
-                <div>✓ Reservation and guest matched</div>
-                <div>✓ Front Office charges retrieved</div>
-                <div>✓ Line amounts and VAT calculated</div>
-              </div>
-              <p style={{ fontSize: '11.5px', color: '#64748b', marginTop: '12px', lineHeight: '1.4' }}>
-                Issuing locks billing information and charges. Drafts stay editable and are excluded from revenue.
-              </p>
-            </div>
-          </div>
-        </div>
-      </>
-    )
-  }
-
-  // ================= VIEW: DRAFT EDIT (Image 3) =================
-  if (subMode === 'edit-draft' && draftInvoice) {
-    const draftSubtotal = draftInvoice.items?.reduce((s, i) => s + i.amount, 0) || 13000
-    const draftVat = Math.round(draftSubtotal * 0.12)
-    const draftTotal = draftSubtotal + draftVat
-
-    return (
-      <>
-        <div className="finance-breadcrumb">Finance &amp; Accounting / Invoices</div>
-        <header className="finance-header">
-          <div className="finance-header-titles">
-            <h1>Invoice {draftInvoice.id}</h1>
-            <p>
-              <button
-                type="button"
-                onClick={() => setSubMode('list')}
-                style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0 }}
-              >
-                ← Back to invoice records
-              </button>{' '}
-              · {draftInvoice.guest} · {draftInvoice.reservation}
-            </p>
-          </div>
-          <span className="fin-badge fin-badge-yellow" style={{ fontSize: '12px', padding: '4px 12px' }}>
-            Draft · Editing permitted
-          </span>
-        </header>
-
-        <div
-          style={{
-            background: '#eff6ff',
-            border: '1px solid #bfdbfe',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            fontSize: '12px',
-            color: '#1e40af',
-            marginBottom: '18px',
-          }}
-        >
-          ⓘ Draft editing permitted for Finance Officer Elena Ramos. Billing fields and charge lines may be updated until issue. This draft is not included in issued revenue.
-        </div>
-
-        <div className="fin-grid-2-1">
-          {/* Left Column */}
-          <div>
-            <div className="fin-surface">
-              <div className="fin-surface-header">
-                <h3 className="fin-surface-title">Billing information</h3>
-                <span className="fin-badge fin-badge-gray">Editable draft</span>
-              </div>
-              <div className="fin-form-row">
-                <div className="fin-form-group">
-                  <label>Bill to</label>
-                  <input
-                    type="text"
-                    value={draftInvoice.guest}
-                    onChange={(e) => setDraftInvoice({ ...draftInvoice, guest: e.target.value })}
-                  />
-                </div>
-                <div className="fin-form-group">
-                  <label>Email</label>
-                  <input
-                    type="email"
-                    value={draftInvoice.email}
-                    onChange={(e) => setDraftInvoice({ ...draftInvoice, email: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="fin-form-row">
-                <div className="fin-form-group">
-                  <label>Invoice date</label>
-                  <input
-                    type="text"
-                    value={draftInvoice.date}
-                    onChange={(e) => setDraftInvoice({ ...draftInvoice, date: e.target.value })}
-                  />
-                </div>
-                <div className="fin-form-group">
-                  <label>Due date</label>
-                  <input
-                    type="text"
-                    value={draftInvoice.dueDate}
-                    onChange={(e) => setDraftInvoice({ ...draftInvoice, dueDate: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div style={{ fontSize: '11px', color: '#64748b' }}>
-                Guest GST-1005 · Deluxe Queen, {draftInvoice.room} · 15–17 Oct 2026 · 2 nights
-              </div>
-            </div>
-
-            <div className="fin-surface">
-              <div className="fin-surface-header">
-                <h3 className="fin-surface-title">Itemized charges</h3>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-secondary"
-                  onClick={() => {
-                    const desc = prompt('Enter charge description:', 'Extra Bed · FO-1005')
-                    const amount = parseFloat(prompt('Enter amount:', '1500') || '0')
-                    if (desc && amount) {
-                      setDraftInvoice({
-                        ...draftInvoice,
-                        items: [...(draftInvoice.items || []), { desc, qty: 1, unitPrice: amount, amount }],
-                      })
-                    }
-                  }}
-                  style={{ fontSize: '11px', padding: '4px 10px' }}
-                >
-                  + Add line
-                </button>
-              </div>
-
-              <table className="fin-table">
-                <thead>
-                  <tr>
-                    <th>Description / source</th>
-                    <th>Qty</th>
-                    <th>Unit price</th>
-                    <th>Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {draftInvoice.items?.map((item, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: 600 }}>{item.desc}</td>
-                      <td>{item.qty}</td>
-                      <td>₱{item.unitPrice.toLocaleString()}.00</td>
-                      <td style={{ fontWeight: 700 }}>₱{item.amount.toLocaleString()}.00</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '10px' }}>
-                Source: Front Office folio FO-1005 · Retrieved 15 Oct, 08:45
-              </div>
-            </div>
-
-            {/* Linked Payments & History */}
-            <div className="fin-surface">
-              <div className="fin-surface-header">
-                <h3 className="fin-surface-title">Linked payments &amp; history</h3>
-                <span className="fin-badge fin-badge-gray">0 payments</span>
-              </div>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 12px' }}>
-                No linked payments. Record a payment after this invoice is issued.
-              </p>
-              <table className="fin-table">
-                <thead>
-                  <tr>
-                    <th>When</th>
-                    <th>Event</th>
-                    <th>By</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td style={{ fontSize: '11.5px', color: '#64748b' }}>15 Oct · 09:10</td>
-                    <td style={{ fontWeight: 600 }}>Billing email updated · Draft retained</td>
-                    <td>Elena Ramos</td>
-                  </tr>
-                  <tr>
-                    <td style={{ fontSize: '11.5px', color: '#64748b' }}>15 Oct · 08:47</td>
-                    <td style={{ fontWeight: 600 }}>Draft created from folio FO-1005</td>
-                    <td>Elena Ramos</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Right Column: Totals & Editing Rules */}
-          <div>
-            <div className="fin-surface">
-              <h3 className="fin-surface-title" style={{ marginBottom: '14px' }}>Invoice totals</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Subtotal</span>
-                  <strong>₱{draftSubtotal.toLocaleString()}.00</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Discount</span>
-                  <span>₱0.00</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>VAT - 12%</span>
-                  <span>₱{draftVat.toLocaleString()}.00</span>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: '17px',
-                    fontWeight: 800,
-                    color: '#0d1238',
-                    borderTop: '1px solid #e2e8f0',
-                    paddingTop: '10px',
-                    marginTop: '6px',
-                  }}
-                >
-                  <span>Draft total</span>
-                  <span>₱{draftTotal.toLocaleString()}.00</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
-                  <span>Linked payments</span>
-                  <span>₱0.00</span>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '18px' }}>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-primary"
-                  onClick={handleSaveDraftChanges}
-                  style={{ justifyContent: 'center', width: '100%', padding: '9px 0', borderRadius: '8px' }}
-                >
-                  Save changes
-                </button>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-secondary"
-                  onClick={handleIssueDraft}
-                  style={{ justifyContent: 'center', width: '100%', padding: '9px 0', borderRadius: '8px' }}
-                >
-                  Issue invoice
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubMode('list')}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#64748b',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    marginTop: '4px',
-                  }}
-                >
-                  Discard changes
-                </button>
-              </div>
-            </div>
-
-            <div className="fin-surface">
-              <h3 className="fin-surface-title" style={{ marginBottom: '8px' }}>Editing rules</h3>
-              <div style={{ fontWeight: 700, fontSize: '12px', color: '#0d1238', marginBottom: '8px' }}>
-                Draft → Issued → Paid
-              </div>
-              <p style={{ fontSize: '11.5px', color: '#64748b', lineHeight: '1.4', margin: '0 0 8px' }}>
-                <strong>Draft:</strong> billing information and line items can be edited by permitted finance staff.
-              </p>
-              <p style={{ fontSize: '11.5px', color: '#64748b', lineHeight: '1.4', margin: 0 }}>
-                <strong>Issued or paid:</strong> billing and charges become read-only. Linked payments and history remain visible.
-              </p>
-            </div>
-          </div>
-        </div>
-      </>
-    )
-  }
-
-  // ================= VIEW: INVOICE REGISTER (Image 1) =================
   const issuedTotal = invoices.filter((i) => i.status !== 'Draft').reduce((s, i) => s + i.total, 0)
   const paidTotal = invoices.reduce((s, i) => s + i.paid, 0)
   const balanceTotal = invoices.filter((i) => i.status !== 'Draft').reduce((s, i) => s + i.balance, 0)
-  const draftsCount = invoices.filter((i) => i.status === 'Draft').length
+
+  const filteredInvoices = invoices.filter((inv) => {
+    const staffMatch =
+      (inv.staffName || inv.guest || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      inv.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (inv.empId || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const statusMatch = statusFilter === 'All' || inv.status === statusFilter
+    const deptMatch = departmentFilter === 'All' || inv.department === departmentFilter
+    return staffMatch && statusMatch && deptMatch
+  })
 
   return (
     <>
-      <div className="finance-breadcrumb">Finance &amp; Accounting / Invoices</div>
+      <div className="finance-breadcrumb">Finance &amp; Accounting / Staff Invoices</div>
+
+      {/* Header with Create Invoice swapped into upper right */}
       <header className="finance-header">
         <div className="finance-header-titles">
-          <h1>Invoice records</h1>
-          <p>Manage guest billing, outstanding balances and permitted invoice updates.</p>
+          <h1>Staff Invoicing &amp; Billing</h1>
+          <p>Internal hotel staff billing, equipment &amp; uniform fees, cafeteria meal charges, and housing settlements.</p>
         </div>
+        {/* Swapped in Upper Right: Create Invoice button */}
         <button
           type="button"
           className="fin-btn fin-btn-primary"
-          onClick={() => setSubMode('create')}
+          onClick={() => setShowCreateModal(true)}
+          style={{ padding: '9px 18px', fontSize: '13px', fontWeight: 700 }}
         >
-          + Create invoice
+          + Create Staff Invoice
         </button>
       </header>
 
-      {/* KPI Row */}
+      {/* KPI Cards */}
       <section className="fin-kpi-grid">
         <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Issued invoices</span>
+          <span className="fin-kpi-label">Total Staff Invoiced</span>
           <div className="fin-kpi-val">₱{issuedTotal.toLocaleString()}.00</div>
-          <span className="fin-kpi-note neutral">4 invoices · 01–15 Oct 2026</span>
+          <span className="fin-kpi-note neutral">
+            {loading ? 'Loading...' : `${invoices.length} database records`}
+          </span>
         </div>
         <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Payments received</span>
+          <span className="fin-kpi-label">Payments / Deductions</span>
           <div className="fin-kpi-val">₱{paidTotal.toLocaleString()}.00</div>
-          <span className="fin-kpi-note neutral">3 linked payment records</span>
+          <span className="fin-kpi-note positive">Settled via salary deduction / bank</span>
         </div>
         <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Outstanding balance</span>
-          <div className="fin-kpi-val">₱{balanceTotal.toLocaleString()}.00</div>
-          <span className="fin-kpi-note neutral">2 invoices with a balance</span>
+          <span className="fin-kpi-label">Outstanding Receivables</span>
+          <div className="fin-kpi-val" style={{ color: balanceTotal > 0 ? '#b45309' : '#0d1238' }}>
+            ₱{balanceTotal.toLocaleString()}.00
+          </div>
+          <span className="fin-kpi-note warning">
+            {invoices.filter((i) => i.balance > 0).length} records pending settlement
+          </span>
         </div>
         <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Drafts</span>
-          <div className="fin-kpi-val">{draftsCount}</div>
-          <span className="fin-kpi-note neutral">₱14,560.00 · Not in revenue</span>
+          <span className="fin-kpi-label">System Mode</span>
+          <div className="fin-kpi-val">Connected</div>
+          <span className="fin-kpi-note positive">Live PostgreSQL Database</span>
         </div>
       </section>
 
-      {/* Table Card */}
-      <div className="fin-surface">
-        <div className="fin-surface-header">
-          <h3 className="fin-surface-title">Guest invoice register</h3>
-          <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>01–15 Oct 2026</span>
-        </div>
-
-        {/* Filters */}
-        <div className="fin-filter-row">
-          <div className="fin-input-wrap">
+      {/* Search & Filter Toolbar */}
+      <div className="fin-surface" style={{ padding: '12px 18px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="fin-input-wrap" style={{ flex: 1, minWidth: '240px' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
               type="text"
-              placeholder="Invoice, guest or reservation"
+              placeholder="Search staff name, employee ID, or invoice number..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -775,10 +287,7 @@ export default function InvoicesView({ showToast }) {
 
           <div className="fin-select-wrap">
             <label>Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="All">All statuses</option>
               <option value="Issued">Issued</option>
               <option value="Part-paid">Part-paid</option>
@@ -788,53 +297,86 @@ export default function InvoicesView({ showToast }) {
           </div>
 
           <div className="fin-select-wrap">
-            <label>Stay / issue period</label>
-            <select defaultValue="01-15 Oct 2026">
-              <option value="01-15 Oct 2026">01–15 Oct 2026</option>
-              <option value="16-31 Oct 2026">16–31 Oct 2026</option>
-            </select>
-          </div>
-
-          <div className="fin-select-wrap">
-            <label>Source</label>
-            <select defaultValue="All sources">
-              <option value="All sources">All sources</option>
+            <label>Department</label>
+            <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)}>
+              <option value="All">All departments</option>
               <option value="Front Office">Front Office</option>
-              <option value="Manual">Manual</option>
+              <option value="Housekeeping">Housekeeping</option>
+              <option value="Food & Beverage">Food &amp; Beverage</option>
+              <option value="Engineering">Engineering</option>
+              <option value="Guest Services">Guest Services</option>
             </select>
           </div>
         </div>
+      </div>
 
-        {/* Invoices Table */}
+      {/* Invoices Table: Actions column removed, clickable rows with hover */}
+      <div className="fin-surface">
+        <div className="fin-surface-header">
+          <div>
+            <h3 className="fin-surface-title">Staff Invoices Register</h3>
+            <p className="fin-surface-subtitle">Click any invoice row to open details, itemized charges and payment history.</p>
+          </div>
+          <span className="fin-badge fin-badge-gray">
+            {loading ? 'Loading database...' : `${filteredInvoices.length} invoices`}
+          </span>
+        </div>
+
         <div className="fin-table-scroll">
           <table className="fin-table">
             <thead>
               <tr>
-                <th>Invoice / issued</th>
-                <th>Guest / reservation</th>
+                <th>Invoice #</th>
+                <th>Staff Personnel</th>
+                <th>Department</th>
+                <th>Issue Date</th>
+                <th>Due Date</th>
                 <th>Total (PHP)</th>
-                <th>Paid / balance</th>
+                <th>Paid</th>
+                <th>Balance Due</th>
                 <th>Status</th>
-                <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((inv) => (
-                <tr key={inv.id}>
+              {loading && (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                    Loading staff invoices from database...
+                  </td>
+                </tr>
+              )}
+              {!loading && filteredInvoices.length === 0 && (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                    No staff invoices found in database.
+                  </td>
+                </tr>
+              )}
+              {!loading && filteredInvoices.map((inv) => (
+                <tr
+                  key={inv.id}
+                  className="clickable-row"
+                  onClick={() => handleOpenInvoice(inv)}
+                  title="Click to view invoice details"
+                >
                   <td>
                     <strong>{inv.id}</strong>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>{inv.date}</div>
                   </td>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{inv.guest}</div>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>{inv.reservation} · {inv.room}</div>
+                    <div style={{ fontWeight: 700, color: '#0d1238' }}>{inv.staffName || inv.guest}</div>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>{inv.empId || 'Staff Member'}</div>
                   </td>
-                  <td style={{ fontWeight: 700 }}>₱{inv.total.toLocaleString()}.00</td>
                   <td>
-                    <div>₱{inv.paid.toLocaleString()}.00 paid</div>
-                    <div style={{ fontSize: '11px', color: inv.balance > 0 ? '#b45309' : '#64748b' }}>
-                      {inv.status === 'Draft' ? 'Draft only' : `₱${inv.balance.toLocaleString()}.00 due`}
-                    </div>
+                    <span className="fin-badge fin-badge-gray" style={{ fontSize: '11px' }}>
+                      {inv.department || 'Hotel Operations'}
+                    </span>
+                  </td>
+                  <td>{inv.date}</td>
+                  <td>{inv.dueDate || '—'}</td>
+                  <td style={{ fontWeight: 800 }}>₱{inv.total.toLocaleString()}.00</td>
+                  <td style={{ color: '#16a34a', fontWeight: 600 }}>₱{inv.paid.toLocaleString()}.00</td>
+                  <td style={{ fontWeight: 700, color: inv.balance > 0 ? '#b45309' : '#64748b' }}>
+                    ₱{inv.balance.toLocaleString()}.00
                   </td>
                   <td>
                     <span
@@ -851,51 +393,351 @@ export default function InvoicesView({ showToast }) {
                       {inv.status}
                     </span>
                   </td>
-                  <td>
-                    {inv.status === 'Draft' ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDraftInvoice(inv)
-                          setSubMode('edit-draft')
-                        }}
-                        style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 600, fontSize: '12px', cursor: 'pointer' }}
-                      >
-                        View / edit →
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDraftInvoice(inv)
-                          setSubMode('edit-draft')
-                        }}
-                        style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 600, fontSize: '12px', cursor: 'pointer' }}
-                      >
-                        View invoice →
-                      </button>
-                    )}
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      </div>
 
-        <div className="fin-table-footer">
-          <span>Showing {filtered.length} of {invoices.length} invoices · Newest billing period</span>
-          <div className="fin-pagination">
-            <button type="button" className="fin-page-btn" disabled>Previous</button>
-            <button type="button" className="fin-page-btn active">1</button>
-            <button type="button" className="fin-page-btn" disabled>Next</button>
+      {/* Invoice Details Modal Window */}
+      {selectedInvoice && (
+        <div className="fin-modal-overlay" onClick={() => setSelectedInvoice(null)}>
+          <div className="fin-modal-window wide" onClick={(e) => e.stopPropagation()}>
+            <div className="fin-modal-header">
+              <div>
+                <span className="fin-subsystem-badge">Grand Horizon Hotel · Staff Billing</span>
+                <h2 className="fin-modal-title">Staff Invoice #{selectedInvoice.id}</h2>
+              </div>
+              <button
+                type="button"
+                className="fin-modal-close-btn"
+                onClick={() => setSelectedInvoice(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="fin-modal-body">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', background: '#f8fafc', padding: '16px', borderRadius: '10px', marginBottom: '20px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Staff Personnel</div>
+                  <strong style={{ fontSize: '15px', color: '#0d1238' }}>{selectedInvoice.staffName || selectedInvoice.guest}</strong>
+                  <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>{selectedInvoice.empId || 'Staff'} · {selectedInvoice.department || 'Hotel Operations'}</div>
+                  <div style={{ fontSize: '11.5px', color: '#64748b' }}>{selectedInvoice.email || 'staff@grandhorizon.com'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Invoice Details</div>
+                  <div style={{ fontSize: '12.5px', marginTop: '2px' }}>Issue Date: <strong>{selectedInvoice.date}</strong></div>
+                  <div style={{ fontSize: '12.5px', marginTop: '2px' }}>Due Date: <strong>{selectedInvoice.dueDate || '—'}</strong></div>
+                  <div style={{ marginTop: '6px' }}>
+                    <span className={`fin-badge ${selectedInvoice.status === 'Paid' ? 'fin-badge-green' : selectedInvoice.status === 'Part-paid' ? 'fin-badge-yellow' : 'fin-badge-blue'}`}>
+                      Status: {selectedInvoice.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#0d1238' }}>Itemized Staff Charges</h4>
+              <table className="fin-table" style={{ marginBottom: '16px' }}>
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th>Qty</th>
+                    <th>Unit Price</th>
+                    <th>Line Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(selectedInvoice.items && selectedInvoice.items.length > 0
+                    ? selectedInvoice.items
+                    : [
+                        { desc: selectedInvoice.purpose || 'Staff Service & Account Settlement', qty: 1, unitPrice: selectedInvoice.total, amount: selectedInvoice.total }
+                      ]
+                  ).map((item, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 600 }}>{item.desc}</td>
+                      <td>{item.qty}</td>
+                      <td>₱{item.unitPrice.toLocaleString()}.00</td>
+                      <td style={{ fontWeight: 700 }}>₱{item.amount.toLocaleString()}.00</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Settlement Progress */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ fontSize: '11.5px', color: '#64748b' }}>Payment status: </span>
+                  <strong>{selectedInvoice.paid >= selectedInvoice.total ? 'Fully settled' : `₱${selectedInvoice.paid.toLocaleString()}.00 settled`}</strong>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '11.5px', color: '#64748b' }}>Remaining balance due: </span>
+                  <strong style={{ fontSize: '15px', color: selectedInvoice.balance > 0 ? '#b45309' : '#16a34a' }}>
+                    ₱{selectedInvoice.balance.toLocaleString()}.00
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="fin-modal-footer">
+              <button
+                type="button"
+                className="fin-btn fin-btn-secondary"
+                onClick={() => {
+                  window.print()
+                  showToast(`Invoice #${selectedInvoice.id} sent to printer.`)
+                }}
+              >
+                🖨 Print Invoice
+              </button>
+              <button
+                type="button"
+                className="fin-btn fin-btn-primary"
+                onClick={() => setSelectedInvoice(null)}
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        <div className="fin-callout" style={{ marginTop: '16px' }}>
-          ⓘ <strong>Editing permission:</strong> authorized finance staff may update drafts only. Issued and paid invoices are read-only; payment records remain linked to their invoice.
+      {/* Redesigned Staff Invoice Creation Modal */}
+      {showCreateModal && (
+        <div className="fin-modal-overlay" onClick={() => setShowCreateModal(false)}>
+          <div className="fin-modal-window wide" onClick={(e) => e.stopPropagation()}>
+            <div className="fin-modal-header">
+              <div>
+                <span className="fin-subsystem-badge">Grand Horizon Hotel · Internal Finance</span>
+                <h2 className="fin-modal-title">Issue New Staff Invoice</h2>
+              </div>
+              <button
+                type="button"
+                className="fin-modal-close-btn"
+                onClick={() => setShowCreateModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateStaffInvoice}>
+              <div className="fin-modal-body">
+                {/* Section 1: Staff Personnel Info */}
+                <div className="fin-surface" style={{ padding: '16px', marginBottom: '16px' }}>
+                  <h4 style={{ margin: '0 0 12px', fontSize: '13px', color: '#0d1238' }}>1. Staff Personnel Selection</h4>
+
+                  <div className="fin-form-row">
+                    {staffList.length > 0 && (
+                      <div className="fin-form-group">
+                        <label>Select From Registered Staff</label>
+                        <select
+                          value={empId}
+                          onChange={(e) => handleStaffChange(e.target.value)}
+                        >
+                          {staffList.map((s) => (
+                            <option key={s.empId} value={s.empId}>
+                              {s.name} ({s.empId} · {s.department})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="fin-form-group">
+                      <label>Staff Personnel Name *</label>
+                      <input
+                        type="text"
+                        value={staffName}
+                        onChange={(e) => setStaffName(e.target.value)}
+                        required
+                        placeholder="e.g. Sofia Garcia"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="fin-form-row">
+                    <div className="fin-form-group">
+                      <label>Employee ID *</label>
+                      <input
+                        type="text"
+                        value={empId}
+                        onChange={(e) => setEmpId(e.target.value)}
+                        required
+                        placeholder="e.g. EMP-014"
+                      />
+                    </div>
+
+                    <div className="fin-form-group">
+                      <label>Department *</label>
+                      <select
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                      >
+                        <option value="Front Office">Front Office</option>
+                        <option value="Housekeeping">Housekeeping</option>
+                        <option value="Food & Beverage">Food &amp; Beverage</option>
+                        <option value="Engineering">Engineering</option>
+                        <option value="Guest Services">Guest Services</option>
+                        <option value="Administration">Administration</option>
+                      </select>
+                    </div>
+
+                    <div className="fin-form-group">
+                      <label>Staff Email</label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="staff@grandhorizon.com"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="fin-form-group">
+                    <label>Invoice Purpose / Description *</label>
+                    <input
+                      type="text"
+                      value={purpose}
+                      onChange={(e) => setPurpose(e.target.value)}
+                      placeholder="e.g. Uniform replacement, staff cafeteria meal plan, locker fee"
+                      required
+                    />
+                  </div>
+
+                  <div className="fin-form-row">
+                    <div className="fin-form-group">
+                      <label>Issue Date *</label>
+                      <input
+                        type="date"
+                        value={issueDate}
+                        onChange={(e) => setIssueDate(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="fin-form-group">
+                      <label>Settlement Due Date *</label>
+                      <input
+                        type="date"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Itemized Charges Table */}
+                <div className="fin-surface" style={{ padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <h4 style={{ margin: 0, fontSize: '13px', color: '#0d1238' }}>2. Itemized Staff Charges</h4>
+                    <button
+                      type="button"
+                      className="fin-btn fin-btn-secondary"
+                      onClick={addLineItem}
+                      style={{ fontSize: '11.5px', padding: '5px 12px' }}
+                    >
+                      + Add Item
+                    </button>
+                  </div>
+
+                  <table className="fin-table" style={{ fontSize: '12.5px' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '45%' }}>Description</th>
+                        <th style={{ width: '15%' }}>Qty</th>
+                        <th style={{ width: '20%' }}>Unit Price (₱)</th>
+                        <th style={{ width: '20%' }}>Total (₱)</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map((line, idx) => (
+                        <tr key={idx}>
+                          <td>
+                            <input
+                              type="text"
+                              value={line.desc}
+                              onChange={(e) => updateLine(idx, 'desc', e.target.value)}
+                              style={{ width: '100%', padding: '5px 8px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+                              required
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              min="1"
+                              value={line.qty}
+                              onChange={(e) => updateLine(idx, 'qty', e.target.value)}
+                              style={{ width: '100%', padding: '5px 8px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              value={line.unitPrice}
+                              onChange={(e) => updateLine(idx, 'unitPrice', e.target.value)}
+                              style={{ width: '100%', padding: '5px 8px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
+                            />
+                          </td>
+                          <td style={{ fontWeight: 700 }}>₱{line.amount.toLocaleString()}.00</td>
+                          <td>
+                            <button
+                              type="button"
+                              onClick={() => removeLine(idx)}
+                              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px' }}
+                              title="Delete line"
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* Totals */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
+                    <div style={{ width: '240px', fontSize: '12.5px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+                        <span>Subtotal:</span>
+                        <span>₱{subtotal.toLocaleString()}.00</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+                        <span>VAT (12%):</span>
+                        <span>₱{vat.toLocaleString()}.00</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '15px', color: '#0d1238', borderTop: '2px solid #e2e8f0', paddingTop: '6px' }}>
+                        <span>Grand Total:</span>
+                        <span>₱{total.toLocaleString()}.00</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="fin-modal-footer">
+                <button
+                  type="button"
+                  className="fin-btn fin-btn-secondary"
+                  onClick={() => setShowCreateModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="fin-btn fin-btn-primary"
+                >
+                  Issue Staff Invoice
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </div>
+      )}
     </>
   )
 }
-

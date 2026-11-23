@@ -14,11 +14,15 @@ app.disable('x-powered-by')
 app.use(cors({
   origin(origin, callback) {
     if (!origin || env.frontendOrigins.includes(origin)) return callback(null, true)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true)
+    }
     const error = new Error('Origin is not allowed by CORS.')
     error.status = 403
     error.codeName = 'CORS_ORIGIN_DENIED'
     return callback(error)
   },
+  credentials: true,
 }))
 app.use(express.json({ limit: '1mb' }))
 

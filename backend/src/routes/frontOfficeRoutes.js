@@ -5,7 +5,7 @@ const authorize = require('../middleware/authorize')
 const { requireBody, requireId } = require('../middleware/validate')
 
 const router = express.Router()
-router.use(authenticate, authorize('FRONT_OFFICE', 'ADMIN'))
+router.use(authenticate, authorize('FRONT_OFFICE', 'ADMIN', 'FINANCE_ADMIN', 'DEPARTMENT_HEAD'))
 
 router.get('/dashboard', controller.dashboard)
 

@@ -14,8 +14,9 @@ async function main() {
   if (!password || password.length < 12 || Buffer.byteLength(password, 'utf8') > 72) {
     throw new Error('Set BOOTSTRAP_PASSWORD to a unique password between 12 characters and 72 UTF-8 bytes.')
   }
-  if (!['FRONT_OFFICE', 'ADMIN'].includes(role)) {
-    throw new Error('BOOTSTRAP_ROLE must be FRONT_OFFICE or ADMIN.')
+  const validRoles = ['FRONT_OFFICE', 'ADMIN', 'FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD']
+  if (!validRoles.includes(role)) {
+    throw new Error('BOOTSTRAP_ROLE must be FRONT_OFFICE, ADMIN, FINANCE, FINANCE_ADMIN, FINANCE_STAFF, or DEPARTMENT_HEAD.')
   }
 
   const passwordHash = await bcrypt.hash(password, env.bcryptRounds)

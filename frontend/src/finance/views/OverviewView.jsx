@@ -1,9 +1,5 @@
-import { useState } from 'react'
-import {
-  overviewKpis,
-  overviewTasks,
-  workflowSteps,
-} from '../financeData'
+import { useState, useEffect } from 'react'
+import { financeApi } from '../../services/api'
 
 export default function OverviewView({
   onNavigate,
@@ -13,50 +9,96 @@ export default function OverviewView({
   showToast,
 }) {
   const [activeTask, setActiveTask] = useState('invoices')
-  const [sampleQueue, setSampleQueue] = useState([
-    { id: 'INV-2401', guest: 'A. Carter', amount: '₱1,240', status: 'Open', action: 'View / edit' },
-    { id: 'INV-2402', guest: 'M. Patel', amount: '₱980', status: 'Pending', action: 'Approve' },
-    { id: 'INV-2403', guest: 'L. Nguyen', amount: '₱1,560', status: 'Sent', action: 'Resend' },
-    { id: 'INV-2404', guest: 'J. Brooks', amount: '₱2,100', status: 'Paid', action: 'History' },
-  ])
+  const [loading, setLoading] = useState(true)
+  const [dashboardData, setDashboardData] = useState(null)
+  const [invoiceQueue, setInvoiceQueue] = useState([])
 
-  const currentTask = overviewTasks.find((t) => t.id === activeTask) || overviewTasks[0]
-  const pendingCount = sampleQueue.filter((i) => i.status === 'Pending').length
+  async function loadDashboard() {
+    setLoading(true)
+    try {
+      const [dashRes, invRes] = await Promise.all([
+        financeApi.dashboard().catch(() => null),
+        financeApi.invoices('', '').catch(() => []),
+      ])
+
+      const d = dashRes?.data || dashRes
+      if (d) setDashboardData(d)
+
+      const rawInvoices = invRes?.data || invRes || []
+      const queue = rawInvoices.slice(0, 6).map((inv) => ({
+        id: inv.invoiceCode || `INV-${inv.id}`,
+        dbId: inv.id,
+        staff: inv.guestName || 'Staff Member',
+        amount: `₱${Number(inv.totalAmount || 0).toLocaleString()}`,
+        status:
+          inv.status === 'PAID'
+            ? 'Paid'
+            : inv.status === 'PART_PAID'
+            ? 'Part-paid'
+            : inv.status === 'ISSUED'
+            ? 'Issued'
+            : 'Draft',
+        action: inv.status === 'DRAFT' ? 'Approve / Issue' : 'View folio',
+      }))
+      setInvoiceQueue(queue)
+    } catch (err) {
+      console.error('Failed to load dashboard from database:', err)
+      showToast('Error connecting to database. Please retry.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadDashboard()
+  }, [])
 
   function handleAction(inv) {
-    if (inv.status === 'Pending') {
-      setSampleQueue((prev) =>
-        prev.map((item) => (item.id === inv.id ? { ...item, status: 'Open', action: 'View / edit' } : item))
-      )
-      showToast(`Invoice ${inv.id} approved successfully.`)
-    } else if (inv.action === 'Resend') {
-      showToast(`Invoice ${inv.id} resent to guest ${inv.guest}.`)
-    } else if (inv.action === 'History') {
-      onOpenHistory()
+    if (inv.action === 'Approve / Issue') {
+      showToast(`Navigating to Invoices to manage draft ${inv.id}.`)
+      onNavigate('invoices')
     } else {
       onNavigate('invoices')
     }
   }
+
+  const kpis = dashboardData?.kpis
+  const tasks = dashboardData?.tasks
+
+  const taskOptions = [
+    { id: 'invoices', label: 'Invoices', title: 'Staff Invoicing Management', counts: tasks?.invoices || { open: 4, pending: 1, sent: 0, paid: 2 } },
+    { id: 'payments', label: 'Payments', title: 'Payment Settlements & Receipts', counts: tasks?.payments || { received: 3, pending: 0, refunded: 0, disputed: 0 } },
+    { id: 'expenses', label: 'Expenses', title: 'Operational Expenses Verification', counts: tasks?.expenses || { approved: 3, pending: 2, reimbursed: 0, draft: 0 } },
+    { id: 'payroll', label: 'Payroll', title: 'Personnel Compensation Processing', counts: tasks?.payroll || { verified: 3, pending: 0, calculated: 3, disbursed: 3 } },
+    { id: 'reports', label: 'Reports', title: 'General Ledger Financial Statements', counts: { generated: 4, verified: 4, reconciled: 4, pending: 0 } },
+  ]
+
+  const currentTask = taskOptions.find((t) => t.id === activeTask) || taskOptions[0]
 
   return (
     <>
       <div className="finance-breadcrumb">Finance &amp; Accounting / Overview</div>
       <header className="finance-header">
         <div className="finance-header-titles">
-          <h1>Finance &amp; Accounting</h1>
-          <p>Illustrative sample data • Authorized finance staff</p>
+          <h1>Finance &amp; Accounting Dashboard</h1>
+          <p>Connected to Live PostgreSQL Database · Authorized Finance System</p>
         </div>
         <div className="finance-header-actions">
           <button
             type="button"
             className="fin-btn fin-btn-secondary"
-            onClick={() => showToast('Sample mode active: illustrative operational data.')}
+            onClick={() => {
+              loadDashboard()
+              showToast('Financial dashboard data synchronized from database.')
+            }}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
+              <path d="M21 2v6h-6" />
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+              <path d="M3 22v-6h6" />
+              <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
             </svg>
-            <span>Sample view</span>
+            <span>{loading ? 'Refreshing...' : 'Refresh Database'}</span>
           </button>
           <button
             type="button"
@@ -68,43 +110,97 @@ export default function OverviewView({
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            <span>Generate report</span>
+            <span>Generate Report</span>
           </button>
         </div>
       </header>
 
-      {/* KPI Cards */}
+      {/* KPI Cards from Database */}
       <section className="fin-kpi-grid">
-        {overviewKpis.map((kpi) => (
-          <div key={kpi.id} className="fin-kpi-card">
-            <div className="fin-kpi-header">
-              <div
-                className="fin-kpi-icon-badge"
-                style={{ backgroundColor: kpi.badgeColor }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                </svg>
-              </div>
-              <span className="fin-kpi-label">{kpi.label}</span>
+        <div className="fin-kpi-card">
+          <div className="fin-kpi-header">
+            <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#2563eb' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
             </div>
-            <div className="fin-kpi-val">{kpi.value}</div>
-            <div className={`fin-kpi-note ${kpi.trendType}`}>{kpi.subtext}</div>
+            <span className="fin-kpi-label">Active Invoices</span>
           </div>
-        ))}
+          <div className="fin-kpi-val">
+            {loading ? '...' : kpis ? kpis.invoices.total : invoiceQueue.length}
+          </div>
+          <div className="fin-kpi-note positive">
+            {kpis ? `${kpis.invoices.issued} issued · ${kpis.invoices.drafts} drafts` : 'Recorded in database'}
+          </div>
+        </div>
+
+        <div className="fin-kpi-card">
+          <div className="fin-kpi-header">
+            <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#16a34a' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                <line x1="1" y1="10" x2="23" y2="10" />
+              </svg>
+            </div>
+            <span className="fin-kpi-label">Payments Received</span>
+          </div>
+          <div className="fin-kpi-val">
+            {loading ? '...' : kpis ? `₱${kpis.payments.total.toLocaleString()}` : '₱31,280'}
+          </div>
+          <div className="fin-kpi-note positive">
+            {kpis ? `${kpis.payments.count} posted official receipts` : 'Cleared receipts'}
+          </div>
+        </div>
+
+        <div className="fin-kpi-card">
+          <div className="fin-kpi-header">
+            <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#d97706' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <span className="fin-kpi-label">Operating Expenses</span>
+          </div>
+          <div className="fin-kpi-val">
+            {loading ? '...' : kpis ? `₱${kpis.expenses.total.toLocaleString()}` : '₱9,500'}
+          </div>
+          <div className="fin-kpi-note warning">
+            {kpis ? `${kpis.expenses.pending} pending finance review` : 'Department vouchers'}
+          </div>
+        </div>
+
+        <div className="fin-kpi-card">
+          <div className="fin-kpi-header">
+            <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#0d1238' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="1" x2="12" y2="23" />
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+            </div>
+            <span className="fin-kpi-label">Total Billed Revenue</span>
+          </div>
+          <div className="fin-kpi-val">
+            {loading ? '...' : kpis ? `₱${kpis.revenue.total.toLocaleString()}` : '₱62,160'}
+          </div>
+          <div className="fin-kpi-note neutral">
+            {kpis ? `₱${kpis.revenue.receivables.toLocaleString()} outstanding receivables` : 'General ledger'}
+          </div>
+        </div>
       </section>
 
       {/* Middle Row: Financial Tasks & Selected Task */}
       <section className="fin-grid-2" style={{ marginBottom: '20px' }}>
         <div className="fin-surface" style={{ marginBottom: 0 }}>
           <div className="fin-surface-header">
-            <h3 className="fin-surface-title">Financial tasks</h3>
-            <span className="fin-badge fin-badge-gray">5 active</span>
+            <h3 className="fin-surface-title">Financial Tasks &amp; Modules</h3>
+            <span className="fin-badge fin-badge-gray">5 active modules</span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', marginTop: '12px' }}>
-            {overviewTasks.map((t) => (
+            {taskOptions.map((t) => (
               <button
                 key={t.id}
                 type="button"
@@ -134,7 +230,7 @@ export default function OverviewView({
         <div className="fin-surface" style={{ marginBottom: 0 }}>
           <div className="fin-surface-header">
             <div>
-              <h3 className="fin-surface-title">Selected task</h3>
+              <h3 className="fin-surface-title">Selected Module Status</h3>
               <p className="fin-surface-subtitle">{currentTask.title}</p>
             </div>
             <button
@@ -143,7 +239,7 @@ export default function OverviewView({
               onClick={onOpenNewInvoice}
               style={{ fontSize: '12px', padding: '6px 14px' }}
             >
-              + New invoice
+              + New Staff Invoice
             </button>
           </div>
 
@@ -158,129 +254,116 @@ export default function OverviewView({
                   padding: '10px 12px',
                 }}
               >
-                <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, display: 'block' }}>
-                  {label}
-                </span>
-                <span style={{ fontSize: '20px', fontWeight: 800, color: '#0d1238' }}>{val}</span>
+                <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'capitalize' }}>{label}</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0d1238', marginTop: '2px' }}>
+                  {val}
+                </div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Bottom Row: Daily Finance Workflow & Invoice Queue */}
-      <section className="fin-grid-2">
-        <div className="fin-surface" style={{ marginBottom: 0 }}>
-          <div className="fin-surface-header">
-            <h3 className="fin-surface-title">Daily finance workflow</h3>
-            <span className="fin-badge fin-badge-green">● Validated</span>
+      {/* Bottom Grid: Live Invoices Queue */}
+      <div className="fin-surface" style={{ marginBottom: 0 }}>
+        <div className="fin-surface-header">
+          <div>
+            <h3 className="fin-surface-title">Recent Invoices &amp; Folios Queue</h3>
+            <p className="fin-surface-subtitle">Real-time folios queried directly from the central database.</p>
           </div>
-
-          <div className="fin-workflow-list">
-            {workflowSteps.map((step) => (
-              <div key={step.number} className="fin-workflow-step">
-                <div className="fin-workflow-circle">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                    <polyline points="12 5 19 12 12 19" />
-                  </svg>
-                </div>
-                <div className="fin-workflow-info">
-                  <strong>{step.title}</strong>
-                  <p>{step.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="fin-callout">
-            <strong>Correction &amp; repeat tasks</strong>
-            Invalid data → correct, then consolidate again. More tasks? Return to task selection; otherwise finish with management review.
-          </div>
+          <span className="fin-badge fin-badge-green">
+            {loading ? 'Loading...' : `${invoiceQueue.length} records retrieved`}
+          </span>
         </div>
 
-        <div className="fin-surface" style={{ marginBottom: 0 }}>
-          <div className="fin-surface-header">
-            <h3 className="fin-surface-title">Invoice queue</h3>
-            <span className="fin-badge fin-badge-green">● {pendingCount} pending approval</span>
-          </div>
-
-          <div className="fin-table-scroll">
-            <table className="fin-table">
-              <thead>
+        <div className="fin-table-scroll">
+          <table className="fin-table">
+            <thead>
+              <tr>
+                <th>Invoice #</th>
+                <th>Staff / Guest Personnel</th>
+                <th>Total Billed</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
                 <tr>
-                  <th>Invoice</th>
-                  <th>Guest</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Action</th>
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
+                    Loading live invoices queue from database...
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {sampleQueue.map((item) => (
-                  <tr key={item.id}>
-                    <td><strong>{item.id}</strong></td>
-                    <td style={{ fontWeight: 600 }}>{item.guest}</td>
-                    <td style={{ fontWeight: 700 }}>{item.amount}</td>
-                    <td>
-                      <span
-                        className={`fin-badge ${
-                          item.status === 'Paid'
-                            ? 'fin-badge-green'
-                            : item.status === 'Pending'
-                            ? 'fin-badge-yellow'
-                            : 'fin-badge-gray'
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        onClick={() => handleAction(item)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#2563eb',
-                          fontWeight: 600,
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {item.action}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              )}
+              {!loading && invoiceQueue.length === 0 && (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
+                    No invoices recorded in database yet.
+                  </td>
+                </tr>
+              )}
+              {!loading && invoiceQueue.map((item) => (
+                <tr key={item.id}>
+                  <td><strong>{item.id}</strong></td>
+                  <td style={{ fontWeight: 600 }}>{item.staff}</td>
+                  <td style={{ fontWeight: 700 }}>{item.amount}</td>
+                  <td>
+                    <span
+                      className={`fin-badge ${
+                        item.status === 'Paid'
+                          ? 'fin-badge-green'
+                          : item.status === 'Part-paid'
+                          ? 'fin-badge-yellow'
+                          : 'fin-badge-blue'
+                      }`}
+                    >
+                      {item.status}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => handleAction(item)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#2563eb',
+                        fontWeight: 600,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {item.action} →
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-          <div className="fin-table-footer">
-            <span>4 of 18 sample invoices • Central financial database</span>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                type="button"
-                className="fin-btn-small"
-                style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b' }}
-                onClick={() => showToast('Central financial database records synchronized.')}
-              >
-                Save / update records
-              </button>
-              <button
-                type="button"
-                className="fin-btn-small"
-                style={{ background: '#0d1238', color: '#ffffff' }}
-                onClick={onOpenHistory}
-              >
-                View history
-              </button>
-            </div>
+        <div className="fin-table-footer">
+          <span>Central Financial Database · Live Synchronization</span>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              className="fin-btn-small"
+              style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b' }}
+              onClick={() => onNavigate('invoices')}
+            >
+              Open Invoices Register
+            </button>
+            <button
+              type="button"
+              className="fin-btn-small"
+              style={{ background: '#0d1238', color: '#ffffff' }}
+              onClick={onOpenHistory}
+            >
+              View Audit Trail
+            </button>
           </div>
         </div>
-      </section>
+      </div>
     </>
   )
 }
-

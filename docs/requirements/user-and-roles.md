@@ -89,19 +89,25 @@ Human Resources staff are responsible for managing employee-related information 
 
 ---
 
-### 1.2.5 FINANCE
+### 1.2.5 FINANCE & ACCOUNTING ROLES
 
-Finance staff are responsible for hotel financial transactions and financial records.
+The Finance & Accounting subsystem defines three primary functional roles:
 
-**Primary responsibilities:**
+#### 1.2.5.1 FINANCE_ADMIN (Finance Administrator)
+Responsible for finance system administration, managing finance staff accounts, configuring financial settings, overseeing audit trails, and general finance operations.
 
-* Manage invoices
-* Manage invoice items
-* Record payments
-* Manage expenses
-* Monitor revenue
-* Generate financial reports
-* Access relevant reservation and employee financial information
+#### 1.2.5.2 FINANCE_STAFF (Finance Staff)
+Responsible for day-to-day hotel financial transactions and record-keeping.
+* Manage invoices and billing items
+* Record guest and vendor payments
+* Record department operational expense vouchers
+* View revenue dashboards and reconciliation reports
+
+#### 1.2.5.3 DEPARTMENT_HEAD (Department Head)
+Responsible for departmental authorization and executive oversight.
+* Review and approve operating expense vouchers and requisitions
+* Access comprehensive financial reports, payroll summaries, and revenue performance
+* Monitor departmental audit logs and financial compliance
 
 ---
 
