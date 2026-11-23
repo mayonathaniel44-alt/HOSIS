@@ -854,6 +854,41 @@ function renderNavigation() {
 }
 
 // Dashboard: counts are computed from the current stored records.
+function workflowOverview(stages, title = 'Maintenance workflow overview', subtitle = 'Current requests and repair workload by stage') {
+    const total = stages.reduce((sum, stage) => sum + stage.count, 0);
+    let cursor = 0;
+    const gradient = total
+        ? stages.map((stage) => {
+            const start = cursor;
+            cursor += (stage.count / total) * 100;
+            return `${stage.color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+        }).join(', ')
+        : 'var(--hotel-line) 0 100%';
+    return `<section class="panel workflow-overview">
+        <div class="panel-head workflow-overview-head">
+            <div><h2>${escapeHtml(title)}</h2><p class="muted">${escapeHtml(subtitle)}</p></div>
+            <span class="workflow-total-label">${total} total</span>
+        </div>
+        <div class="workflow-overview-grid">
+            <div class="workflow-legend">
+                ${stages.map((stage) => `<a href="${stage.href}" class="workflow-legend-item">
+                    <span class="workflow-dot" style="--stage-color:${stage.color}" aria-hidden="true">${stage.icon}</span>
+                    <span><strong>${escapeHtml(stage.label)}</strong><small>${escapeHtml(stage.caption)}</small></span>
+                </a>`).join('')}
+            </div>
+            <div class="workflow-bars" aria-label="Maintenance workflow counts">
+                ${stages.map((stage) => `<div class="workflow-bar-row">
+                    <span class="workflow-track"><span class="workflow-fill" style="--stage-color:${stage.color};--stage-width:${total ? Math.max(3, (stage.count / total) * 100) : 0}%"></span></span>
+                    <strong>${stage.count}</strong>
+                </div>`).join('')}
+            </div>
+            <div class="workflow-donut" style="--workflow-gradient:${gradient}" role="img" aria-label="${escapeHtml(stages.map((stage) => `${stage.label}: ${stage.count}`).join(', '))}">
+                <span><small>Total work</small><strong>${total}</strong></span>
+            </div>
+        </div>
+    </section>`;
+}
+
 function dashboard() {
     const visibleOrders = db.orders.filter((r) => matches(r, 'Work Orders'));
     const openOrders = visibleOrders.filter((r) => !isDone(r));
@@ -900,6 +935,14 @@ function dashboard() {
         ]
     ];
     const awaitingExpense = db.expenses.filter((r) => r.status === 'Pending Approval').length;
+    const reviewCount = stats[0][1];
+    const workflowStages = [
+        { label: 'Awaiting review', count: reviewCount, caption: 'Pending or in review', color: 'var(--workflow-review)', icon: '!', href: 'requests.html' },
+        { label: 'Assigned', count: db.orders.filter((r) => ['Assigned', 'Reassigned'].includes(r.status)).length, caption: 'Ready for technician', color: 'var(--workflow-assigned)', icon: 'A', href: 'work-orders.html' },
+        { label: 'In repair', count: db.orders.filter((r) => r.status === 'In Repair').length, caption: 'Repair work underway', color: 'var(--workflow-repair)', icon: 'R', href: 'work-orders.html' },
+        { label: 'Awaiting supervisor', count: stats[2][1], caption: 'Submitted for verification', color: 'var(--workflow-reviewing)', icon: '✓', href: 'repair-verify.html' },
+        { label: 'Completed', count: db.orders.filter((r) => isDone(r)).length, caption: 'Verified repair work', color: 'var(--workflow-complete)', icon: '✓', href: 'history.html' }
+    ];
     const statDetails = [
         ['☷', 'Pending or in review'], ['▤', 'Active repair work'],
         ['✓', 'Repairs submitted for review'], ['◷', 'Past their due date'],
@@ -925,13 +968,14 @@ function dashboard() {
                 </a>`;
             }).join('')}
         </div>
+        ${workflowOverview(workflowStages)}
         <section class="panel dashboard-panel">
             <h2>Pending work &amp; reports</h2>
-            <ul class="pending-list">
-                <li><a href="requests.html">${stats[0][1]} requests awaiting review</a></li>
-                <li><a href="repair-verify.html">${stats[2][1]} repairs awaiting verification</a></li>
-                <li><a href="expense-review.html">${awaitingExpense} technician expense(s) awaiting review</a></li>
-            </ul>
+            <div class="pending-work-grid">
+                <a class="pending-work-card" href="requests.html"><span class="pending-work-icon">!</span><span><strong>${reviewCount}</strong><b>Requests awaiting review</b><small>Pending and in-review requests</small></span></a>
+                <a class="pending-work-card" href="repair-verify.html"><span class="pending-work-icon">✓</span><span><strong>${stats[2][1]}</strong><b>Repairs awaiting verification</b><small>Supervisor decision required</small></span></a>
+                <a class="pending-work-card" href="expense-review.html"><span class="pending-work-icon">₱</span><span><strong>${awaitingExpense}</strong><b>Expenses awaiting review</b><small>Technician submissions</small></span></a>
+            </div>
             ${lowStock.length ? `<div class="stock-warning">
                 <strong>Low stock</strong>
                 <a href="parts.html">Review low stock for ${lowStock.length} item(s)</a>
@@ -3207,6 +3251,11 @@ document.addEventListener('submit', async (event) => {
 // Technician workspace: repair execution, preventive tasks and own cost records.
 function technicianPage() {
     const records = db.orders.filter((r) => matches(r, 'Work Orders'));
+    const technicianStats = [
+        ['Assigned', db.orders.filter((r) => ['Assigned', 'Reassigned'].includes(r.status)).length, 'Ready to start', '⌕'],
+        ['In Repair', db.orders.filter((r) => r.status === 'In Repair').length, 'Repair work underway', '⚙'],
+        ['Awaiting Supervisor', db.orders.filter((r) => r.verification === 'Pending Verification').length, 'Submitted for review', '✓']
+    ];
     return (
         heading(
             'My Repairs',
@@ -3214,10 +3263,11 @@ function technicianPage() {
         ) +
         `
         <section class="panel">
-            <div class="cards">
-                <div class="card"><span>Assigned</span><strong>${db.orders.filter((r) => ['Assigned', 'Reassigned'].includes(r.status)).length}</strong></div>
-                <div class="card"><span>In Repair</span><strong>${db.orders.filter((r) => r.status === 'In Repair').length}</strong></div>
-                <div class="card"><span>Awaiting Supervisor</span><strong>${db.orders.filter((r) => r.verification === 'Pending Verification').length}</strong></div>
+            <div class="cards dashboard-cards technician-status-cards">
+                ${technicianStats.map(([label, value, caption, symbol]) => `<div class="card">
+                    <span class="dashboard-card-label"><span class="dashboard-card-icon" aria-hidden="true">${symbol}</span><span class="label">${label}</span></span>
+                    <strong>${value}</strong><small>${caption}</small>
+                </div>`).join('')}
             </div>
             <div class="panel-head"><h2>My Work Orders</h2><button class="secondary" data-action="refresh-records">Refresh</button></div>
             ${table(
