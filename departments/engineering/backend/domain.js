@@ -14,7 +14,10 @@ const collections = [
 ];
 const terminal = (order) => ['Completed', 'Closed'].includes(order.status);
 const fail = (message) => {
-    throw Object.assign(new Error(message), { status: 400 });
+    throw Object.assign(new Error(message), {
+        status: 400,
+        codeName: 'INVALID_ENGINEERING_DATA'
+    });
 };
 const text = (value) => typeof value === 'string' && value.trim().length > 0;
 const date = (value) =>
