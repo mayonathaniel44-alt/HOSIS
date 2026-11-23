@@ -386,7 +386,7 @@ router.get(
             ? req.query.before
             : '9223372036854775807';
         const result = await pool.query(
-            'SELECT id, actor_name, action, collection, record_id, before_data, after_data, created_at FROM engineering.engineering_audit WHERE id < $1 ORDER BY id DESC LIMIT 100',
+            'SELECT id, actor_id, actor_name, action, collection, record_id, before_data, after_data, created_at FROM engineering.engineering_audit WHERE id < $1 ORDER BY id DESC LIMIT 100',
             [before]
         );
         res.json({

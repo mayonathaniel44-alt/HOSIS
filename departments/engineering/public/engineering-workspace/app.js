@@ -3066,7 +3066,7 @@ async function auditTrail(more = false) {
             (r) => `
             <tr>
                 <td>${escapeHtml(new Date(r.created_at).toLocaleString())}</td>
-                <td>${escapeHtml(r.actor_name)}</td>
+                <td>${escapeHtml(r.actor_name)}<br><small class="muted">Actor ID: ${escapeHtml(r.actor_id ?? 'System')}</small></td>
                 <td>${escapeHtml(r.action)}</td>
                 <td>${escapeHtml(r.collection)} · ${escapeHtml(r.record_id)}</td>
                 <td><button class="secondary" data-action="audit-detail" data-id="${escapeHtml(r.id)}">View Change</button></td>
