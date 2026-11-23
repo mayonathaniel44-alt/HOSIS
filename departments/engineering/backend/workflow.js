@@ -3,7 +3,13 @@
 const { randomUUID } = require('crypto');
 const domain = require('./domain.js');
 const error = (message, status = 400) => {
-    throw Object.assign(new Error(message), { status });
+    const codeName = {
+        400: 'INVALID_ENGINEERING_WORKFLOW',
+        403: 'ENGINEERING_FORBIDDEN',
+        404: 'ENGINEERING_NOT_FOUND',
+        409: 'ENGINEERING_CONFLICT'
+    }[status] || 'ENGINEERING_WORKFLOW_ERROR';
+    throw Object.assign(new Error(message), { status, codeName });
 };
 const today = () =>
     new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });

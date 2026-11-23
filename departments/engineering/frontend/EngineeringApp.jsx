@@ -1,28 +1,16 @@
 import { useEffect, useState } from 'react'
-import { authApi } from '../../../frontend/src/services/api.js'
+import { request } from '../../../frontend/src/services/api.js'
 export default function EngineeringApp({ onSignOut }) {
   const [requests, setRequests] = useState([]),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
-  async function call(path, options = {}) {
-    const response = await fetch(
-      `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/housekeeping/maintenance${path}`,
-      {
-        ...options,
-        headers: {
-          Authorization: `Bearer ${authApi.getToken()}`,
-          'Content-Type': 'application/json',
-        },
-      },
-    )
-    const data = await response.json()
-    if (!response.ok)
-      throw new Error(data.error?.message || 'Unable to load repairs.')
-    return data
+  function call(path, options) {
+    return request('/housekeeping/maintenance' + path, options)
   }
   async function reload() {
     const data = await call('/incoming')
     setRequests(data.requests)
+    setError('')
   }
   useEffect(() => {
     let active = true
