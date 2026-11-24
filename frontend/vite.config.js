@@ -3,6 +3,7 @@ import { cpSync, createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { networkInterfaces } from 'node:os'
 import { defineConfig, searchForWorkspaceRoot } from 'vite'
 
 const housekeepingSource = fileURLToPath(new URL('./src/modules/housekeeping', import.meta.url))
@@ -10,6 +11,19 @@ const housekeepingDependencies = ['react-dom', 'jspdf', 'jspdf-autotable', 'qrco
 const departmentSources = ['admin', 'engineering', 'finance', 'front-office', 'hr', 'sales-marketing']
   .map((name) => fileURLToPath(new URL(`../departments/${name}/frontend`, import.meta.url)))
 const engineeringPublic = fileURLToPath(new URL('../departments/engineering/public/engineering-workspace', import.meta.url))
+
+function findLanIpv4() {
+  const candidates = Object.entries(networkInterfaces()).flatMap(([name, addresses = []]) =>
+    addresses
+      .filter((entry) => entry.family === 'IPv4' && !entry.internal)
+      .filter((entry) => /^(10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(entry.address))
+      .map((entry) => ({ name, address: entry.address })),
+  )
+  const physical = candidates.find(({ name }) => /wi-?fi|wireless|ethernet/i.test(name) && !/virtual|vethernet|wsl|vpn|tunnel/i.test(name))
+  return physical?.address || candidates[0]?.address || ''
+}
+
+const lanHost = findLanIpv4()
 
 function engineeringStaticPages() {
   const contentTypes = {
@@ -51,6 +65,9 @@ function engineeringStaticPages() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), engineeringStaticPages()],
+  define: {
+    'import.meta.env.VITE_DETECTED_LAN_HOST': JSON.stringify(lanHost),
+  },
   resolve: {
     alias: { '@housekeeping': housekeepingSource },
     dedupe: ['react', 'react-dom', 'jspdf', 'jspdf-autotable', 'qrcode', 'write-excel-file', 'lucide-react', 'recharts', 'dompurify'],
