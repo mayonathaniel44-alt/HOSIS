@@ -79,14 +79,34 @@ export default function ReportsView({ showToast }) {
 
   return (
     <>
-      <div className="finance-breadcrumb">Finance &amp; Accounting / Financial Reports</div>
+      <div className="finance-breadcrumb no-print">Finance &amp; Accounting / Financial Reports</div>
 
-      <header className="finance-header">
+      {/* Printable Official Document Letterhead */}
+      <div className="fin-print-official-header print-only">
+        <div className="fin-print-letterhead">
+          <div className="fin-print-logo-col">
+            <h1 className="fin-print-hotel-name">GRAND HORIZON HOTEL &amp; RESORT</h1>
+            <p className="fin-print-hotel-sub">FINANCE &amp; ACCOUNTING SUBSYSTEM · AUDITED PERFORMANCE RECORD</p>
+          </div>
+          <div className="fin-print-doc-col">
+            <span className="fin-print-doc-badge">{period.toUpperCase()} FINANCIAL STATEMENT</span>
+            <span className="fin-print-doc-date">Generated: {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+          </div>
+        </div>
+        <div className="fin-print-meta-bar">
+          <div><strong>Period:</strong> {reportData?.periodLabel || period.toUpperCase()}</div>
+          <div><strong>Target Date:</strong> {targetDate}</div>
+          <div><strong>Currency:</strong> Philippine Peso (PHP ₱)</div>
+          <div><strong>Accounting Basis:</strong> Accrual &amp; Cash Combined</div>
+        </div>
+      </div>
+
+      <header className="finance-header no-print">
         <div className="finance-header-titles">
           <h1>Financial Reports &amp; Statements</h1>
           <p>Comprehensive periodic statements: Daily, Weekly, Monthly, and Annual financial performance.</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }} className="no-print">
           <button
             type="button"
             className="fin-btn fin-btn-secondary"
@@ -115,7 +135,7 @@ export default function ReportsView({ showToast }) {
       </header>
 
       {/* Period Selection Controls */}
-      <section className="fin-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+      <section className="fin-toolbar no-print" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fin-text-dim, #94a3b8)' }}>REPORTING PERIOD:</span>
           <div className="fin-pill-toggle" role="tablist">
@@ -304,7 +324,7 @@ export default function ReportsView({ showToast }) {
           <input
             type="search"
             placeholder="Search statement lines..."
-            className="fin-input"
+            className="fin-input no-print"
             style={{ width: '240px', padding: '6px 12px', fontSize: '13px' }}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -381,6 +401,28 @@ export default function ReportsView({ showToast }) {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Official Sign-Off Block for Printed Statement */}
+        <div className="fin-print-signoff print-only">
+          <div className="fin-signoff-box">
+            <span className="fin-signoff-title">PREPARED BY:</span>
+            <div className="fin-signoff-line"></div>
+            <strong>{user?.displayName || user?.username || 'Finance Officer'}</strong>
+            <small>Finance &amp; Accounting Officer</small>
+          </div>
+          <div className="fin-signoff-box">
+            <span className="fin-signoff-title">AUDITED &amp; VERIFIED:</span>
+            <div className="fin-signoff-line"></div>
+            <strong>Internal Audit Division</strong>
+            <small>Compliance &amp; Financial Control</small>
+          </div>
+          <div className="fin-signoff-box">
+            <span className="fin-signoff-title">APPROVED BY:</span>
+            <div className="fin-signoff-line"></div>
+            <strong>Victoria Reyes, CPA</strong>
+            <small>Director of Finance / Department Head</small>
+          </div>
         </div>
       </section>
 

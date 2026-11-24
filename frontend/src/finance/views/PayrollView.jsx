@@ -528,159 +528,190 @@ export default function PayrollView({ showToast }) {
               </div>
 
               <div className="fin-modal-body">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-                  <div>
-                    <label className="fin-label">Employee ID</label>
-                    <input
-                      type="text"
-                      className="fin-input"
-                      placeholder="e.g. EMP-26105"
-                      value={empId}
-                      onChange={(e) => setEmpId(e.target.value)}
-                    />
+                {/* Section 1: Staff Details */}
+                <div className="fin-form-section">
+                  <div className="fin-form-section-header">
+                    <span className="fin-form-section-num">1</span>
+                    <h4 className="fin-form-section-title">Employee Details</h4>
                   </div>
-                  <div>
-                    <label className="fin-label">Full Employee Name *</label>
-                    <input
-                      type="text"
-                      className="fin-input"
-                      placeholder="e.g. Christine Joyce Santos"
-                      required
-                      value={empName}
-                      onChange={(e) => setEmpName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="fin-label">Department</label>
-                    <select
-                      className="fin-select"
-                      value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
-                    >
-                      <option value="Front Office">Front Office</option>
-                      <option value="Housekeeping">Housekeeping</option>
-                      <option value="FAB Services">FAB Services</option>
-                      <option value="Engineering">Engineering</option>
-                      <option value="Sales &amp; Marketing">Sales &amp; Marketing</option>
-                      <option value="Finance &amp; Accounting">Finance &amp; Accounting</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="fin-label">Role / Position Title</label>
-                    <input
-                      type="text"
-                      className="fin-input"
-                      placeholder="e.g. Senior Receptionist"
-                      value={roleTitle}
-                      onChange={(e) => setRoleTitle(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                  <div>
-                    <label className="fin-label">Regular Hours (Semi-monthly)</label>
-                    <input
-                      type="number"
-                      className="fin-input"
-                      value={regularHours}
-                      onChange={(e) => setRegularHours(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="fin-label">Overtime Hours</label>
-                    <input
-                      type="number"
-                      className="fin-input"
-                      value={overtimeHours}
-                      onChange={(e) => setOvertimeHours(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="fin-label">Basic Pay Rate (PHP) *</label>
-                    <input
-                      type="number"
-                      className="fin-input"
-                      required
-                      value={basicPay}
-                      onChange={(e) => setBasicPay(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="fin-label">Overtime Compensation</label>
-                    <input
-                      type="number"
-                      className="fin-input"
-                      value={overtimePay}
-                      onChange={(e) => setOvertimePay(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="fin-label">Allowances &amp; Incentives</label>
-                    <input
-                      type="number"
-                      className="fin-input"
-                      value={allowances}
-                      onChange={(e) => setAllowances(e.target.value)}
-                    />
-                  </div>
-                  <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '10px', borderRadius: '6px' }}>
-                    <span style={{ fontSize: '11px', color: '#38bdf8' }}>CALCULATED GROSS</span>
-                    <div style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>
-                      ₱{calcGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  <div className="fin-form-grid fin-form-grid-2">
+                    <div className="fin-field">
+                      <label className="fin-label">Employee ID</label>
+                      <input
+                        type="text"
+                        className="fin-input"
+                        placeholder="e.g. EMP-26105"
+                        value={empId}
+                        onChange={(e) => setEmpId(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">Full Employee Name <span className="fin-required">*</span></label>
+                      <input
+                        type="text"
+                        className="fin-input"
+                        placeholder="e.g. Christine Joyce Santos"
+                        required
+                        value={empName}
+                        onChange={(e) => setEmpName(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">Department</label>
+                      <select
+                        className="fin-select"
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                      >
+                        <option value="Front Office">Front Office</option>
+                        <option value="Housekeeping">Housekeeping</option>
+                        <option value="FAB Services">FAB Services</option>
+                        <option value="Engineering">Engineering</option>
+                        <option value="Sales &amp; Marketing">Sales &amp; Marketing</option>
+                        <option value="Finance &amp; Accounting">Finance &amp; Accounting</option>
+                      </select>
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">Role / Position Title</label>
+                      <input
+                        type="text"
+                        className="fin-input"
+                        placeholder="e.g. Senior Receptionist"
+                        value={roleTitle}
+                        onChange={(e) => setRoleTitle(e.target.value)}
+                      />
                     </div>
                   </div>
                 </div>
 
-                <h4 style={{ margin: '14px 0 8px 0', fontSize: '13px', color: '#d4af37' }}>
-                  Statutory Deductions (Automatic Reductions)
-                </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                  <div>
-                    <label className="fin-label">BIR Withholding Tax</label>
-                    <input
-                      type="number"
-                      className="fin-input"
-                      value={withholdingTax}
-                      onChange={(e) => setWithholdingTax(e.target.value)}
-                    />
+                {/* Section 2: Compensation & Hours */}
+                <div className="fin-form-section">
+                  <div className="fin-form-section-header">
+                    <span className="fin-form-section-num">2</span>
+                    <h4 className="fin-form-section-title">Earnings &amp; Hours (Semi-Monthly)</h4>
                   </div>
-                  <div>
-                    <label className="fin-label">SSS Contribution</label>
-                    <input
-                      type="number"
-                      className="fin-input"
-                      value={sssDeduction}
-                      onChange={(e) => setSssDeduction(e.target.value)}
-                    />
+                  <div className="fin-form-grid fin-form-grid-3">
+                    <div className="fin-field">
+                      <label className="fin-label">Regular Hours</label>
+                      <input
+                        type="number"
+                        className="fin-input"
+                        placeholder="80"
+                        value={regularHours}
+                        onChange={(e) => setRegularHours(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">Overtime Hours</label>
+                      <input
+                        type="number"
+                        className="fin-input"
+                        placeholder="0"
+                        value={overtimeHours}
+                        onChange={(e) => setOvertimeHours(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">Basic Pay Rate (PHP) <span className="fin-required">*</span></label>
+                      <input
+                        type="number"
+                        className="fin-input"
+                        placeholder="0.00"
+                        required
+                        value={basicPay}
+                        onChange={(e) => setBasicPay(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">Overtime Compensation</label>
+                      <input
+                        type="number"
+                        className="fin-input"
+                        placeholder="0.00"
+                        value={overtimePay}
+                        onChange={(e) => setOvertimePay(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">Allowances &amp; Incentives</label>
+                      <input
+                        type="number"
+                        className="fin-input"
+                        placeholder="0.00"
+                        value={allowances}
+                        onChange={(e) => setAllowances(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-calc-card gross">
+                      <span className="fin-calc-card-label">CALCULATED GROSS</span>
+                      <div className="fin-calc-card-val">
+                        ₱{calcGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </div>
+                      <small className="fin-calc-card-note">Basic + OT + Allowances</small>
+                    </div>
                   </div>
-                  <div>
-                    <label className="fin-label">PhilHealth Premium</label>
-                    <input
-                      type="number"
-                      className="fin-input"
-                      value={philhealthDeduction}
-                      onChange={(e) => setPhilhealthDeduction(e.target.value)}
-                    />
+                </div>
+
+                {/* Section 3: Statutory Deductions */}
+                <div className="fin-form-section">
+                  <div className="fin-form-section-header">
+                    <span className="fin-form-section-num">3</span>
+                    <h4 className="fin-form-section-title">Statutory Deductions (Mandatory Contributions)</h4>
                   </div>
-                  <div>
-                    <label className="fin-label">Pag-IBIG Contribution</label>
-                    <input
-                      type="number"
-                      className="fin-input"
-                      value={pagibigDeduction}
-                      onChange={(e) => setPagibigDeduction(e.target.value)}
-                    />
+                  <div className="fin-form-grid fin-form-grid-4">
+                    <div className="fin-field">
+                      <label className="fin-label">BIR Withholding Tax</label>
+                      <input
+                        type="number"
+                        className="fin-input"
+                        placeholder="0.00"
+                        value={withholdingTax}
+                        onChange={(e) => setWithholdingTax(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">SSS Contribution</label>
+                      <input
+                        type="number"
+                        className="fin-input"
+                        placeholder="0.00"
+                        value={sssDeduction}
+                        onChange={(e) => setSssDeduction(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">PhilHealth Premium</label>
+                      <input
+                        type="number"
+                        className="fin-input"
+                        placeholder="0.00"
+                        value={philhealthDeduction}
+                        onChange={(e) => setPhilhealthDeduction(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">Pag-IBIG Contribution</label>
+                      <input
+                        type="number"
+                        className="fin-input"
+                        placeholder="0.00"
+                        value={pagibigDeduction}
+                        onChange={(e) => setPagibigDeduction(e.target.value)}
+                      />
+                    </div>
                   </div>
                 </div>
 
                 {/* Net Summary Box */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid #22c55e', padding: '12px 18px', borderRadius: '8px' }}>
-                  <div>
-                    <span style={{ fontSize: '12px', color: '#86efac', fontWeight: 600 }}>CALCULATED NET TAKE-HOME PAY</span>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>Gross (₱{calcGross.toLocaleString()}) minus Total Deductions (₱{calcDeductions.toLocaleString()})</div>
+                <div className="fin-calc-card net">
+                  <div className="fin-calc-net-info">
+                    <span className="fin-calc-net-badge">ESTIMATED TAKE-HOME COMPENSATION</span>
+                    <h3 className="fin-calc-net-title">Calculated Net Pay</h3>
+                    <p className="fin-calc-net-sub">
+                      Gross (₱{calcGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}) minus Total Deductions (₱{calcDeductions.toLocaleString('en-US', { minimumFractionDigits: 2 })})
+                    </p>
                   </div>
-                  <div style={{ fontSize: '22px', fontWeight: 800, color: '#22c55e' }}>
+                  <div className="fin-calc-net-amount">
                     ₱{calcNet.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </div>
                 </div>

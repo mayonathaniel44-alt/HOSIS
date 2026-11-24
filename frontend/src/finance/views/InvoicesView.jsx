@@ -598,8 +598,8 @@ export default function InvoicesView({ user, showToast }) {
                 </button>
               </div>
               <div className="fin-modal-body">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                  <div>
+                <div className="fin-form-grid fin-form-grid-3">
+                  <div className="fin-field">
                     <label className="fin-label">Invoice Classification</label>
                     <select
                       className="fin-select"
@@ -611,8 +611,8 @@ export default function InvoicesView({ user, showToast }) {
                       <option value="STAFF">Staff Account Charge</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="fin-label">Customer / Guest Name *</label>
+                  <div className="fin-field">
+                    <label className="fin-label">Customer / Guest Name <span className="fin-required">*</span></label>
                     <input
                       type="text"
                       className="fin-input"
@@ -622,7 +622,7 @@ export default function InvoicesView({ user, showToast }) {
                       onChange={(e) => setCustomerName(e.target.value)}
                     />
                   </div>
-                  <div>
+                  <div className="fin-field">
                     <label className="fin-label">Billing Email</label>
                     <input
                       type="email"
@@ -635,8 +635,8 @@ export default function InvoicesView({ user, showToast }) {
                 </div>
 
                 {invoiceType === 'GUEST' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                    <div>
+                  <div className="fin-form-grid fin-form-grid-2">
+                    <div className="fin-field">
                       <label className="fin-label">Room Number</label>
                       <input
                         type="text"
@@ -646,7 +646,7 @@ export default function InvoicesView({ user, showToast }) {
                         onChange={(e) => setRoomNumber(e.target.value)}
                       />
                     </div>
-                    <div>
+                    <div className="fin-field">
                       <label className="fin-label">Reservation Code</label>
                       <input
                         type="text"
@@ -659,8 +659,8 @@ export default function InvoicesView({ user, showToast }) {
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                  <div>
+                <div className="fin-form-grid fin-form-grid-2">
+                  <div className="fin-field">
                     <label className="fin-label">Issue Date</label>
                     <input
                       type="date"
@@ -669,7 +669,7 @@ export default function InvoicesView({ user, showToast }) {
                       onChange={(e) => setIssueDate(e.target.value)}
                     />
                   </div>
-                  <div>
+                  <div className="fin-field">
                     <label className="fin-label">Payment Due Date</label>
                     <input
                       type="date"
