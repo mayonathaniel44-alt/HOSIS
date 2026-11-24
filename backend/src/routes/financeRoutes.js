@@ -62,5 +62,14 @@ router.post('/integrations/maintenance/expenses', requireBody, controller.create
 // 3. Marketing & Sales: Sales records connected to finance
 router.get('/integrations/sales/records', controller.listSalesRecords)
 router.post('/integrations/sales/sync-invoice', requireBody, controller.syncSalesInvoice)
+router.get('/integrations/city-ledger/aging', controller.getCityLedgerAging)
+
+// 4. Human Resources: Timesheet & Biometric Attendance Ingestion
+router.get('/integrations/hr/timesheets', controller.syncHRTimesheets)
+router.get('/statutory-rates', controller.getStatutoryRates)
+
+// 5. Automated Hospitality Night Audit & Daily Close
+router.get('/night-audit', controller.getNightAuditHistory)
+router.post('/night-audit/run', controller.runNightAudit)
 
 module.exports = router

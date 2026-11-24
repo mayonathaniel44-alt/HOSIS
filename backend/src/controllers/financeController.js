@@ -58,4 +58,9 @@ module.exports = {
   createMaintenanceExpense: controller((req) => service.createMaintenanceExpense(req.body, userId(req), userName(req)), 201),
   listSalesRecords: controller((req) => service.listSalesRecords(req.query.status)),
   syncSalesInvoice: controller((req) => service.syncSalesInvoice(req.body, userId(req), userName(req)), 201),
+  getCityLedgerAging: controller(() => service.getCityLedgerAging()),
+  syncHRTimesheets: controller(() => service.syncHRTimesheets()),
+  getStatutoryRates: controller(() => service.getStatutoryRates()),
+  runNightAudit: controller((req) => service.runNightAudit(req.body, userName(req)), 201),
+  getNightAuditHistory: controller((req) => service.getNightAuditHistory(req.query.limit)),
 }

@@ -108,6 +108,27 @@ async function syncSalesInvoice(body, userId, userName) {
   return model.syncSalesInvoice(body, userId, userName)
 }
 
+// Advanced Integrations & Night Audit
+async function getCityLedgerAging() {
+  return model.getCityLedgerAging()
+}
+
+async function syncHRTimesheets() {
+  return model.syncHRTimesheets()
+}
+
+async function getStatutoryRates() {
+  return model.getStatutoryRates()
+}
+
+async function runNightAudit(body, auditorName) {
+  return model.runNightAudit(body?.auditDate || null, auditorName)
+}
+
+async function getNightAuditHistory(limit) {
+  return model.getNightAuditHistory(limit ? Number(limit) : 15)
+}
+
 module.exports = {
   dashboard,
   listInvoices,
@@ -132,4 +153,9 @@ module.exports = {
   createMaintenanceExpense,
   listSalesRecords,
   syncSalesInvoice,
+  getCityLedgerAging,
+  syncHRTimesheets,
+  getStatutoryRates,
+  runNightAudit,
+  getNightAuditHistory,
 }
