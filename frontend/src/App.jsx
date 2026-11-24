@@ -621,60 +621,6 @@ function App() {
                 </button>
               </form>
 
-              {/* Quick Fill Database Role Demo Accounts */}
-              <div className="login-quick-roles">
-                <span className="login-quick-roles-title">Demo Accounts (Direct Database Role)</span>
-                <div className="login-quick-roles-list">
-                  <button
-                    type="button"
-                    className="login-role-chip"
-                    onClick={() => {
-                      setUsername('admin')
-                      setPassword('Admin123456!')
-                      if (loginError) setLoginError('')
-                    }}
-                    title="Fill Super Admin credentials"
-                  >
-                    ⚡ Super Admin
-                  </button>
-                  <button
-                    type="button"
-                    className="login-role-chip"
-                    onClick={() => {
-                      setUsername('finance.officer')
-                      setPassword('Finance123456!')
-                      if (loginError) setLoginError('')
-                    }}
-                    title="Fill Finance Officer credentials"
-                  >
-                    ⚡ Finance Officer
-                  </button>
-                  <button
-                    type="button"
-                    className="login-role-chip"
-                    onClick={() => {
-                      setUsername('finance.head')
-                      setPassword('Head123456!')
-                      if (loginError) setLoginError('')
-                    }}
-                    title="Fill Department Head credentials"
-                  >
-                    ⚡ Department Head
-                  </button>
-                  <button
-                    type="button"
-                    className="login-role-chip"
-                    onClick={() => {
-                      setUsername('frontoffice')
-                      setPassword('FrontOffice123456!')
-                      if (loginError) setLoginError('')
-                    }}
-                    title="Fill Front Office credentials"
-                  >
-                    ⚡ Front Office
-                  </button>
-                </div>
-              </div>
 
               <div className="login-footer">
                 <span>ROLE-BASED DIRECT ACCESS</span>
