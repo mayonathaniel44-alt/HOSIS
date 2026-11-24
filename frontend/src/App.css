@@ -1800,6 +1800,58 @@ tbody tr:last-child td {
   box-sizing: border-box;
 }
 
+.auth-tab-switch {
+  display: flex;
+  background: #f4f3f0;
+  border: 1px solid #e7e4dc;
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 20px;
+  gap: 3px;
+}
+
+.auth-tab-btn {
+  flex: 1;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #787588;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.auth-tab-btn:hover {
+  color: #2b283d;
+}
+
+.auth-tab-btn.active {
+  background: #ffffff;
+  color: #a57c2c;
+  box-shadow: 0 2px 5px rgba(40, 30, 20, 0.07);
+}
+
+.auth-switch-prompt {
+  margin-top: 13px;
+  text-align: center;
+  font-size: 11px;
+  color: #79778c;
+}
+
+.auth-switch-prompt .text-button {
+  font-size: 11px;
+  font-weight: 600;
+  color: #a57c2c;
+  cursor: pointer;
+}
+
+.auth-switch-prompt .text-button:hover {
+  text-decoration: underline;
+}
+
 .login-card-heading {
   margin-bottom: 21px;
   text-align: center;
