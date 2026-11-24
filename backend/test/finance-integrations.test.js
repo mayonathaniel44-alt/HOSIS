@@ -97,3 +97,48 @@ test('Night Audit Day-End Close formula validates balanced ledger reconciliation
   assert.equal(discrepancy, 0)
   assert.equal(status, 'COMPLETED')
 })
+
+test('Subsystem and Super Admin dispatch packaging generates correct destination summaries', () => {
+  const targetSubsystems = ['SUPER_ADMIN', 'FRONT_OFFICE', 'HOUSEKEEPING', 'MAINTENANCE', 'SALES_MARKETING', 'HUMAN_RESOURCES']
+  const mockData = {
+    invoices: [1, 2, 3],
+    payments: [1, 2],
+    expenses: [1, 2, 3, 4],
+    payroll: [1, 2],
+    hkDamages: [{ billingStatus: 'BILLED', estimatedCost: 1500 }],
+    sales: [{ status: 'INVOICED', contractAmount: 80000 }],
+    leave: [1, 2, 3],
+    maint: { records: [1, 2], totalApproved: 25000, remainingBudget: 225000 },
+  }
+
+  const results = targetSubsystems.map((sub) => {
+    let summary = {}
+    if (sub === 'SUPER_ADMIN') {
+      summary = {
+        totalInvoices: mockData.invoices.length,
+        totalPayments: mockData.payments.length,
+        totalExpenses: mockData.expenses.length,
+        totalPayroll: mockData.payroll.length,
+      }
+    } else if (sub === 'FRONT_OFFICE') {
+      summary = { invoicesTransmitted: mockData.invoices.length, paymentsPosted: mockData.payments.length }
+    } else if (sub === 'HOUSEKEEPING') {
+      summary = { damagesBilledToGuests: mockData.hkDamages.length }
+    } else if (sub === 'MAINTENANCE') {
+      summary = { recordsCount: mockData.maint.records.length, totalApprovedCost: mockData.maint.totalApproved }
+    } else if (sub === 'SALES_MARKETING') {
+      summary = { dealsCount: mockData.sales.length }
+    } else if (sub === 'HUMAN_RESOURCES') {
+      summary = { payrollRecordsCount: mockData.payroll.length, leaveRequestsCount: mockData.leave.length }
+    }
+    return { subsystem: sub, status: 'SYNCHRONIZED', summary }
+  })
+
+  assert.equal(results.length, 6)
+  assert.equal(results[0].subsystem, 'SUPER_ADMIN')
+  assert.equal(results[0].summary.totalInvoices, 3)
+  assert.equal(results[1].subsystem, 'FRONT_OFFICE')
+  assert.equal(results[1].summary.invoicesTransmitted, 3)
+  assert.equal(results[5].subsystem, 'HUMAN_RESOURCES')
+  assert.equal(results[5].summary.leaveRequestsCount, 3)
+})

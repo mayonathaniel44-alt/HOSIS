@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
 import { exportToCsv, exportToJson } from '../utils/exportHelper'
+import MasterDispatchModal from './MasterDispatchModal'
 
 export default function IntegrationsView({ showToast }) {
   const [activeSubTab, setActiveSubTab] = useState('housekeeping') // 'housekeeping' | 'maintenance' | 'sales'
@@ -36,74 +37,6 @@ export default function IntegrationsView({ showToast }) {
 
   // 5. Master Bulk Export & Subsystem Dispatch state
   const [showDispatchModal, setShowDispatchModal] = useState(false)
-  const [exportingMaster, setExportingMaster] = useState(false)
-  const [dispatchingMaster, setDispatchingMaster] = useState(false)
-  const [dispatchResults, setDispatchResults] = useState(null)
-  const [selectedSubsystems, setSelectedSubsystems] = useState([
-    'FRONT_OFFICE',
-    'HOUSEKEEPING',
-    'MAINTENANCE',
-    'SALES_MARKETING',
-    'HUMAN_RESOURCES',
-  ])
-  const [dispatchNotes, setDispatchNotes] = useState('Master financial ledger synchronization')
-
-  function toggleSubsystem(subId) {
-    if (selectedSubsystems.includes(subId)) {
-      setSelectedSubsystems(selectedSubsystems.filter((s) => s !== subId))
-    } else {
-      setSelectedSubsystems([...selectedSubsystems, subId])
-    }
-  }
-
-  async function handleMasterExport(format = 'json') {
-    setExportingMaster(true)
-    try {
-      const res = await financeApi.exportData('all', format)
-      if (format === 'json') {
-        const payload = res.data || res
-        exportToJson(`hosis-master-finance-${Date.now()}`, payload)
-      } else {
-        const csvData = typeof res === 'string' ? res : res.data || ''
-        const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' })
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `hosis-master-finance-ledger-${Date.now()}.csv`
-        link.click()
-        URL.revokeObjectURL(url)
-      }
-      showToast(`Master financial archive exported as ${format.toUpperCase()}.`)
-    } catch (err) {
-      console.error('Master bulk export failed:', err)
-      showToast('Error exporting master financial archive.')
-    } finally {
-      setExportingMaster(false)
-    }
-  }
-
-  async function handleDispatchToSubsystems(e) {
-    e.preventDefault()
-    if (!selectedSubsystems.length) {
-      showToast('Select at least one destination subsystem.')
-      return
-    }
-    setDispatchingMaster(true)
-    try {
-      const res = await financeApi.dispatchSubsystems({
-        targetSubsystems: selectedSubsystems,
-        notes: dispatchNotes,
-      })
-      const data = res.data || res
-      setDispatchResults(data.dispatches || [])
-      showToast(`Successfully dispatched master financial records to ${selectedSubsystems.length} subsystem(s).`)
-    } catch (err) {
-      console.error('Subsystem dispatch failed:', err)
-      showToast(err.message || 'Failed to dispatch data to subsystems.')
-    } finally {
-      setDispatchingMaster(false)
-    }
-  }
 
   async function loadData() {
     setLoading(true)
@@ -1260,174 +1193,11 @@ export default function IntegrationsView({ showToast }) {
       )}
 
       {/* Modal: Master Bulk Export & Subsystem Dispatch Hub */}
-      {showDispatchModal && (
-        <div className="fin-modal-overlay" onClick={() => setShowDispatchModal(false)}>
-          <div className="fin-modal-window" style={{ maxWidth: '680px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="fin-modal-header">
-              <h3 className="fin-modal-title">Master Bulk Export &amp; Subsystem Dispatch Hub</h3>
-              <button
-                type="button"
-                className="fin-modal-close-btn"
-                onClick={() => setShowDispatchModal(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="fin-modal-body">
-              <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#64748b' }}>
-                Generate a complete financial archive of all records across the hotel subsystem or dispatch synchronized records directly to recipient departments.
-              </p>
-
-              {/* SECTION 1: MANUAL BULK EXPORT */}
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '18px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                    1. Manual Master Bulk Export
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#4334ad', fontWeight: 600 }}>
-                    Includes 100% of Financial Ledgers
-                  </span>
-                </div>
-                <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#64748b' }}>
-                  Download consolidated folios, payments, expense vouchers, payroll disbursements, damage billings, banquet contracts, and immutable audit logs.
-                </p>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    type="button"
-                    className="fin-btn fin-btn-secondary"
-                    disabled={exportingMaster}
-                    onClick={() => handleMasterExport('csv')}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    {exportingMaster ? 'Generating CSV...' : 'Download Master CSV'}
-                  </button>
-                  <button
-                    type="button"
-                    className="fin-btn fin-btn-secondary"
-                    disabled={exportingMaster}
-                    onClick={() => handleMasterExport('json')}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    {exportingMaster ? 'Packaging JSON...' : 'Download Master JSON'}
-                  </button>
-                </div>
-              </div>
-
-              {/* SECTION 2: DISPATCH TO SUBSYSTEMS */}
-              <form onSubmit={handleDispatchToSubsystems}>
-                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
-                    2. Synchronize &amp; Send to Recipient Subsystems
-                  </span>
-                  <p style={{ margin: '0 0 14px 0', fontSize: '12px', color: '#64748b' }}>
-                    Select hotel departments to push reconciled financial records and create verified audit trail records:
-                  </p>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-                    {[
-                      { id: 'FRONT_OFFICE', label: 'Front Office PMS', desc: 'Guest folios, payments, billing status' },
-                      { id: 'HOUSEKEEPING', label: 'Housekeeping', desc: 'Room damage recovery & restocking release' },
-                      { id: 'MAINTENANCE', label: 'Maintenance & Engineering', desc: 'OpEx/CapEx work order vouchers & budget' },
-                      { id: 'SALES_MARKETING', label: 'Sales & Marketing', desc: 'Corporate contracts & city ledger aging' },
-                      { id: 'HUMAN_RESOURCES', label: 'Human Resources (HR)', desc: 'Payroll compensation & approved leave' },
-                    ].map((target) => (
-                      <label
-                        key={target.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '10px',
-                          padding: '10px 12px',
-                          borderRadius: '6px',
-                          border: selectedSubsystems.includes(target.id) ? '1.5px solid #4334ad' : '1px solid #e2e8f0',
-                          background: selectedSubsystems.includes(target.id) ? '#f5f3ff' : '#fafafa',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedSubsystems.includes(target.id)}
-                          onChange={() => toggleSubsystem(target.id)}
-                          style={{ marginTop: '3px' }}
-                        />
-                        <div>
-                          <strong style={{ fontSize: '12px', color: '#0f172a', display: 'block' }}>{target.label}</strong>
-                          <span style={{ fontSize: '11px', color: '#64748b' }}>{target.desc}</span>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '4px' }}>
-                      DISPATCH MEMO / AUDIT REASON
-                    </label>
-                    <input
-                      type="text"
-                      className="fin-input"
-                      value={dispatchNotes}
-                      onChange={(e) => setDispatchNotes(e.target.value)}
-                      placeholder="e.g., Periodic financial subsystem reconciliation"
-                      style={{ padding: '8px 12px', fontSize: '12px' }}
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="fin-btn fin-btn-primary"
-                    disabled={dispatchingMaster}
-                    style={{ width: '100%', minHeight: '38px', fontSize: '12px' }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="22" y1="2" x2="11" y2="13" />
-                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                    </svg>
-                    {dispatchingMaster ? 'Dispatching Records to Subsystems...' : `Send Records to ${selectedSubsystems.length} Subsystem(s)`}
-                  </button>
-                </div>
-              </form>
-
-              {/* DISPATCH CONFIRMATION FEEDBACK */}
-              {dispatchResults && dispatchResults.length > 0 && (
-                <div style={{ marginTop: '16px', background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '8px', padding: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <span style={{ color: '#16a34a', fontWeight: 700, fontSize: '13px' }}>
-                      ✓ Subsystem Synchronization Completed
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {dispatchResults.map((r, i) => (
-                      <div key={i} style={{ fontSize: '12px', color: '#1e293b', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '4px' }}>
-                        <span><strong>{r.subsystem}</strong>: Status {r.status}</span>
-                        <span style={{ color: '#64748b' }}>
-                          {Object.entries(r.summary || {}).map(([k, v]) => `${k}: ${v}`).join(' · ')}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="fin-modal-footer">
-              <button
-                type="button"
-                className="fin-btn fin-btn-secondary"
-                onClick={() => setShowDispatchModal(false)}
-              >
-                Close Hub
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <MasterDispatchModal
+        isOpen={showDispatchModal}
+        onClose={() => setShowDispatchModal(false)}
+        showToast={showToast}
+      />
     </>
   )
 }
