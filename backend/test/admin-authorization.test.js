@@ -44,3 +44,29 @@ test('finance roles pass the finance role guard', () => {
   })
   assert.equal(rejected, true)
 })
+
+test('super admin, officer, and head roles pass equivalent guards', () => {
+  const requireAdmin = authorize('ADMIN')
+  let adminPassed = false
+  requireAdmin({ user: { role: 'SUPER_ADMIN' } }, {}, (error) => {
+    assert.equal(error, undefined)
+    adminPassed = true
+  })
+  assert.equal(adminPassed, true)
+
+  const requireFinance = authorize('FINANCE')
+  let officerPassed = false
+  requireFinance({ user: { role: 'OFFICER' } }, {}, (error) => {
+    assert.equal(error, undefined)
+    officerPassed = true
+  })
+  assert.equal(officerPassed, true)
+
+  const requireHead = authorize('DEPARTMENT_HEAD')
+  let headPassed = false
+  requireHead({ user: { role: 'HEAD' } }, {}, (error) => {
+    assert.equal(error, undefined)
+    headPassed = true
+  })
+  assert.equal(headPassed, true)
+})

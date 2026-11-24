@@ -6,6 +6,7 @@ import ExpensesView from './views/ExpensesView'
 import RevenueView from './views/RevenueView'
 import PayrollView from './views/PayrollView'
 import ReportsView from './views/ReportsView'
+import IntegrationsView from './views/IntegrationsView'
 import HistoryView from './views/HistoryView'
 import './FinanceDashboard.css'
 
@@ -60,12 +61,17 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
   const [toastMessage, setToastMessage] = useState('')
 
   const roleDisplay = {
+    ADMIN: 'SUPER ADMIN',
+    SUPER_ADMIN: 'SUPER ADMIN',
     FINANCE_ADMIN: 'FINANCE ADMIN',
-    FINANCE_STAFF: 'FINANCE STAFF',
+    FINANCE_STAFF: 'FINANCE OFFICER',
+    FINANCE_OFFICER: 'FINANCE OFFICER',
+    OFFICER: 'FINANCE OFFICER',
     DEPARTMENT_HEAD: 'DEPARTMENT HEAD',
-    ADMIN: 'FINANCE ADMIN',
-    FINANCE: 'FINANCE',
-  }[user?.role] || (user?.role ? user.role.replace(/_/g, ' ') : 'FINANCE')
+    HEAD: 'DEPARTMENT HEAD',
+    FINANCE_HEAD: 'DEPARTMENT HEAD',
+    FINANCE: 'FINANCE OFFICER',
+  }[user?.role?.toUpperCase()] || (user?.role ? user.role.replace(/_/g, ' ').toUpperCase() : 'FINANCE OFFICER')
 
   const defaultNames = {
     FINANCE_ADMIN: 'Victoria Reyes',
@@ -101,6 +107,7 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
     { id: 'payroll', label: 'Payroll', icon: '👥' },
     { id: 'reports', label: 'Financial Reports', icon: '📈' },
     { id: 'revenue', label: 'Revenue', icon: '🏨' },
+    { id: 'integrations', label: 'Integrations', icon: '🔗' },
     { id: 'history', label: 'Audit Trail', icon: '📜' },
   ]
 
@@ -141,7 +148,18 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
               <small>{userHandle}</small>
             </div>
           </div>
-          {onOpenAdmin && (user?.role === 'ADMIN' || user?.role === 'FINANCE_ADMIN') && (
+          {onOpenFrontOffice && (user?.role === 'ADMIN' || user?.role === 'FRONT_OFFICE') && (
+            <button
+              type="button"
+              className="finance-signout-btn"
+              onClick={onOpenFrontOffice}
+              title="Open Front Office Workspace"
+              style={{ background: 'rgba(56, 189, 248, 0.15)', borderColor: '#38bdf8', color: '#38bdf8' }}
+            >
+              Front Office
+            </button>
+          )}
+          {onOpenAdmin && (['ADMIN', 'SUPER_ADMIN', 'FINANCE_ADMIN'].includes(user?.role?.toUpperCase())) && (
             <button
               type="button"
               className="finance-signout-btn"
@@ -206,6 +224,10 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
               onNavigate={(target) => setActiveTab(target)}
               showToast={showToast}
             />
+          )}
+
+          {activeTab === 'integrations' && (
+            <IntegrationsView user={user} showToast={showToast} />
           )}
 
           {activeTab === 'history' && (

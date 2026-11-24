@@ -1,130 +1,79 @@
 import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
+import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
 export default function ReportsView({ showToast }) {
-  const [reports, setReports] = useState([])
+  const [reportType, setReportType] = useState('Income & expenditure')
+  const [period, setPeriod] = useState('daily') // 'daily' | 'weekly' | 'monthly' | 'annually'
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10))
+  const [reportData, setReportData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [selectedReport, setSelectedReport] = useState(null)
+  const [selectedStatement, setSelectedStatement] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
 
-  async function loadReports() {
+  async function loadReport(chosenPeriod = period, chosenDate = selectedDate, chosenType = reportType) {
     setLoading(true)
     try {
-      const [reportData, revData, expData, payrollData] = await Promise.all([
-        financeApi.reports('').catch(() => ({})),
-        financeApi.revenue().catch(() => ({})),
-        financeApi.expenses('APPROVED').catch(() => []),
-        financeApi.payroll().catch(() => []),
-      ])
-
-      const r = reportData.data || reportData || {}
-      const rev = revData.data || revData || {}
-      const rawExp = expData.data || expData || []
-      const rawPayroll = payrollData.data || payrollData || []
-
-      const netRev = Number(rev.netRevenue || r.netRevenue || 55500)
-      const totalExp = rawExp.reduce((s, e) => s + Number(e.amount || 0), 0)
-      const totalPayroll = rawPayroll.reduce((s, p) => s + Number(p.grossPay || 0), 0)
-      const totalCosts = totalExp + totalPayroll
-      const netIncome = netRev - totalCosts
-
-      const todayStr = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
-
-      const generatedReports = [
-        {
-          id: 'RPT-GL-01',
-          date: todayStr,
-          source: 'General Ledger & Operating Accounts',
-          title: 'Consolidated Income & Expenditure Statement',
-          status: 'Audited & Verified',
-          revenue: netRev,
-          expenses: totalExp,
-          payroll: totalPayroll,
-          netIncome,
-          preparedBy: 'Elena Ramos (Finance Officer)',
-          currency: 'PHP (Philippine Peso)',
-          details: [
-            { category: 'Net Hotel Invoiced Revenue (Excl. VAT)', type: 'credit', amount: netRev },
-            { category: 'Department Operating Expenses (Approved)', type: 'debit', amount: -totalExp },
-            { category: 'Staff Payroll Gross Compensation', type: 'debit', amount: -totalPayroll },
-            { category: 'Operating Position / Surplus', type: 'credit', amount: netIncome },
-          ],
-        },
-        {
-          id: 'RPT-REV-02',
-          date: todayStr,
-          source: 'Front Office Billing & Payment Folios',
-          title: 'Revenue Reconciliation & Receivables Statement',
-          status: 'Audited & Verified',
-          revenue: Number(rev.totalBilled || netRev),
-          expenses: 0,
-          payroll: 0,
-          netIncome: Number(rev.paid || 0),
-          preparedBy: 'Elena Ramos (Finance Officer)',
-          currency: 'PHP (Philippine Peso)',
-          details: [
-            { category: 'Total Guest & Staff Billed Invoices', type: 'credit', amount: Number(rev.totalBilled || 0) },
-            { category: 'Collections Settled to Date', type: 'credit', amount: Number(rev.paid || 0) },
-            { category: 'Outstanding Receivables Due', type: 'debit', amount: -Number(rev.receivables || 0) },
-          ],
-        },
-        {
-          id: 'RPT-EXP-03',
-          date: todayStr,
-          source: 'Operating Expense Vouchers Ledger',
-          title: 'Department Operational Expenditures Audit',
-          status: 'Approved Vouchers',
-          revenue: 0,
-          expenses: totalExp,
-          payroll: 0,
-          netIncome: -totalExp,
-          preparedBy: 'D. Villanueva (Finance Manager)',
-          currency: 'PHP (Philippine Peso)',
-          details: rawExp.map((e) => ({
-            category: `${e.department} · ${e.category}`,
-            type: 'debit',
-            amount: -Number(e.amount || 0),
-          })),
-        },
-        {
-          id: 'RPT-PR-04',
-          date: todayStr,
-          source: 'Verified HR Compensation Ledger',
-          title: 'Statutory Payroll Deductions & Wage Ledger',
-          status: 'HR Verified',
-          revenue: 0,
-          expenses: 0,
-          payroll: totalPayroll,
-          netIncome: -rawPayroll.reduce((s, p) => s + Number(p.netPayable || 0), 0),
-          preparedBy: 'HR & Finance Verification',
-          currency: 'PHP (Philippine Peso)',
-          details: [
-            { category: 'Gross Staff Wages Accrual', type: 'debit', amount: -totalPayroll },
-            { category: 'Statutory Withholding Tax Deductions', type: 'debit', amount: -rawPayroll.reduce((s, p) => s + Number(p.withholdingTax || 0), 0) },
-            { category: 'SSS Social Security Contributions', type: 'debit', amount: -rawPayroll.reduce((s, p) => s + Number(p.sssDeduction || 0), 0) },
-            { category: 'PhilHealth Healthcare Contributions', type: 'debit', amount: -rawPayroll.reduce((s, p) => s + Number(p.philhealthDeduction || 0), 0) },
-            { category: 'Pag-IBIG Housing Fund Contributions', type: 'debit', amount: -rawPayroll.reduce((s, p) => s + Number(p.pagibigDeduction || 0), 0) },
-          ],
-        },
-      ]
-
-      setReports(generatedReports)
+      const res = await financeApi.reports(chosenType, chosenPeriod, chosenDate)
+      const data = res.data || res || {}
+      setReportData(data)
     } catch (err) {
-      console.error('Failed to load reports from database:', err)
-      showToast('Error connecting to database. Please retry.')
+      console.error('Failed to load financial report:', err)
+      showToast('Error loading report data. Please retry.')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadReports()
-  }, [])
+    loadReport(period, selectedDate, reportType)
+  }, [period, selectedDate, reportType])
 
-  const filteredReports = reports.filter((r) => {
+  function handlePeriodChange(p) {
+    setPeriod(p)
+  }
+
+  function handleBulkExportCsv() {
+    if (!reportData || !reportData.statementLines) {
+      showToast('No report data available to export.')
+      return
+    }
+    const headers = [
+      { key: 'category', label: 'Line Item / Category' },
+      { key: 'source', label: 'Subsystem / Source' },
+      { key: 'type', label: 'Debit / Credit' },
+      { key: 'amount', label: 'Amount (PHP)' },
+    ]
+    exportToCsv(`hosis-${period}-financial-report`, reportData.statementLines, headers)
+    showToast(`Exported ${period.toUpperCase()} financial report to CSV.`)
+  }
+
+  function handleBulkExportJson() {
+    if (!reportData) {
+      showToast('No report data available to export.')
+      return
+    }
+    exportToJson(`hosis-${period}-financial-report`, reportData)
+    showToast(`Exported ${period.toUpperCase()} financial report to JSON.`)
+  }
+
+  function handlePrint() {
+    window.print()
+  }
+
+  const netRev = Number(reportData?.netRevenue || 0)
+  const approvedCosts = Number(reportData?.approvedCosts || 0)
+  const operatingSurplus = Number(reportData?.operatingSurplus || 0)
+  const collections = Number(reportData?.collections || 0)
+  const receivables = Number(reportData?.receivables || 0)
+
+  const statementLines = reportData?.statementLines || []
+  const filteredLines = statementLines.filter((line) => {
+    const q = searchTerm.toLowerCase()
     return (
-      r.date.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.source.toLowerCase().includes(searchTerm.toLowerCase())
+      line.category.toLowerCase().includes(q) ||
+      line.source.toLowerCase().includes(q) ||
+      line.type.toLowerCase().includes(q)
     )
   })
 
@@ -135,227 +84,370 @@ export default function ReportsView({ showToast }) {
       <header className="finance-header">
         <div className="finance-header-titles">
           <h1>Financial Reports &amp; Statements</h1>
-          <p>Official ledger statements, revenue reconciliations, and consolidated financial summaries.</p>
+          <p>Comprehensive periodic statements: Daily, Weekly, Monthly, and Annual financial performance.</p>
         </div>
-        <span className="fin-badge fin-badge-blue" style={{ fontSize: '12px', padding: '5px 14px' }}>
-          Authorized Finance Access
-        </span>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            onClick={handleBulkExportCsv}
+            title="Export full statement as CSV spreadsheet"
+          >
+            📥 Bulk Export CSV
+          </button>
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            onClick={handleBulkExportJson}
+            title="Export full statement as structured JSON"
+          >
+            📋 Bulk Export JSON
+          </button>
+          <button
+            type="button"
+            className="fin-btn fin-btn-primary"
+            onClick={handlePrint}
+            title="Print or save PDF of current report"
+          >
+            🖨️ Print Statement
+          </button>
+        </div>
       </header>
 
-      {/* KPI Cards */}
-      <section className="fin-kpi-grid fin-kpi-grid-3">
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Available Financial Statements</span>
-          <div className="fin-kpi-val">{loading ? 'Loading...' : `${reports.length} Statements`}</div>
-          <span className="fin-kpi-note positive">Consolidated general ledger files</span>
+      {/* Period Selection Controls */}
+      <section className="fin-toolbar" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fin-text-dim, #94a3b8)' }}>REPORTING PERIOD:</span>
+          <div className="fin-pill-toggle" role="tablist">
+            <button
+              type="button"
+              className={`fin-pill-btn ${period === 'daily' ? 'active' : ''}`}
+              onClick={() => handlePeriodChange('daily')}
+            >
+              📅 Daily
+            </button>
+            <button
+              type="button"
+              className={`fin-pill-btn ${period === 'weekly' ? 'active' : ''}`}
+              onClick={() => handlePeriodChange('weekly')}
+            >
+              📆 Weekly
+            </button>
+            <button
+              type="button"
+              className={`fin-pill-btn ${period === 'monthly' ? 'active' : ''}`}
+              onClick={() => handlePeriodChange('monthly')}
+            >
+              📊 Monthly
+            </button>
+            <button
+              type="button"
+              className={`fin-pill-btn ${period === 'annually' ? 'active' : ''}`}
+              onClick={() => handlePeriodChange('annually')}
+            >
+              📈 Annually
+            </button>
+          </div>
         </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Reporting Standard</span>
-          <div className="fin-kpi-val">GAAP / PFRS</div>
-          <span className="fin-kpi-note neutral">Philippine hospitality financial standard</span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Audit Verification</span>
-          <div className="fin-kpi-val">Verified</div>
-          <span className="fin-kpi-note positive">Reconciled with bank &amp; payroll</span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <label htmlFor="reportDate" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fin-text-dim, #94a3b8)' }}>
+            TARGET DATE:
+          </label>
+          <input
+            id="reportDate"
+            type="date"
+            className="fin-input"
+            style={{ padding: '6px 12px', fontSize: '13px', width: '160px' }}
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+          />
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            style={{ padding: '6px 12px', fontSize: '13px' }}
+            onClick={() => loadReport(period, selectedDate, reportType)}
+          >
+            🔄 Refresh
+          </button>
         </div>
       </section>
 
-      {/* Search Filter */}
-      <div className="fin-surface" style={{ padding: '12px 18px', marginBottom: '16px' }}>
-        <div className="fin-input-wrap" style={{ maxWidth: '400px' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
+      {/* Period Summary Header Banner */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.12), rgba(15, 23, 42, 0.6))',
+          border: '1px solid rgba(212, 175, 55, 0.3)',
+          borderRadius: '10px',
+          padding: '16px 20px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}
+      >
+        <div>
+          <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', color: '#d4af37', fontWeight: 700 }}>
+            {period.toUpperCase()} FINANCIAL STATEMENT
+          </span>
+          <h2 style={{ fontSize: '20px', margin: '4px 0 0 0', color: '#f8fafc' }}>
+            {reportData?.periodLabel || 'Grand Horizon Hotel & Resort'}
+          </h2>
+          <small style={{ color: '#94a3b8' }}>
+            Span: {reportData?.startDate || '—'} through {reportData?.endDate || '—'} · Currency: PHP (₱) · Accounting Basis: Accrual &amp; Cash Combined
+          </small>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ fontSize: '12px', color: '#94a3b8' }}>Net Operating Position:</span>
+          <div style={{ fontSize: '22px', fontWeight: 700, color: operatingSurplus >= 0 ? '#22c55e' : '#ef4444' }}>
+            {operatingSurplus >= 0 ? `+₱${operatingSurplus.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `-₱${Math.abs(operatingSurplus).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+          </div>
+          <small style={{ color: operatingSurplus >= 0 ? '#86efac' : '#fca5a5' }}>
+            {operatingSurplus >= 0 ? 'Operating Surplus' : 'Net Operating Deficit'}
+          </small>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <section className="fin-kpi-grid fin-kpi-grid-4">
+        <div className="fin-kpi-card">
+          <span className="fin-kpi-label">Invoiced Net Revenue</span>
+          <div className="fin-kpi-val" style={{ color: '#38bdf8' }}>
+            ₱{netRev.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </div>
+          <span className="fin-kpi-note positive">Excludes 12% Government VAT</span>
+        </div>
+
+        <div className="fin-kpi-card">
+          <span className="fin-kpi-label">Approved Operating Expenses</span>
+          <div className="fin-kpi-val" style={{ color: '#f59e0b' }}>
+            ₱{approvedCosts.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </div>
+          <span className="fin-kpi-note">Operations &amp; Staff Compensation</span>
+        </div>
+
+        <div className="fin-kpi-card">
+          <span className="fin-kpi-label">Cash Collections Settled</span>
+          <div className="fin-kpi-val" style={{ color: '#22c55e' }}>
+            ₱{collections.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </div>
+          <span className="fin-kpi-note positive">Realized cash inflow to date</span>
+        </div>
+
+        <div className="fin-kpi-card">
+          <span className="fin-kpi-label">Accounts Receivable Due</span>
+          <div className="fin-kpi-val" style={{ color: '#eab308' }}>
+            ₱{receivables.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </div>
+          <span className="fin-kpi-note">Pending folio settlements</span>
+        </div>
+      </section>
+
+      {/* Revenue Stream Breakdown for this Period */}
+      {reportData?.revenueBreakdown && (
+        <section className="fin-card" style={{ marginBottom: '20px' }}>
+          <div className="fin-card-header">
+            <h3 style={{ margin: 0, fontSize: '15px' }}>{period.toUpperCase()} REVENUE BY SUBSYSTEM &amp; SERVICE STREAM</h3>
+            <span style={{ fontSize: '12px', color: '#94a3b8' }}>Integrated across hotel operations</span>
+          </div>
+          <div className="fin-kpi-grid fin-kpi-grid-5" style={{ padding: '16px', gap: '12px' }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ fontSize: '12px', color: '#94a3b8', display: 'block' }}>Rooms Accommodations</span>
+              <strong style={{ fontSize: '16px', color: '#f8fafc' }}>
+                ₱{Number(reportData.revenueBreakdown.rooms || 0).toLocaleString()}
+              </strong>
+              <small style={{ display: 'block', color: '#64748b' }}>Front Office Bookings</small>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ fontSize: '12px', color: '#94a3b8', display: 'block' }}>Dining &amp; F&amp;B</span>
+              <strong style={{ fontSize: '16px', color: '#f8fafc' }}>
+                ₱{Number(reportData.revenueBreakdown.dining || 0).toLocaleString()}
+              </strong>
+              <small style={{ display: 'block', color: '#64748b' }}>Restaurants &amp; Room Service</small>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ fontSize: '12px', color: '#94a3b8', display: 'block' }}>Guest Services</span>
+              <strong style={{ fontSize: '16px', color: '#f8fafc' }}>
+                ₱{Number(reportData.revenueBreakdown.guestServices || 0).toLocaleString()}
+              </strong>
+              <small style={{ display: 'block', color: '#64748b' }}>Amenities &amp; Incidentals</small>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ fontSize: '12px', color: '#f59e0b', display: 'block' }}>HK Damage Bills</span>
+              <strong style={{ fontSize: '16px', color: '#f59e0b' }}>
+                ₱{Number(reportData.revenueBreakdown.hkDamages || 0).toLocaleString()}
+              </strong>
+              <small style={{ display: 'block', color: '#64748b' }}>Housekeeping Recovery</small>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ fontSize: '12px', color: '#a855f7', display: 'block' }}>Sales &amp; Marketing</span>
+              <strong style={{ fontSize: '16px', color: '#a855f7' }}>
+                ₱{Number(reportData.revenueBreakdown.salesMarketing || 0).toLocaleString()}
+              </strong>
+              <small style={{ display: 'block', color: '#64748b' }}>Corporate &amp; Banquets</small>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Statement Table Section */}
+      <section className="fin-card">
+        <div className="fin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Consolidated Statement of Operating Performance</h3>
+            <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+              Itemized ledger for {reportData?.periodLabel || 'this period'}
+            </span>
+          </div>
           <input
-            type="text"
-            placeholder="Search report by date or source ledger..."
+            type="search"
+            placeholder="Search statement lines..."
+            className="fin-input"
+            style={{ width: '240px', padding: '6px 12px', fontSize: '13px' }}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-      </div>
 
-      {/* Financial Reports Table - DATE and SOURCE ONLY, HOVER EFFECT AND CLICKABLE */}
-      <div className="fin-surface">
-        <div className="fin-surface-header">
-          <div>
-            <h3 className="fin-surface-title">Financial Reports Register</h3>
-            <p className="fin-surface-subtitle">Click any report row to open and inspect the full financial statement window.</p>
-          </div>
-          <span className="fin-badge fin-badge-gray">
-            {loading ? 'Loading database...' : `${filteredReports.length} statements`}
-          </span>
-        </div>
-
-        <div className="fin-table-scroll">
+        <div className="fin-table-responsive">
           <table className="fin-table">
             <thead>
               <tr>
-                <th style={{ width: '25%', paddingLeft: '20px' }}>Date</th>
-                <th style={{ width: '75%' }}>Source</th>
+                <th>ACCOUNT LINE ITEM</th>
+                <th>OPERATIONAL SUBSYSTEM</th>
+                <th>CLASSIFICATION</th>
+                <th style={{ textAlign: 'right' }}>AMOUNT (PHP)</th>
+                <th>STATUS</th>
               </tr>
             </thead>
             <tbody>
-              {loading && (
+              {loading ? (
                 <tr>
-                  <td colSpan="2" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                    Loading reports from database...
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                    Loading financial report statement...
                   </td>
                 </tr>
-              )}
-              {!loading && filteredReports.length === 0 && (
+              ) : filteredLines.length === 0 ? (
                 <tr>
-                  <td colSpan="2" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                    No financial statements found.
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                    No statement records found for the selected period ({period}).
                   </td>
                 </tr>
+              ) : (
+                filteredLines.map((line, idx) => {
+                  const isSurplus = line.category.includes('Net Operating')
+                  const isDebit = line.type === 'debit'
+                  return (
+                    <tr
+                      key={idx}
+                      className="clickable-row"
+                      style={isSurplus ? { background: 'rgba(212, 175, 55, 0.08)', fontWeight: 700 } : {}}
+                      onClick={() => setSelectedStatement(line)}
+                    >
+                      <td style={{ fontWeight: isSurplus ? 700 : 500, color: isSurplus ? '#d4af37' : '#f8fafc' }}>
+                        {line.category}
+                      </td>
+                      <td style={{ color: '#94a3b8', fontSize: '13px' }}>
+                        {line.source}
+                      </td>
+                      <td>
+                        <span
+                          className={`fin-badge ${
+                            isDebit ? 'fin-badge-red' : isSurplus ? 'fin-badge-gold' : 'fin-badge-green'
+                          }`}
+                        >
+                          {isDebit ? 'DEBIT (Expense)' : isSurplus ? 'NET SURPLUS' : 'CREDIT (Revenue)'}
+                        </span>
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'right',
+                          fontWeight: 600,
+                          color: isDebit ? '#ef4444' : isSurplus ? (line.amount >= 0 ? '#22c55e' : '#ef4444') : '#22c55e',
+                        }}
+                      >
+                        {line.amount >= 0
+                          ? `₱${Number(line.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                          : `-₱${Math.abs(Number(line.amount)).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                      </td>
+                      <td>
+                        <span className="fin-badge fin-badge-blue">Audited</span>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
-              {!loading && filteredReports.map((report) => (
-                <tr
-                  key={report.id}
-                  className="clickable-row"
-                  onClick={() => setSelectedReport(report)}
-                  title="Click to open financial statement window"
-                >
-                  <td style={{ paddingLeft: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '16px' }}>📅</span>
-                      <strong style={{ fontSize: '13.5px', color: '#0d1238' }}>{report.date}</strong>
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0d1238' }}>
-                      {report.source}
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '2px' }}>
-                      Ref: {report.id} · {report.title}
-                    </div>
-                  </td>
-                </tr>
-              ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
-      {/* Financial Statement Modal Window (Pops up when clicking a row) */}
-      {selectedReport && (
-        <div className="fin-modal-overlay" onClick={() => setSelectedReport(null)}>
-          <div className="fin-modal-window wide" onClick={(e) => e.stopPropagation()}>
+      {/* Modal: Statement Line Details */}
+      {selectedStatement && (
+        <div className="fin-modal-overlay" onClick={() => setSelectedStatement(null)}>
+          <div className="fin-modal-window" onClick={(e) => e.stopPropagation()}>
             <div className="fin-modal-header">
-              <div>
-                <span className="fin-subsystem-badge">Grand Horizon Hotel · Financial Statement</span>
-                <h2 className="fin-modal-title">{selectedReport.title}</h2>
-              </div>
+              <h3 className="fin-modal-title">Financial Statement Line Detail</h3>
               <button
                 type="button"
                 className="fin-modal-close-btn"
-                onClick={() => setSelectedReport(null)}
+                onClick={() => setSelectedStatement(null)}
               >
                 ✕
               </button>
             </div>
-
             <div className="fin-modal-body">
-              <div className="fin-paper-document">
-                <div className="fin-paper-header">
+              <div style={{ marginBottom: '16px' }}>
+                <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Account Line</span>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: '#f8fafc' }}>{selectedStatement.category}</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Operational Source</span>
+                  <div style={{ color: '#cbd5e1', fontWeight: 500 }}>{selectedStatement.source}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Classification</span>
                   <div>
-                    <h3 className="fin-paper-title">Grand Horizon Hotel</h3>
-                    <div className="fin-paper-subtitle">{selectedReport.title}</div>
-                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-                      Source: <strong>{selectedReport.source}</strong>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', fontSize: '12px', color: '#64748b' }}>
-                    <div>Ref: <strong>{selectedReport.id}</strong></div>
-                    <div>Date: <strong>{selectedReport.date}</strong></div>
-                    <div style={{ marginTop: '4px' }}>
-                      <span className="fin-badge fin-badge-green">{selectedReport.status}</span>
-                    </div>
+                    <span className={`fin-badge ${selectedStatement.type === 'debit' ? 'fin-badge-red' : 'fin-badge-green'}`}>
+                      {selectedStatement.type.toUpperCase()}
+                    </span>
                   </div>
                 </div>
-
-                {/* Financial Summary KPIs */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700, textTransform: 'uppercase' }}>Operating Inflow</div>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: '#15803d', marginTop: '2px' }}>
-                      ₱{selectedReport.revenue.toLocaleString()}.00
-                    </div>
-                  </div>
-
-                  <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '12px', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '11px', color: '#854d0e', fontWeight: 700, textTransform: 'uppercase' }}>Operating Outflow</div>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: '#b45309', marginTop: '2px' }}>
-                      ₱{(selectedReport.expenses + selectedReport.payroll).toLocaleString()}.00
-                    </div>
-                  </div>
-
-                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '11px', color: '#0d1238', fontWeight: 700, textTransform: 'uppercase' }}>Net Position</div>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: selectedReport.netIncome >= 0 ? '#0d1238' : '#b91c1c', marginTop: '2px' }}>
-                      ₱{selectedReport.netIncome.toLocaleString()}.00
-                    </div>
-                  </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Reported Period</span>
+                  <div style={{ color: '#cbd5e1' }}>{reportData?.periodLabel}</div>
                 </div>
-
-                {/* Itemized Financial Breakdown Table */}
-                <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#0d1238' }}>Statement Particulars &amp; Audit Breakdown</h4>
-                <table className="fin-table" style={{ fontSize: '12.5px', marginBottom: '16px' }}>
-                  <thead>
-                    <tr>
-                      <th>Ledger Account / Category</th>
-                      <th>Entry Type</th>
-                      <th style={{ textAlign: 'right' }}>Amount (PHP)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedReport.details.map((item, idx) => (
-                      <tr key={idx}>
-                        <td style={{ fontWeight: 600 }}>{item.category}</td>
-                        <td>
-                          <span className={`fin-badge ${item.type === 'credit' ? 'fin-badge-green' : 'fin-badge-yellow'}`}>
-                            {item.type === 'credit' ? 'Credit / Inflow' : 'Debit / Outflow'}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: item.amount >= 0 ? '#15803d' : '#b91c1c' }}>
-                          {item.amount >= 0 ? `+₱${item.amount.toLocaleString()}.00` : `-₱${Math.abs(item.amount).toLocaleString()}.00`}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0', paddingTop: '12px', fontSize: '11.5px', color: '#64748b' }}>
-                  <div>
-                    Prepared By: <strong>{selectedReport.preparedBy}</strong>
-                  </div>
-                  <div>
-                    Currency: <strong>{selectedReport.currency}</strong>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Amount</span>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: selectedStatement.type === 'debit' ? '#ef4444' : '#22c55e' }}>
+                    ₱{Math.abs(Number(selectedStatement.amount)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>
+              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '6px', fontSize: '12px', color: '#94a3b8' }}>
+                ℹ️ Consolidated from Grand Horizon Hotel General Ledger. Compliant with Philippine Hotel Accounting Standards and local BIR tax withholding rules.
+              </div>
             </div>
-
             <div className="fin-modal-footer">
               <button
                 type="button"
                 className="fin-btn fin-btn-secondary"
-                onClick={() => {
-                  window.print()
-                  showToast(`Report ${selectedReport.id} printed / exported to PDF.`)
-                }}
+                onClick={() => setSelectedStatement(null)}
               >
-                🖨 Print Statement
+                Close
               </button>
               <button
                 type="button"
                 className="fin-btn fin-btn-primary"
-                onClick={() => setSelectedReport(null)}
+                onClick={() => {
+                  window.print()
+                  setSelectedStatement(null)
+                }}
               >
-                Close
+                Print Line Voucher
               </button>
             </div>
           </div>

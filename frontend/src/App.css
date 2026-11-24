@@ -1836,6 +1836,68 @@ tbody tr:last-child td {
   font-size: 10px;
 }
 
+.login-error-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 11px;
+  line-height: 1.4;
+  animation: toast-in 160ms ease-out;
+}
+
+.login-error-alert svg {
+  flex: 0 0 auto;
+  color: #dc2626;
+}
+
+.login-quick-roles {
+  margin-top: 15px;
+  padding-top: 13px;
+  border-top: 1px dashed #e8e5db;
+}
+
+.login-quick-roles-title {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8b889b;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.login-quick-roles-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.login-role-chip {
+  padding: 4px 9px;
+  font-size: 10px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid #dcd8cc;
+  background: #faf9f6;
+  color: #4b4860;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.login-role-chip:hover {
+  background: #f0ede4;
+  border-color: #c5bead;
+  color: #1f1d2e;
+}
+
 .login-form {
   display: grid;
   gap: 7px;

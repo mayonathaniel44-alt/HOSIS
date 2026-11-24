@@ -1,14 +1,19 @@
 const model = require('../models/financeModel')
-const { appError } = require('../lib/errors')
-const money = require('../lib/money')
-const { validateInvoice, validatePayment, validateExpense } = require('../lib/financeValidation')
+const {
+  validateInvoice,
+  validatePayment,
+  validateExpense,
+  validatePayroll,
+  validateHKDamageBilling,
+  validateSalesSync,
+} = require('../lib/financeValidation')
 
 async function dashboard() {
   return model.dashboard()
 }
 
-async function listInvoices(search, status) {
-  return model.listInvoices(search, status)
+async function listInvoices(search, status, invoiceType) {
+  return model.listInvoices(search, status, invoiceType)
 }
 
 async function getInvoice(id) {
@@ -24,8 +29,8 @@ async function updateInvoice(id, body, userId, userName) {
   return model.updateInvoice(id, body, userId, userName)
 }
 
-async function listPayments(search, method) {
-  return model.listPayments(search, method)
+async function listPayments(search, method, date) {
+  return model.listPayments(search, method, date)
 }
 
 async function createPayment(body, userId, userName) {
@@ -33,8 +38,8 @@ async function createPayment(body, userId, userName) {
   return model.createPayment(body, userId, userName)
 }
 
-async function listExpenses(status) {
-  return model.listExpenses(status)
+async function listExpenses(status, department) {
+  return model.listExpenses(status, department)
 }
 
 async function createExpense(body, userId, userName) {
@@ -46,40 +51,61 @@ async function approveExpense(id, approverName) {
   return model.approveExpense(id, approverName)
 }
 
-async function listPayroll() {
-  return model.listPayroll()
+async function listPayroll(department, status, search) {
+  return model.listPayroll(department, status, search)
+}
+
+async function createPayroll(body, userId, userName) {
+  validatePayroll(body)
+  return model.createPayroll(body, userId, userName)
+}
+
+async function disbursePayroll(id, userId, userName) {
+  return model.disbursePayroll(id, userId, userName)
 }
 
 async function listAuditLog(search, eventType) {
   return model.listAuditLog(search, eventType)
 }
 
-async function revenueReconciliation() {
-  return model.revenueReconciliation()
+async function revenueReconciliation(period, date) {
+  return model.revenueReconciliation(period, date)
 }
 
-async function generateReport(reportType = 'Income & expenditure') {
-  const [rev, expenses, payroll] = await Promise.all([
-    model.revenueReconciliation(),
-    model.listExpenses('APPROVED'),
-    model.listPayroll(),
-  ])
+async function generateReport(reportType = 'Income & expenditure', period = 'daily', date = null) {
+  return model.generateReport(reportType, period, date)
+}
 
-  const totalApprovedCosts =
-    expenses.reduce((s, e) => s + Number(e.amount), 0) +
-    payroll.reduce((s, p) => s + Number(p.grossPay), 0)
-  const operatingSurplus = rev.netRevenue - totalApprovedCosts
+async function exportData(entity = 'invoices', format = 'csv', period = 'all') {
+  return model.exportData(entity, format, period)
+}
 
-  return {
-    reportType,
-    generatedAt: new Date().toISOString(),
-    netRevenue: rev.netRevenue,
-    approvedCosts: totalApprovedCosts,
-    operatingSurplus,
-    revenueBreakdown: rev.revenueBreakdown,
-    expenses,
-    payrollTotal: payroll.reduce((s, p) => s + Number(p.grossPay), 0),
-  }
+// Integrations
+async function listHousekeepingDamages(status) {
+  return model.listHousekeepingDamages(status)
+}
+
+async function billHousekeepingDamage(body, userId, userName) {
+  validateHKDamageBilling(body)
+  return model.billHousekeepingDamage(body, userId, userName)
+}
+
+async function listMaintenanceRecords(status) {
+  return model.listMaintenanceRecords(status)
+}
+
+async function createMaintenanceExpense(body, userId, userName) {
+  validateExpense(body)
+  return model.createMaintenanceExpense(body, userId, userName)
+}
+
+async function listSalesRecords(status) {
+  return model.listSalesRecords(status)
+}
+
+async function syncSalesInvoice(body, userId, userName) {
+  validateSalesSync(body)
+  return model.syncSalesInvoice(body, userId, userName)
 }
 
 module.exports = {
@@ -94,7 +120,16 @@ module.exports = {
   createExpense,
   approveExpense,
   listPayroll,
+  createPayroll,
+  disbursePayroll,
   listAuditLog,
   revenueReconciliation,
   generateReport,
+  exportData,
+  listHousekeepingDamages,
+  billHousekeepingDamage,
+  listMaintenanceRecords,
+  createMaintenanceExpense,
+  listSalesRecords,
+  syncSalesInvoice,
 }

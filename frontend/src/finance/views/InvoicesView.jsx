@@ -1,75 +1,59 @@
 import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
+import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
 export default function InvoicesView({ user, showToast }) {
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
-  const [staffList, setStaffList] = useState([])
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
-  const [departmentFilter, setDepartmentFilter] = useState('All')
+  const [typeFilter, setTypeFilter] = useState('All')
 
   // Modals state
   const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [modalLoading, setModalLoading] = useState(false)
 
-  // Create Staff Invoice form state
-  const [staffName, setStaffName] = useState('')
-  const [empId, setEmpId] = useState('')
-  const [department, setDepartment] = useState('Front Office')
+  // Create Invoice form state
+  const [invoiceType, setInvoiceType] = useState('GUEST') // 'GUEST' | 'CORPORATE' | 'STAFF'
+  const [customerName, setCustomerName] = useState('')
   const [email, setEmail] = useState('')
-  const [purpose, setPurpose] = useState('Staff Uniform & Grooming Replacement')
+  const [roomNumber, setRoomNumber] = useState('')
+  const [reservationCode, setReservationCode] = useState('')
+  const [department, setDepartment] = useState('Front Office')
+  const [notes, setNotes] = useState('Standard Hotel Accommodation & Services')
+  const [issueNow, setIssueNow] = useState(true)
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10))
   const [dueDate, setDueDate] = useState(
-    new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
+    new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
   )
   const [lines, setLines] = useState([
-    { desc: 'Front Desk Uniform & Blazer Set', qty: 1, unitPrice: 2800, amount: 2800 },
-    { desc: 'Engraved Hotel Crest Nameplate', qty: 1, unitPrice: 350, amount: 350 },
+    { desc: 'Deluxe Suite Accommodation (1 Night)', qty: 1, unitPrice: 7500, category: 'ROOM', source: 'FRONT_OFFICE' },
+    { desc: 'Breakfast Buffet & Dining Room Service', qty: 2, unitPrice: 850, category: 'DINING', source: 'FOOD_BEVERAGE' },
   ])
+  const [submitting, setSubmitting] = useState(false)
 
   async function loadInvoices() {
     setLoading(true)
     try {
-      const [invRes, payrRes] = await Promise.all([
-        financeApi.invoices('', ''),
-        financeApi.payroll().catch(() => []),
-      ])
-
-      const rawInvoices = invRes.data || invRes || []
-      const rawPayroll = payrRes.data || payrRes || []
-
-      if (rawPayroll.length > 0) {
-        const staffMap = rawPayroll.map((p) => ({
-          name: p.employeeName,
-          empId: p.employeeId,
-          department: p.department,
-          email: `${p.employeeName.toLowerCase().replace(/\s+/g, '.')}@grandhorizon.com`,
-        }))
-        setStaffList(staffMap)
-        if (!staffName && staffMap.length > 0) {
-          setStaffName(staffMap[0].name)
-          setEmpId(staffMap[0].empId)
-          setDepartment(staffMap[0].department)
-          setEmail(staffMap[0].email)
-        }
-      }
+      const res = await financeApi.invoices('', '', '')
+      const rawInvoices = res.data || res || []
 
       const mapped = rawInvoices.map((inv) => ({
         id: inv.invoiceCode || `INV-${inv.id}`,
         dbId: inv.id,
-        date: inv.issueDate
-          ? new Date(inv.issueDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
-          : inv.createdAt
-          ? new Date(inv.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
-          : '—',
-        staffName: inv.guestName || 'Staff Member',
-        guest: inv.guestName || 'Staff Member',
-        empId: inv.reservationCode || `EMP-${String(inv.id).padStart(3, '0')}`,
-        department: inv.roomNumber || 'Hotel Staff',
-        purpose: inv.notes || 'Staff Charges',
+        invoiceType: inv.invoiceType || 'GUEST',
+        guest: inv.guestName || 'Customer',
+        email: inv.guestEmail || '',
+        roomNumber: inv.roomNumber || '—',
+        reservationCode: inv.reservationCode || '—',
+        department: inv.department || 'Hotel Operations',
+        notes: inv.notes || '',
         total: Number(inv.totalAmount || 0),
+        subtotal: Number(inv.subtotal || 0),
+        discount: Number(inv.discount || 0),
+        vat: Number(inv.vat || 0),
         paid: Number(inv.paidAmount || 0),
         balance: Number(inv.balanceDue || 0),
         status:
@@ -79,19 +63,23 @@ export default function InvoicesView({ user, showToast }) {
             ? 'Part-paid'
             : inv.status === 'ISSUED'
             ? 'Issued'
-            : 'Draft',
+            : inv.status === 'DRAFT'
+            ? 'Draft'
+            : inv.status,
         rawStatus: inv.status,
-        email: inv.guestEmail || '',
+        date: inv.issueDate
+          ? new Date(inv.issueDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+          : inv.createdAt
+          ? new Date(inv.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+          : '—',
         dueDate: inv.dueDate
           ? new Date(inv.dueDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
           : '—',
-        items: [],
       }))
-
       setInvoices(mapped)
     } catch (err) {
-      console.error('Failed to load invoices from database:', err)
-      showToast('Error connecting to database. Please retry.')
+      console.error('Failed to load invoices:', err)
+      showToast('Error loading invoices from database.')
     } finally {
       setLoading(false)
     }
@@ -101,224 +89,267 @@ export default function InvoicesView({ user, showToast }) {
     loadInvoices()
   }, [])
 
-  function handleStaffChange(empIdSelected) {
-    const found = staffList.find((s) => s.empId === empIdSelected)
-    if (found) {
-      setStaffName(found.name)
-      setEmpId(found.empId)
-      setDepartment(found.department)
-      setEmail(found.email)
-    }
-  }
-
-  async function handleOpenInvoice(inv) {
+  async function openInvoiceDetails(inv) {
     setSelectedInvoice(inv)
+    setModalLoading(true)
     try {
-      const details = await financeApi.invoice(inv.dbId)
-      const data = details.data || details
-      if (data && data.items) {
-        setSelectedInvoice((prev) => ({
-          ...prev,
-          items: data.items.map((it) => ({
-            desc: it.description,
-            qty: Number(it.quantity || 1),
-            unitPrice: Number(it.unitPrice || 0),
-            amount: Number(it.amount || 0),
-          })),
-          payments: data.payments || [],
-        }))
-      }
+      const full = await financeApi.invoice(inv.dbId)
+      setSelectedInvoice((prev) => ({
+        ...prev,
+        items: full.items || [],
+        payments: full.payments || [],
+      }))
     } catch (err) {
-      console.warn('Could not fetch line items for invoice:', err)
+      console.error('Failed to load full invoice details:', err)
+    } finally {
+      setModalLoading(false)
     }
   }
 
-  const subtotal = lines.reduce((sum, item) => sum + item.amount, 0)
-  const vat = Math.round(subtotal * 0.12)
-  const total = subtotal + vat
-
-  function addLineItem() {
-    setLines([...lines, { desc: 'Standard Staff Charge', qty: 1, unitPrice: 500, amount: 500 }])
+  function handleAddLine() {
+    setLines([...lines, { desc: 'Additional Service Item', qty: 1, unitPrice: 500, category: 'GENERAL', source: 'FINANCE' }])
   }
 
-  function updateLine(index, field, value) {
+  function handleRemoveLine(index) {
+    if (lines.length <= 1) return
+    setLines(lines.filter((_, i) => i !== index))
+  }
+
+  function handleLineChange(index, field, val) {
     const updated = [...lines]
-    if (field === 'qty') {
-      const q = Math.max(1, parseInt(value, 10) || 1)
-      updated[index].qty = q
-      updated[index].amount = q * updated[index].unitPrice
-    } else if (field === 'unitPrice') {
-      const p = Math.max(0, parseFloat(value) || 0)
-      updated[index].unitPrice = p
-      updated[index].amount = updated[index].qty * p
-    } else {
-      updated[index][field] = value
-    }
+    updated[index][field] = val
     setLines(updated)
   }
 
-  function removeLine(index) {
-    if (lines.length <= 1) {
-      showToast('At least one charge line is required.')
-      return
-    }
-    setLines(lines.filter((_, idx) => idx !== index))
-  }
+  const subtotal = lines.reduce((s, l) => s + (Number(l.qty || 1) * Number(l.unitPrice || 0)), 0)
+  const vat = Math.round(subtotal * 0.12 * 100) / 100
+  const total = subtotal + vat
 
-  async function handleCreateStaffInvoice(e) {
+  async function handleCreateInvoice(e) {
     e.preventDefault()
-    if (!staffName.trim()) {
-      showToast('Please specify the staff personnel name.')
+    if (!customerName.trim()) {
+      showToast('Customer / Guest name is required.')
       return
     }
 
+    setSubmitting(true)
     try {
       await financeApi.createInvoice({
-        guestName: staffName.trim(),
+        guestName: customerName.trim(),
         guestEmail: email || null,
-        reservationCode: empId || null,
-        roomNumber: department,
-        notes: purpose,
+        invoiceType,
+        roomNumber: invoiceType === 'GUEST' ? roomNumber : null,
+        reservationCode: invoiceType === 'GUEST' ? reservationCode : null,
+        department: invoiceType === 'STAFF' ? department : invoiceType === 'CORPORATE' ? 'Sales & Marketing' : null,
         subtotal,
-        discount: 0,
         vat,
         totalAmount: total,
-        issueNow: true,
+        status: issueNow ? 'ISSUED' : 'DRAFT',
+        issueNow,
         issueDate,
         dueDate,
+        notes,
         items: lines.map((l) => ({
           desc: l.desc,
-          qty: l.qty,
-          unitPrice: l.unitPrice,
-          amount: l.amount,
-          source: 'STAFF_CHARGE',
+          qty: Number(l.qty || 1),
+          unitPrice: Number(l.unitPrice || 0),
+          amount: Number(l.qty || 1) * Number(l.unitPrice || 0),
+          category: l.category || 'GENERAL',
+          source: l.source || 'FINANCE',
         })),
       })
 
-      showToast(`Staff invoice issued for ${staffName} (${department}) and stored in database.`)
+      showToast(`Invoice successfully created and ${issueNow ? 'issued' : 'saved as draft'}.`)
       setShowCreateModal(false)
-      await loadInvoices()
+      // reset
+      setCustomerName('')
+      setRoomNumber('')
+      setReservationCode('')
+      loadInvoices()
     } catch (err) {
       console.error('Failed to create invoice:', err)
-      showToast(err.message || 'Failed to create invoice in database.')
+      showToast(err.message || 'Failed to create invoice.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const issuedTotal = invoices.filter((i) => i.status !== 'Draft').reduce((s, i) => s + i.total, 0)
-  const paidTotal = invoices.reduce((s, i) => s + i.paid, 0)
-  const balanceTotal = invoices.filter((i) => i.status !== 'Draft').reduce((s, i) => s + i.balance, 0)
+  async function handleIssueDraft(inv) {
+    try {
+      await financeApi.updateInvoice(inv.dbId, { issueNow: true, status: 'ISSUED' })
+      showToast(`Invoice ${inv.id} has been officially issued.`)
+      loadInvoices()
+      if (selectedInvoice && selectedInvoice.dbId === inv.dbId) {
+        setSelectedInvoice((prev) => ({ ...prev, status: 'Issued', rawStatus: 'ISSUED' }))
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to update invoice.')
+    }
+  }
+
+  function handleBulkExportCsv() {
+    if (!invoices.length) {
+      showToast('No invoices to export.')
+      return
+    }
+    const headers = [
+      { key: 'id', label: 'Invoice Code' },
+      { key: 'invoiceType', label: 'Type' },
+      { key: 'guest', label: 'Guest / Customer Name' },
+      { key: 'roomNumber', label: 'Room' },
+      { key: 'reservationCode', label: 'Reservation Code' },
+      { key: 'department', label: 'Department' },
+      { key: 'date', label: 'Issue Date' },
+      { key: 'dueDate', label: 'Due Date' },
+      { key: 'subtotal', label: 'Subtotal (PHP)' },
+      { key: 'vat', label: '12% VAT (PHP)' },
+      { key: 'total', label: 'Total Amount (PHP)' },
+      { key: 'paid', label: 'Paid Amount (PHP)' },
+      { key: 'balance', label: 'Balance Due (PHP)' },
+      { key: 'status', label: 'Status' },
+      { key: 'notes', label: 'Notes' },
+    ]
+    exportToCsv('hosis-invoices-register', invoices, headers)
+    showToast('Exported invoices register to CSV.')
+  }
+
+  function handleBulkExportJson() {
+    if (!invoices.length) {
+      showToast('No invoices to export.')
+      return
+    }
+    exportToJson('hosis-invoices-register', invoices)
+    showToast('Exported invoices register to JSON.')
+  }
+
+  const totalBilled = invoices.reduce((s, i) => s + (i.rawStatus !== 'DRAFT' ? i.total : 0), 0)
+  const totalPaid = invoices.reduce((s, i) => s + i.paid, 0)
+  const totalReceivables = invoices.reduce((s, i) => s + (i.rawStatus !== 'DRAFT' ? i.balance : 0), 0)
 
   const filteredInvoices = invoices.filter((inv) => {
-    const staffMatch =
-      (inv.staffName || inv.guest || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inv.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (inv.empId || '').toLowerCase().includes(searchTerm.toLowerCase())
-    const statusMatch = statusFilter === 'All' || inv.status === statusFilter
-    const deptMatch = departmentFilter === 'All' || inv.department === departmentFilter
-    return staffMatch && statusMatch && deptMatch
+    const q = searchTerm.toLowerCase()
+    const matchSearch =
+      inv.id.toLowerCase().includes(q) ||
+      inv.guest.toLowerCase().includes(q) ||
+      inv.roomNumber.toLowerCase().includes(q) ||
+      inv.reservationCode.toLowerCase().includes(q) ||
+      inv.notes.toLowerCase().includes(q)
+
+    const matchStatus = statusFilter === 'All' || inv.status === statusFilter || inv.rawStatus === statusFilter
+    const matchType = typeFilter === 'All' || inv.invoiceType === typeFilter
+    return matchSearch && matchStatus && matchType
   })
 
   return (
     <>
-      <div className="finance-breadcrumb">Finance &amp; Accounting / Staff Invoices</div>
+      <div className="finance-breadcrumb">Finance &amp; Accounting / Invoices &amp; Billing</div>
 
-      {/* Header with Create Invoice swapped into upper right */}
       <header className="finance-header">
         <div className="finance-header-titles">
-          <h1>Staff Invoicing &amp; Billing</h1>
-          <p>Internal hotel staff billing, equipment &amp; uniform fees, cafeteria meal charges, and housing settlements.</p>
+          <h1>Invoices &amp; Billing Folios</h1>
+          <p>Issue guest folios, manage corporate event accounts, and monitor accounts receivable balances.</p>
         </div>
-        {/* Swapped in Upper Right: Create Invoice button */}
-        <button
-          type="button"
-          className="fin-btn fin-btn-primary"
-          onClick={() => setShowCreateModal(true)}
-          style={{ padding: '9px 18px', fontSize: '13px', fontWeight: 700 }}
-        >
-          + Create Staff Invoice
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            onClick={handleBulkExportCsv}
+            title="Bulk export all invoices to CSV spreadsheet"
+          >
+            📥 Bulk Export CSV
+          </button>
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            onClick={handleBulkExportJson}
+            title="Bulk export invoices to JSON"
+          >
+            📋 Bulk Export JSON
+          </button>
+          <button
+            type="button"
+            className="fin-btn fin-btn-primary"
+            onClick={() => setShowCreateModal(true)}
+            title="Create a new customer or corporate invoice"
+          >
+            ➕ Create New Invoice
+          </button>
+        </div>
       </header>
 
       {/* KPI Cards */}
-      <section className="fin-kpi-grid">
+      <section className="fin-kpi-grid fin-kpi-grid-3">
         <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Total Staff Invoiced</span>
-          <div className="fin-kpi-val">₱{issuedTotal.toLocaleString()}.00</div>
-          <span className="fin-kpi-note neutral">
-            {loading ? 'Loading...' : `${invoices.length} database records`}
-          </span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Payments / Deductions</span>
-          <div className="fin-kpi-val">₱{paidTotal.toLocaleString()}.00</div>
-          <span className="fin-kpi-note positive">Settled via salary deduction / bank</span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Outstanding Receivables</span>
-          <div className="fin-kpi-val" style={{ color: balanceTotal > 0 ? '#b45309' : '#0d1238' }}>
-            ₱{balanceTotal.toLocaleString()}.00
+          <span className="fin-kpi-label">Total Invoiced Billed</span>
+          <div className="fin-kpi-val" style={{ color: '#38bdf8' }}>
+            ₱{totalBilled.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </div>
-          <span className="fin-kpi-note warning">
-            {invoices.filter((i) => i.balance > 0).length} records pending settlement
-          </span>
+          <span className="fin-kpi-note positive">{invoices.length} total billing records</span>
         </div>
         <div className="fin-kpi-card">
-          <span className="fin-kpi-label">System Mode</span>
-          <div className="fin-kpi-val">Connected</div>
-          <span className="fin-kpi-note positive">Live PostgreSQL Database</span>
+          <span className="fin-kpi-label">Total Collections Realized</span>
+          <div className="fin-kpi-val" style={{ color: '#22c55e' }}>
+            ₱{totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </div>
+          <span className="fin-kpi-note positive">Settled guest &amp; client payments</span>
+        </div>
+        <div className="fin-kpi-card">
+          <span className="fin-kpi-label">Outstanding Receivables Due</span>
+          <div className="fin-kpi-val" style={{ color: '#f59e0b' }}>
+            ₱{totalReceivables.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </div>
+          <span className="fin-kpi-note warning">Pending collection balance</span>
         </div>
       </section>
 
-      {/* Search & Filter Toolbar */}
+      {/* Filters Toolbar */}
       <div className="fin-surface" style={{ padding: '12px 18px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="fin-input-wrap" style={{ flex: 1, minWidth: '240px' }}>
+          <div className="fin-input-wrap" style={{ flex: 1, minWidth: '220px' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
               type="text"
-              placeholder="Search staff name, employee ID, or invoice number..."
+              placeholder="Search invoice #, guest name, room, or reservation code..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
 
           <div className="fin-select-wrap">
-            <label>Status</label>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="All">All statuses</option>
-              <option value="Issued">Issued</option>
-              <option value="Part-paid">Part-paid</option>
-              <option value="Paid">Paid</option>
-              <option value="Draft">Draft</option>
+            <label>Invoice Type</label>
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <option value="All">All Types</option>
+              <option value="GUEST">Guest Folios</option>
+              <option value="CORPORATE">Corporate &amp; Sales</option>
+              <option value="STAFF">Staff Charges</option>
             </select>
           </div>
 
           <div className="fin-select-wrap">
-            <label>Department</label>
-            <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)}>
-              <option value="All">All departments</option>
-              <option value="Front Office">Front Office</option>
-              <option value="Housekeeping">Housekeeping</option>
-              <option value="Food & Beverage">Food &amp; Beverage</option>
-              <option value="Engineering">Engineering</option>
-              <option value="Guest Services">Guest Services</option>
+            <label>Billing Status</label>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="All">All Statuses</option>
+              <option value="Issued">Issued (Unsettled)</option>
+              <option value="Part-paid">Partially Paid</option>
+              <option value="Paid">Fully Paid</option>
+              <option value="Draft">Draft</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* Invoices Table: Actions column removed, clickable rows with hover */}
+      {/* Invoices Table */}
       <div className="fin-surface">
         <div className="fin-surface-header">
           <div>
-            <h3 className="fin-surface-title">Staff Invoices Register</h3>
-            <p className="fin-surface-subtitle">Click any invoice row to open details, itemized charges and payment history.</p>
+            <h3 className="fin-surface-title">Invoice &amp; Folio Register</h3>
+            <p className="fin-surface-subtitle">Click any invoice to view full itemization, payments received, and printable statement.</p>
           </div>
-          <span className="fin-badge fin-badge-gray">
-            {loading ? 'Loading database...' : `${filteredInvoices.length} invoices`}
+          <span className="fin-badge fin-badge-blue">
+            {loading ? 'Loading...' : `${filteredInvoices.length} Invoices`}
           </span>
         </div>
 
@@ -326,57 +357,62 @@ export default function InvoicesView({ user, showToast }) {
           <table className="fin-table">
             <thead>
               <tr>
-                <th>Invoice #</th>
-                <th>Staff Personnel</th>
-                <th>Department</th>
-                <th>Issue Date</th>
-                <th>Due Date</th>
-                <th>Total (PHP)</th>
-                <th>Paid</th>
-                <th>Balance Due</th>
-                <th>Status</th>
+                <th>INVOICE #</th>
+                <th>CUSTOMER / GUEST</th>
+                <th>TYPE &amp; LOCATION</th>
+                <th>DATE ISSUED</th>
+                <th style={{ textAlign: 'right' }}>TOTAL AMOUNT</th>
+                <th style={{ textAlign: 'right' }}>PAID</th>
+                <th style={{ textAlign: 'right' }}>BALANCE DUE</th>
+                <th>STATUS</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                    Loading staff invoices from database...
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                    Loading invoices from database...
                   </td>
                 </tr>
               )}
               {!loading && filteredInvoices.length === 0 && (
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                    No staff invoices found in database.
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                    No invoices found matching current filters.
                   </td>
                 </tr>
               )}
               {!loading && filteredInvoices.map((inv) => (
                 <tr
-                  key={inv.id}
+                  key={inv.dbId}
                   className="clickable-row"
-                  onClick={() => handleOpenInvoice(inv)}
-                  title="Click to view invoice details"
+                  onClick={() => openInvoiceDetails(inv)}
                 >
                   <td>
-                    <strong>{inv.id}</strong>
+                    <strong style={{ color: '#d4af37' }}>{inv.id}</strong>
+                    <small style={{ display: 'block', color: '#64748b' }}>Due: {inv.dueDate}</small>
                   </td>
                   <td>
-                    <div style={{ fontWeight: 700, color: '#0d1238' }}>{inv.staffName || inv.guest}</div>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>{inv.empId || 'Staff Member'}</div>
+                    <strong>{inv.guest}</strong>
+                    {inv.email && <small style={{ display: 'block', color: '#64748b' }}>{inv.email}</small>}
                   </td>
                   <td>
-                    <span className="fin-badge fin-badge-gray" style={{ fontSize: '11px' }}>
-                      {inv.department || 'Hotel Operations'}
+                    <span className="fin-badge fin-badge-gold" style={{ fontSize: '11px', padding: '2px 8px' }}>
+                      {inv.invoiceType}
                     </span>
+                    <small style={{ display: 'block', color: '#64748b', marginTop: '2px' }}>
+                      {inv.invoiceType === 'GUEST' ? `Room ${inv.roomNumber}` : inv.department}
+                    </small>
                   </td>
-                  <td>{inv.date}</td>
-                  <td>{inv.dueDate || '—'}</td>
-                  <td style={{ fontWeight: 800 }}>₱{inv.total.toLocaleString()}.00</td>
-                  <td style={{ color: '#16a34a', fontWeight: 600 }}>₱{inv.paid.toLocaleString()}.00</td>
-                  <td style={{ fontWeight: 700, color: inv.balance > 0 ? '#b45309' : '#64748b' }}>
-                    ₱{inv.balance.toLocaleString()}.00
+                  <td style={{ fontSize: '13px', color: '#94a3b8' }}>{inv.date}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                    ₱{inv.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ textAlign: 'right', color: '#22c55e' }}>
+                    ₱{inv.paid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: inv.balance > 0 ? '#f59e0b' : '#22c55e' }}>
+                    ₱{inv.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </td>
                   <td>
                     <span
@@ -384,7 +420,7 @@ export default function InvoicesView({ user, showToast }) {
                         inv.status === 'Paid'
                           ? 'fin-badge-green'
                           : inv.status === 'Part-paid'
-                          ? 'fin-badge-yellow'
+                          ? 'fin-badge-gold'
                           : inv.status === 'Issued'
                           ? 'fin-badge-blue'
                           : 'fin-badge-gray'
@@ -400,15 +436,12 @@ export default function InvoicesView({ user, showToast }) {
         </div>
       </div>
 
-      {/* Invoice Details Modal Window */}
+      {/* Invoice Details Modal */}
       {selectedInvoice && (
         <div className="fin-modal-overlay" onClick={() => setSelectedInvoice(null)}>
           <div className="fin-modal-window wide" onClick={(e) => e.stopPropagation()}>
             <div className="fin-modal-header">
-              <div>
-                <span className="fin-subsystem-badge">Grand Horizon Hotel · Staff Billing</span>
-                <h2 className="fin-modal-title">Staff Invoice #{selectedInvoice.id}</h2>
-              </div>
+              <h3 className="fin-modal-title">Official Billing Statement &amp; Folio</h3>
               <button
                 type="button"
                 className="fin-modal-close-btn"
@@ -417,305 +450,327 @@ export default function InvoicesView({ user, showToast }) {
                 ✕
               </button>
             </div>
-
             <div className="fin-modal-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', background: '#f8fafc', padding: '16px', borderRadius: '10px', marginBottom: '20px' }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Staff Personnel</div>
-                  <strong style={{ fontSize: '15px', color: '#0d1238' }}>{selectedInvoice.staffName || selectedInvoice.guest}</strong>
-                  <div style={{ fontSize: '12px', color: '#475569', marginTop: '2px' }}>{selectedInvoice.empId || 'Staff'} · {selectedInvoice.department || 'Hotel Operations'}</div>
-                  <div style={{ fontSize: '11.5px', color: '#64748b' }}>{selectedInvoice.email || 'staff@grandhorizon.com'}</div>
+              <div className="fin-paper-document">
+                <div className="fin-paper-header">
+                  <div>
+                    <h2 className="fin-paper-title">GRAND HORIZON HOTEL &amp; RESORT</h2>
+                    <span className="fin-paper-subtitle">OFFICIAL GUEST &amp; CUSTOMER BILLING FOLIO</span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '18px', fontWeight: 800, color: '#d4af37' }}>{selectedInvoice.id}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>Issued: {selectedInvoice.date}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>Payment Due: {selectedInvoice.dueDate}</div>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>Invoice Details</div>
-                  <div style={{ fontSize: '12.5px', marginTop: '2px' }}>Issue Date: <strong>{selectedInvoice.date}</strong></div>
-                  <div style={{ fontSize: '12.5px', marginTop: '2px' }}>Due Date: <strong>{selectedInvoice.dueDate || '—'}</strong></div>
-                  <div style={{ marginTop: '6px' }}>
-                    <span className={`fin-badge ${selectedInvoice.status === 'Paid' ? 'fin-badge-green' : selectedInvoice.status === 'Part-paid' ? 'fin-badge-yellow' : 'fin-badge-blue'}`}>
-                      Status: {selectedInvoice.status}
-                    </span>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', marginBottom: '16px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>BILLED TO</span>
+                    <div style={{ fontWeight: 700, fontSize: '15px' }}>{selectedInvoice.guest}</div>
+                    {selectedInvoice.roomNumber && selectedInvoice.roomNumber !== '—' && (
+                      <div style={{ color: '#cbd5e1' }}>Room {selectedInvoice.roomNumber} · Res: {selectedInvoice.reservationCode}</div>
+                    )}
+                    {selectedInvoice.email && <div style={{ color: '#64748b' }}>{selectedInvoice.email}</div>}
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>ACCOUNT CLASSIFICATION</span>
+                    <div style={{ fontWeight: 600 }}>{selectedInvoice.invoiceType} INVOICE</div>
+                    <div style={{ color: '#94a3b8' }}>Status: {selectedInvoice.status}</div>
+                    {selectedInvoice.notes && <div style={{ color: '#64748b', fontSize: '12px' }}>{selectedInvoice.notes}</div>}
+                  </div>
+                </div>
+
+                {/* Line Items */}
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '13px' }}>ITEMIZED CHARGES</h4>
+                <table className="fin-table" style={{ marginBottom: '16px' }}>
+                  <thead>
+                    <tr>
+                      <th>DESCRIPTION</th>
+                      <th>CATEGORY</th>
+                      <th style={{ textAlign: 'center' }}>QTY</th>
+                      <th style={{ textAlign: 'right' }}>UNIT PRICE</th>
+                      <th style={{ textAlign: 'right' }}>AMOUNT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modalLoading ? (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '14px', color: '#64748b' }}>
+                          Loading items...
+                        </td>
+                      </tr>
+                    ) : (selectedInvoice.items || []).length === 0 ? (
+                      <tr>
+                        <td>{selectedInvoice.notes || 'Hotel Accommodation Charge'}</td>
+                        <td>GENERAL</td>
+                        <td style={{ textAlign: 'center' }}>1</td>
+                        <td style={{ textAlign: 'right' }}>₱{selectedInvoice.subtotal.toLocaleString()}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>₱{selectedInvoice.subtotal.toLocaleString()}</td>
+                      </tr>
+                    ) : (
+                      selectedInvoice.items.map((item, i) => (
+                        <tr key={i}>
+                          <td>{item.description}</td>
+                          <td>
+                            <span className="fin-badge fin-badge-blue" style={{ fontSize: '10px' }}>
+                              {item.category || item.source || 'CHARGE'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>{item.quantity}</td>
+                          <td style={{ textAlign: 'right' }}>₱{Number(item.unitPrice).toLocaleString()}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>₱{Number(item.amount).toLocaleString()}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Totals Summary */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                  <div style={{ width: '280px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ color: '#94a3b8' }}>Subtotal:</span>
+                      <strong>₱{selectedInvoice.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ color: '#94a3b8' }}>12% VAT:</span>
+                      <strong>₱{selectedInvoice.vat.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '6px', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 700 }}>Total Billed:</span>
+                      <strong style={{ fontSize: '16px' }}>₱{selectedInvoice.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#22c55e', marginBottom: '4px' }}>
+                      <span>Paid to Date:</span>
+                      <strong>₱{selectedInvoice.paid.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid rgba(212, 175, 55, 0.4)', paddingTop: '6px', color: selectedInvoice.balance > 0 ? '#f59e0b' : '#22c55e' }}>
+                      <span style={{ fontWeight: 800 }}>Balance Due:</span>
+                      <strong style={{ fontSize: '18px', fontWeight: 800 }}>₱{selectedInvoice.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    </div>
                   </div>
                 </div>
               </div>
-
-              <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#0d1238' }}>Itemized Staff Charges</h4>
-              <table className="fin-table" style={{ marginBottom: '16px' }}>
-                <thead>
-                  <tr>
-                    <th>Description</th>
-                    <th>Qty</th>
-                    <th>Unit Price</th>
-                    <th>Line Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(selectedInvoice.items && selectedInvoice.items.length > 0
-                    ? selectedInvoice.items
-                    : [
-                        { desc: selectedInvoice.purpose || 'Staff Service & Account Settlement', qty: 1, unitPrice: selectedInvoice.total, amount: selectedInvoice.total }
-                      ]
-                  ).map((item, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: 600 }}>{item.desc}</td>
-                      <td>{item.qty}</td>
-                      <td>₱{item.unitPrice.toLocaleString()}.00</td>
-                      <td style={{ fontWeight: 700 }}>₱{item.amount.toLocaleString()}.00</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {/* Settlement Progress */}
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <span style={{ fontSize: '11.5px', color: '#64748b' }}>Payment status: </span>
-                  <strong>{selectedInvoice.paid >= selectedInvoice.total ? 'Fully settled' : `₱${selectedInvoice.paid.toLocaleString()}.00 settled`}</strong>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '11.5px', color: '#64748b' }}>Remaining balance due: </span>
-                  <strong style={{ fontSize: '15px', color: selectedInvoice.balance > 0 ? '#b45309' : '#16a34a' }}>
-                    ₱{selectedInvoice.balance.toLocaleString()}.00
-                  </strong>
-                </div>
-              </div>
             </div>
-
             <div className="fin-modal-footer">
               <button
                 type="button"
                 className="fin-btn fin-btn-secondary"
-                onClick={() => {
-                  window.print()
-                  showToast(`Invoice #${selectedInvoice.id} sent to printer.`)
-                }}
+                onClick={() => setSelectedInvoice(null)}
               >
-                🖨 Print Invoice
+                Close
               </button>
               <button
                 type="button"
-                className="fin-btn fin-btn-primary"
-                onClick={() => setSelectedInvoice(null)}
+                className="fin-btn fin-btn-secondary"
+                onClick={() => window.print()}
               >
-                Done
+                🖨️ Print Folio
               </button>
+              {selectedInvoice.rawStatus === 'DRAFT' && (
+                <button
+                  type="button"
+                  className="fin-btn fin-btn-primary"
+                  onClick={() => handleIssueDraft(selectedInvoice)}
+                >
+                  ✓ Officially Issue Invoice
+                </button>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Redesigned Staff Invoice Creation Modal */}
+      {/* Create Invoice Modal */}
       {showCreateModal && (
         <div className="fin-modal-overlay" onClick={() => setShowCreateModal(false)}>
           <div className="fin-modal-window wide" onClick={(e) => e.stopPropagation()}>
-            <div className="fin-modal-header">
-              <div>
-                <span className="fin-subsystem-badge">Grand Horizon Hotel · Internal Finance</span>
-                <h2 className="fin-modal-title">Issue New Staff Invoice</h2>
+            <form onSubmit={handleCreateInvoice}>
+              <div className="fin-modal-header">
+                <h3 className="fin-modal-title">Generate Customer or Corporate Invoice</h3>
+                <button
+                  type="button"
+                  className="fin-modal-close-btn"
+                  onClick={() => setShowCreateModal(false)}
+                >
+                  ✕
+                </button>
               </div>
-              <button
-                type="button"
-                className="fin-modal-close-btn"
-                onClick={() => setShowCreateModal(false)}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateStaffInvoice}>
               <div className="fin-modal-body">
-                {/* Section 1: Staff Personnel Info */}
-                <div className="fin-surface" style={{ padding: '16px', marginBottom: '16px' }}>
-                  <h4 style={{ margin: '0 0 12px', fontSize: '13px', color: '#0d1238' }}>1. Staff Personnel Selection</h4>
-
-                  <div className="fin-form-row">
-                    {staffList.length > 0 && (
-                      <div className="fin-form-group">
-                        <label>Select From Registered Staff</label>
-                        <select
-                          value={empId}
-                          onChange={(e) => handleStaffChange(e.target.value)}
-                        >
-                          {staffList.map((s) => (
-                            <option key={s.empId} value={s.empId}>
-                              {s.name} ({s.empId} · {s.department})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    <div className="fin-form-group">
-                      <label>Staff Personnel Name *</label>
-                      <input
-                        type="text"
-                        value={staffName}
-                        onChange={(e) => setStaffName(e.target.value)}
-                        required
-                        placeholder="e.g. Sofia Garcia"
-                      />
-                    </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                  <div>
+                    <label className="fin-label">Invoice Classification</label>
+                    <select
+                      className="fin-select"
+                      value={invoiceType}
+                      onChange={(e) => setInvoiceType(e.target.value)}
+                    >
+                      <option value="GUEST">Guest Folio (Hotel Room / Guest)</option>
+                      <option value="CORPORATE">Corporate Client / Sales Event</option>
+                      <option value="STAFF">Staff Account Charge</option>
+                    </select>
                   </div>
-
-                  <div className="fin-form-row">
-                    <div className="fin-form-group">
-                      <label>Employee ID *</label>
-                      <input
-                        type="text"
-                        value={empId}
-                        onChange={(e) => setEmpId(e.target.value)}
-                        required
-                        placeholder="e.g. EMP-014"
-                      />
-                    </div>
-
-                    <div className="fin-form-group">
-                      <label>Department *</label>
-                      <select
-                        value={department}
-                        onChange={(e) => setDepartment(e.target.value)}
-                      >
-                        <option value="Front Office">Front Office</option>
-                        <option value="Housekeeping">Housekeeping</option>
-                        <option value="Food & Beverage">Food &amp; Beverage</option>
-                        <option value="Engineering">Engineering</option>
-                        <option value="Guest Services">Guest Services</option>
-                        <option value="Administration">Administration</option>
-                      </select>
-                    </div>
-
-                    <div className="fin-form-group">
-                      <label>Staff Email</label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="staff@grandhorizon.com"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="fin-form-group">
-                    <label>Invoice Purpose / Description *</label>
+                  <div>
+                    <label className="fin-label">Customer / Guest Name *</label>
                     <input
                       type="text"
-                      value={purpose}
-                      onChange={(e) => setPurpose(e.target.value)}
-                      placeholder="e.g. Uniform replacement, staff cafeteria meal plan, locker fee"
+                      className="fin-input"
+                      placeholder="e.g. Atty. Ronald Hernandez"
                       required
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
                     />
                   </div>
-
-                  <div className="fin-form-row">
-                    <div className="fin-form-group">
-                      <label>Issue Date *</label>
-                      <input
-                        type="date"
-                        value={issueDate}
-                        onChange={(e) => setIssueDate(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="fin-form-group">
-                      <label>Settlement Due Date *</label>
-                      <input
-                        type="date"
-                        value={dueDate}
-                        onChange={(e) => setDueDate(e.target.value)}
-                        required
-                      />
-                    </div>
+                  <div>
+                    <label className="fin-label">Billing Email</label>
+                    <input
+                      type="email"
+                      className="fin-input"
+                      placeholder="guest@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
                   </div>
                 </div>
 
-                {/* Itemized Charges Table */}
-                <div className="fin-surface" style={{ padding: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <h4 style={{ margin: 0, fontSize: '13px', color: '#0d1238' }}>2. Itemized Staff Charges</h4>
-                    <button
-                      type="button"
-                      className="fin-btn fin-btn-secondary"
-                      onClick={addLineItem}
-                      style={{ fontSize: '11.5px', padding: '5px 12px' }}
-                    >
-                      + Add Item
-                    </button>
-                  </div>
-
-                  <table className="fin-table" style={{ fontSize: '12.5px' }}>
-                    <thead>
-                      <tr>
-                        <th style={{ width: '45%' }}>Description</th>
-                        <th style={{ width: '15%' }}>Qty</th>
-                        <th style={{ width: '20%' }}>Unit Price (₱)</th>
-                        <th style={{ width: '20%' }}>Total (₱)</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lines.map((line, idx) => (
-                        <tr key={idx}>
-                          <td>
-                            <input
-                              type="text"
-                              value={line.desc}
-                              onChange={(e) => updateLine(idx, 'desc', e.target.value)}
-                              style={{ width: '100%', padding: '5px 8px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
-                              required
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              min="1"
-                              value={line.qty}
-                              onChange={(e) => updateLine(idx, 'qty', e.target.value)}
-                              style={{ width: '100%', padding: '5px 8px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              min="0"
-                              step="50"
-                              value={line.unitPrice}
-                              onChange={(e) => updateLine(idx, 'unitPrice', e.target.value)}
-                              style={{ width: '100%', padding: '5px 8px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
-                            />
-                          </td>
-                          <td style={{ fontWeight: 700 }}>₱{line.amount.toLocaleString()}.00</td>
-                          <td>
-                            <button
-                              type="button"
-                              onClick={() => removeLine(idx)}
-                              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px' }}
-                              title="Delete line"
-                            >
-                              ✕
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  {/* Totals */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
-                    <div style={{ width: '240px', fontSize: '12.5px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
-                        <span>Subtotal:</span>
-                        <span>₱{subtotal.toLocaleString()}.00</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
-                        <span>VAT (12%):</span>
-                        <span>₱{vat.toLocaleString()}.00</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '15px', color: '#0d1238', borderTop: '2px solid #e2e8f0', paddingTop: '6px' }}>
-                        <span>Grand Total:</span>
-                        <span>₱{total.toLocaleString()}.00</span>
-                      </div>
+                {invoiceType === 'GUEST' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                    <div>
+                      <label className="fin-label">Room Number</label>
+                      <input
+                        type="text"
+                        className="fin-input"
+                        placeholder="e.g. 305"
+                        value={roomNumber}
+                        onChange={(e) => setRoomNumber(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="fin-label">Reservation Code</label>
+                      <input
+                        type="text"
+                        className="fin-input"
+                        placeholder="e.g. RES-261099"
+                        value={reservationCode}
+                        onChange={(e) => setReservationCode(e.target.value)}
+                      />
                     </div>
                   </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                  <div>
+                    <label className="fin-label">Issue Date</label>
+                    <input
+                      type="date"
+                      className="fin-input"
+                      value={issueDate}
+                      onChange={(e) => setIssueDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="fin-label">Payment Due Date</label>
+                    <input
+                      type="date"
+                      className="fin-input"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Line Items Editor */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <h4 style={{ margin: 0, fontSize: '13px' }}>Itemized Charges &amp; Services</h4>
+                  <button
+                    type="button"
+                    className="fin-btn fin-btn-secondary"
+                    style={{ padding: '4px 10px', fontSize: '12px' }}
+                    onClick={handleAddLine}
+                  >
+                    ➕ Add Line Item
+                  </button>
+                </div>
+
+                <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '8px', marginBottom: '14px' }}>
+                  {lines.map((l, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr auto', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        placeholder="Item description"
+                        className="fin-input"
+                        value={l.desc}
+                        onChange={(e) => handleLineChange(idx, 'desc', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Qty"
+                        className="fin-input"
+                        value={l.qty}
+                        onChange={(e) => handleLineChange(idx, 'qty', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Unit Price"
+                        className="fin-input"
+                        value={l.unitPrice}
+                        onChange={(e) => handleLineChange(idx, 'unitPrice', e.target.value)}
+                      />
+                      <select
+                        className="fin-select"
+                        value={l.category}
+                        onChange={(e) => handleLineChange(idx, 'category', e.target.value)}
+                      >
+                        <option value="ROOM">Room</option>
+                        <option value="DINING">Dining</option>
+                        <option value="SERVICES">Services</option>
+                        <option value="DAMAGE_BILL">HK Damage</option>
+                        <option value="EVENT_BANQUET">Sales Event</option>
+                        <option value="GENERAL">General</option>
+                      </select>
+                      <button
+                        type="button"
+                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '16px' }}
+                        onClick={() => handleRemoveLine(idx)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Calculation Box */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(212, 175, 55, 0.08)', border: '1px solid rgba(212, 175, 55, 0.25)', padding: '12px', borderRadius: '8px', marginBottom: '14px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>SUBTOTAL: ₱{subtotal.toLocaleString()} · 12% VAT: ₱{vat.toLocaleString()}</span>
+                    <div style={{ fontSize: '13px', color: '#cbd5e1' }}>Government statutory VAT automatically applied.</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>TOTAL INVOICE AMOUNT</span>
+                    <div style={{ fontSize: '20px', fontWeight: 800, color: '#38bdf8' }}>₱{total.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '14px' }}>
+                  <label className="fin-label">Invoice Notes</label>
+                  <input
+                    type="text"
+                    className="fin-input"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={issueNow}
+                      onChange={(e) => setIssueNow(e.target.checked)}
+                    />
+                    <span>Issue immediately (Uncheck to save as draft)</span>
+                  </label>
                 </div>
               </div>
 
@@ -730,8 +785,9 @@ export default function InvoicesView({ user, showToast }) {
                 <button
                   type="submit"
                   className="fin-btn fin-btn-primary"
+                  disabled={submitting}
                 >
-                  Issue Staff Invoice
+                  {submitting ? 'Generating…' : '✓ Create Invoice'}
                 </button>
               </div>
             </form>

@@ -73,7 +73,7 @@ function json(method, value) {
 }
 
 export const authApi = {
-  login: (username, password, role) => request('/auth/login', json('POST', { username, password, role })),
+  login: (username, password) => request('/auth/login', json('POST', { username, password })),
   me: () => request('/auth/me'),
   logout: () => request('/auth/logout', { method: 'POST' }),
   saveSession,
@@ -122,17 +122,44 @@ export const adminApi = {
 
 export const financeApi = {
   dashboard: () => request('/finance/dashboard'),
-  invoices: (search = '', status = '') => request(`/finance/invoices?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}`),
+  invoices: (search = '', status = '', invoiceType = '') =>
+    request(`/finance/invoices?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}&invoiceType=${encodeURIComponent(invoiceType)}`),
   invoice: (id) => request(`/finance/invoices/${id}`),
   createInvoice: (invoice) => request('/finance/invoices', json('POST', invoice)),
   updateInvoice: (id, fields) => request(`/finance/invoices/${id}`, json('PATCH', fields)),
-  payments: (search = '', method = '') => request(`/finance/payments?search=${encodeURIComponent(search)}&method=${encodeURIComponent(method)}`),
+  payments: (search = '', method = '', date = '') =>
+    request(`/finance/payments?search=${encodeURIComponent(search)}&method=${encodeURIComponent(method)}&date=${encodeURIComponent(date)}`),
   createPayment: (payment) => request('/finance/payments', json('POST', payment)),
-  expenses: (status = '') => request(`/finance/expenses?status=${encodeURIComponent(status)}`),
+  expenses: (status = '', department = '') =>
+    request(`/finance/expenses?status=${encodeURIComponent(status)}&department=${encodeURIComponent(department)}`),
   createExpense: (expense) => request('/finance/expenses', json('POST', expense)),
   approveExpense: (id) => request(`/finance/expenses/${id}/approve`, { method: 'PATCH' }),
-  revenue: () => request('/finance/revenue'),
-  payroll: () => request('/finance/payroll'),
-  audit: (search = '', eventType = '') => request(`/finance/audit?search=${encodeURIComponent(search)}&eventType=${encodeURIComponent(eventType)}`),
-  reports: (reportType = '') => request(`/finance/reports?reportType=${encodeURIComponent(reportType)}`),
+  revenue: (period = 'all', date = '') =>
+    request(`/finance/revenue?period=${encodeURIComponent(period)}&date=${encodeURIComponent(date)}`),
+  payroll: (department = '', status = '', search = '') =>
+    request(`/finance/payroll?department=${encodeURIComponent(department)}&status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`),
+  createPayroll: (payrollData) => request('/finance/payroll', json('POST', payrollData)),
+  disbursePayroll: (id) => request(`/finance/payroll/${id}/disburse`, { method: 'PATCH' }),
+  audit: (search = '', eventType = '') =>
+    request(`/finance/audit?search=${encodeURIComponent(search)}&eventType=${encodeURIComponent(eventType)}`),
+  reports: (reportType = '', period = 'daily', date = '') =>
+    request(`/finance/reports?reportType=${encodeURIComponent(reportType)}&period=${encodeURIComponent(period)}&date=${encodeURIComponent(date)}`),
+  exportDataUrl: (entity = 'invoices', format = 'csv', period = 'all') =>
+    `/api/v1/finance/export?entity=${encodeURIComponent(entity)}&format=${encodeURIComponent(format)}&period=${encodeURIComponent(period)}`,
+  exportData: (entity = 'invoices', format = 'csv', period = 'all') =>
+    request(`/finance/export?entity=${encodeURIComponent(entity)}&format=${encodeURIComponent(format)}&period=${encodeURIComponent(period)}`),
+
+  // Subsystem Integrations
+  hkDamages: (status = '') =>
+    request(`/finance/integrations/housekeeping/damages?status=${encodeURIComponent(status)}`),
+  billHkDamage: (payload) =>
+    request('/finance/integrations/housekeeping/damages/bill', json('POST', payload)),
+  maintenanceRecords: (status = '') =>
+    request(`/finance/integrations/maintenance/records?status=${encodeURIComponent(status)}`),
+  createMaintenanceExpense: (payload) =>
+    request('/finance/integrations/maintenance/expenses', json('POST', payload)),
+  salesRecords: (status = '') =>
+    request(`/finance/integrations/sales/records?status=${encodeURIComponent(status)}`),
+  syncSalesInvoice: (payload) =>
+    request('/finance/integrations/sales/sync-invoice', json('POST', payload)),
 }

@@ -11,6 +11,7 @@ router.use(authenticate, authorize('FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 
 
 router.get('/dashboard', controller.dashboard)
 
+// Invoices
 router.route('/invoices')
   .get(controller.listInvoices)
   .post(requireBody, controller.createInvoice)
@@ -20,20 +21,46 @@ router.route('/invoices/:id')
   .get(controller.getInvoice)
   .patch(requireBody, controller.updateInvoice)
 
+// Customer Payments
 router.route('/payments')
   .get(controller.listPayments)
   .post(requireBody, controller.createPayment)
 
+// Expenses
 router.route('/expenses')
   .get(controller.listExpenses)
   .post(requireBody, controller.createExpense)
 
 router.patch('/expenses/:id/approve', requireId, controller.approveExpense)
 
+// Payroll (Calculations, Listing, Disbursement)
+router.route('/payroll')
+  .get(controller.listPayroll)
+  .post(requireBody, controller.createPayroll)
+
+router.patch('/payroll/:id/disburse', requireId, controller.disbursePayroll)
+
+// Revenue Monitoring & Reports
 router.get('/revenue', controller.revenueMonitoring)
-router.get('/payroll', controller.listPayroll)
-router.get('/audit', controller.listAuditLog)
 router.get('/reports', controller.generateReport)
 
-module.exports = router
+// Audit Log & Financial Records
+router.get('/audit', controller.listAuditLog)
 
+// Bulk Exporter
+router.get('/export', controller.exportData)
+
+// Subsystem Integrations:
+// 1. Housekeeping: Inventory damage billing from guest
+router.get('/integrations/housekeeping/damages', controller.listHousekeepingDamages)
+router.post('/integrations/housekeeping/damages/bill', requireBody, controller.billHousekeepingDamage)
+
+// 2. Maintenance: Access to Finance records
+router.get('/integrations/maintenance/records', controller.listMaintenanceRecords)
+router.post('/integrations/maintenance/expenses', requireBody, controller.createMaintenanceExpense)
+
+// 3. Marketing & Sales: Sales records connected to finance
+router.get('/integrations/sales/records', controller.listSalesRecords)
+router.post('/integrations/sales/sync-invoice', requireBody, controller.syncSalesInvoice)
+
+module.exports = router

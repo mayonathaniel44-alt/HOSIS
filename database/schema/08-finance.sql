@@ -229,3 +229,53 @@ CREATE TABLE IF NOT EXISTS finance_audit_log (
 CREATE INDEX IF NOT EXISTS idx_fin_audit_log_created ON finance_audit_log (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fin_audit_log_ref ON finance_audit_log (reference_code);
 CREATE INDEX IF NOT EXISTS idx_fin_audit_log_activity ON finance_audit_log (activity);
+
+
+-- ====================================================================
+-- 8. TABLE: finance_hk_damages (Housekeeping Damage Billing Integration)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS finance_hk_damages (
+    id BIGSERIAL PRIMARY KEY,
+    incident_code VARCHAR(50) NOT NULL UNIQUE,
+    room_number VARCHAR(40) NOT NULL,
+    guest_name VARCHAR(200) NOT NULL,
+    reservation_code VARCHAR(50),
+    damaged_item VARCHAR(200) NOT NULL,
+    damage_category VARCHAR(80) NOT NULL DEFAULT 'INVENTORY',
+    description TEXT,
+    estimated_cost NUMERIC(12, 2) NOT NULL CHECK (estimated_cost >= 0),
+    billed_amount NUMERIC(12, 2) DEFAULT 0.00,
+    invoice_id BIGINT REFERENCES finance_invoices(id) ON DELETE SET NULL,
+    billing_status VARCHAR(30) NOT NULL DEFAULT 'PENDING_BILLING' CHECK (billing_status IN ('PENDING_BILLING', 'BILLED', 'WAIVED', 'DISPUTED')),
+    reported_by VARCHAR(100) DEFAULT 'Housekeeping Staff',
+    reported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    billed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fin_hk_damages_status ON finance_hk_damages (billing_status);
+CREATE INDEX IF NOT EXISTS idx_fin_hk_damages_room ON finance_hk_damages (room_number);
+
+
+-- ====================================================================
+-- 9. TABLE: finance_sales_records (Sales & Marketing Integration)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS finance_sales_records (
+    id BIGSERIAL PRIMARY KEY,
+    deal_code VARCHAR(50) NOT NULL UNIQUE,
+    client_name VARCHAR(200) NOT NULL,
+    client_email VARCHAR(254),
+    client_phone VARCHAR(50),
+    package_name VARCHAR(200) NOT NULL,
+    package_category VARCHAR(80) NOT NULL DEFAULT 'EVENT_BANQUET',
+    contract_amount NUMERIC(12, 2) NOT NULL CHECK (contract_amount >= 0),
+    event_date DATE,
+    sales_rep VARCHAR(100) DEFAULT 'Sales & Marketing Team',
+    status VARCHAR(30) NOT NULL DEFAULT 'CONFIRMED' CHECK (status IN ('LEAD', 'CONFIRMED', 'INVOICED', 'COMPLETED', 'CANCELLED')),
+    invoice_id BIGINT REFERENCES finance_invoices(id) ON DELETE SET NULL,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fin_sales_records_status ON finance_sales_records (status);
+CREATE INDEX IF NOT EXISTS idx_fin_sales_records_client ON finance_sales_records (client_name);

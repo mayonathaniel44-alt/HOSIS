@@ -5,13 +5,18 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(30) NOT NULL CHECK (
         role IN (
             'ADMIN',
+            'SUPER_ADMIN',
             'FRONT_OFFICE',
             'HOUSEKEEPING',
             'HR',
             'FINANCE',
             'FINANCE_ADMIN',
             'FINANCE_STAFF',
+            'FINANCE_OFFICER',
+            'OFFICER',
             'DEPARTMENT_HEAD',
+            'HEAD',
+            'FINANCE_HEAD',
             'SALES_MARKETING',
             'ENGINEERING'
         )

@@ -143,8 +143,28 @@ function Status({ children, tone = 'blue' }) {
   return <span className={`status status-${tone}`}><i />{children}</span>
 }
 
-const isFinanceRole = (role) => ['FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD'].includes(role)
-const isAdminRole = (role) => ['ADMIN', 'FINANCE_ADMIN'].includes(role)
+const isFinanceRole = (role) => {
+  if (!role) return false
+  const r = String(role).toUpperCase()
+  return [
+    'FINANCE',
+    'FINANCE_ADMIN',
+    'FINANCE_STAFF',
+    'FINANCE_OFFICER',
+    'OFFICER',
+    'DEPARTMENT_HEAD',
+    'HEAD',
+    'FINANCE_HEAD',
+    'ADMIN',
+    'SUPER_ADMIN',
+  ].includes(r)
+}
+
+const isAdminRole = (role) => {
+  if (!role) return false
+  const r = String(role).toUpperCase()
+  return ['ADMIN', 'SUPER_ADMIN', 'FINANCE_ADMIN'].includes(r)
+}
 
 function App() {
   const [signedIn, setSignedIn] = useState(false)
@@ -153,7 +173,6 @@ function App() {
   const [showFinanceConsole, setShowFinanceConsole] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [accessRole, setAccessRole] = useState('FINANCE_ADMIN')
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(false)
   const [activePage, setActivePage] = useState('Dashboard')
@@ -161,6 +180,7 @@ function App() {
   const [modal, setModal] = useState(null)
   const [selectedRecord, setSelectedRecord] = useState(null)
   const [toast, setToast] = useState('')
+  const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
   const [loadingWorkspace, setLoadingWorkspace] = useState(false)
   const [dataError, setDataError] = useState('')
@@ -203,8 +223,17 @@ function App() {
       if (!active) return
       setUser(result.user)
       setSignedIn(true)
-      setShowAdminConsole(isAdminRole(result.user.role))
-      setShowFinanceConsole(isFinanceRole(result.user.role))
+      const role = result.user?.role?.toUpperCase() || ''
+      if (['FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'FINANCE_OFFICER', 'OFFICER', 'DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'ADMIN', 'SUPER_ADMIN'].includes(role)) {
+        setShowFinanceConsole(true)
+        setShowAdminConsole(false)
+      } else if (isAdminRole(role)) {
+        setShowAdminConsole(true)
+        setShowFinanceConsole(false)
+      } else {
+        setShowFinanceConsole(false)
+        setShowAdminConsole(false)
+      }
     }).catch((error) => {
       if (!active) return
       authApi.clearSession()
@@ -258,21 +287,32 @@ function App() {
 
   async function signIn(event) {
     event.preventDefault()
+    setLoginError('')
     if (!username.trim() || !password) {
-      notify('Enter your username and password to continue.')
+      setLoginError('Enter both your username and password to continue.')
       return
     }
     setLoginLoading(true)
     try {
-      const session = await authApi.login(username.trim(), password, accessRole)
+      const session = await authApi.login(username.trim(), password)
       authApi.saveSession(session, remember)
       setUser(session.user)
       setSignedIn(true)
-      setShowAdminConsole(isAdminRole(session.user.role))
-      setShowFinanceConsole(isFinanceRole(session.user.role))
+      const role = session.user?.role?.toUpperCase() || ''
+      if (['FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'FINANCE_OFFICER', 'OFFICER', 'DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'ADMIN', 'SUPER_ADMIN'].includes(role)) {
+        setShowFinanceConsole(true)
+        setShowAdminConsole(false)
+      } else if (isAdminRole(role)) {
+        setShowAdminConsole(true)
+        setShowFinanceConsole(false)
+      } else {
+        setShowFinanceConsole(false)
+        setShowAdminConsole(false)
+      }
       setPassword('')
       setActivePage('Dashboard')
     } catch (error) {
+      setLoginError(error.message || 'Unable to sign in. Please check your credentials.')
       notify(error.message)
     } finally {
       setLoginLoading(false)
@@ -439,12 +479,12 @@ function App() {
     ? user.username.replace(/[._-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
     : 'Front Office'
   const roleDisplayNames = {
+    ADMIN: 'Super Admin',
     FINANCE_ADMIN: 'Finance Admin',
-    FINANCE_STAFF: 'Finance Staff',
+    FINANCE_STAFF: 'Finance Officer',
     DEPARTMENT_HEAD: 'Department Head',
-    ADMIN: 'Finance Admin',
     FRONT_OFFICE: 'Front Office',
-    FINANCE: 'Accounting & Finance',
+    FINANCE: 'Finance Officer',
   }
   const accessLabel = roleDisplayNames[user?.role] || 'Staff'
 
@@ -504,47 +544,67 @@ function App() {
                 <span className="eyebrow">TEAM PORTAL</span>
                 <h2>Welcome back</h2>
                 <p>
-                  {accessRole === 'FINANCE_ADMIN'
-                    ? 'Sign in to the finance administration workspace.'
-                    : accessRole === 'FINANCE_STAFF'
-                    ? 'Sign in to the finance & accounting workspace.'
-                    : accessRole === 'DEPARTMENT_HEAD'
-                    ? 'Sign in as department head for approvals and financial oversight.'
-                    : accessRole === 'ADMIN'
-                    ? 'Sign in with your administrator account.'
-                    : 'Sign in to your front office workspace.'}
+                  Sign in with your staff credentials. Your workspace and permissions will be applied automatically based on your database account role.
                 </p>
               </div>
+              {loginError && (
+                <div className="login-error-alert" role="alert">
+                  <Icon name="close" size={14} />
+                  <span>{loginError}</span>
+                </div>
+              )}
               <form className="login-form" onSubmit={signIn}>
                 <label htmlFor="username">Username</label>
-                <div className="input-wrap"><Icon name="users" size={17} /><input id="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Enter your username" autoComplete="username" /></div>
+                <div className="input-wrap">
+                  <Icon name="users" size={17} />
+                  <input
+                    id="username"
+                    value={username}
+                    onChange={(event) => {
+                      setUsername(event.target.value)
+                      if (loginError) setLoginError('')
+                    }}
+                    placeholder="e.g. admin, finance.officer, head"
+                    autoComplete="username"
+                  />
+                </div>
                 <label htmlFor="password">Password</label>
-                <div className="input-wrap"><Icon name="lock" size={17} /><input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" autoComplete="current-password" /><button className="input-action" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword((value) => !value)}><Icon name="eye" size={17} /></button></div>
-                <label htmlFor="accessRole">Access type</label>
-                <div className="select-wrap">
-                  <select id="accessRole" value={accessRole} onChange={(event) => setAccessRole(event.target.value)}>
-                    <option value="FINANCE_ADMIN">Finance Admin</option>
-                    <option value="FINANCE_STAFF">Finance Staff</option>
-                    <option value="DEPARTMENT_HEAD">Department Head</option>
-                    <option value="FRONT_OFFICE">Front Office</option>
-                  </select>
-                  <Icon name="chevron" size={15} />
+                <div className="input-wrap">
+                  <Icon name="lock" size={17} />
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value)
+                      if (loginError) setLoginError('')
+                    }}
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                  />
+                  <button
+                    className="input-action"
+                    type="button"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    onClick={() => setShowPassword((value) => !value)}
+                  >
+                    <Icon name="eye" size={17} />
+                  </button>
                 </div>
                 <div className="form-options">
-                  <label className="remember-label"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Remember me</label>
+                  <label className="remember-label">
+                    <input
+                      type="checkbox"
+                      checked={remember}
+                      onChange={(event) => setRemember(event.target.checked)}
+                    />
+                    Remember me
+                  </label>
                   <button
                     type="button"
                     className="text-button"
                     onClick={() => {
-                      const role = ['FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD'].includes(accessRole)
-                        ? accessRole
-                        : 'FINANCE_ADMIN'
-                      const nameMap = {
-                        FINANCE_ADMIN: 'finance.admin',
-                        FINANCE_STAFF: 'finance.staff',
-                        DEPARTMENT_HEAD: 'dept.head',
-                      }
-                      setUser({ username: nameMap[role] || 'finance.officer', role })
+                      setUser({ username: 'finance.admin', role: 'FINANCE_ADMIN' })
                       setSignedIn(true)
                       setShowFinanceConsole(true)
                     }}
@@ -552,20 +612,68 @@ function App() {
                     Preview Finance UI →
                   </button>
                 </div>
-                <button className="login-submit" type="submit" disabled={loginLoading}>{loginLoading ? 'Signing in…' : 'Sign in'} <Icon name="arrow" size={16} /></button>
+                <button className="login-submit" type="submit" disabled={loginLoading}>
+                  {loginLoading ? 'Signing in…' : 'Sign in'} <Icon name="arrow" size={16} />
+                </button>
               </form>
+
+              {/* Quick Fill Database Role Demo Accounts */}
+              <div className="login-quick-roles">
+                <span className="login-quick-roles-title">Demo Accounts (Direct Database Role)</span>
+                <div className="login-quick-roles-list">
+                  <button
+                    type="button"
+                    className="login-role-chip"
+                    onClick={() => {
+                      setUsername('admin')
+                      setPassword('Admin123456!')
+                      if (loginError) setLoginError('')
+                    }}
+                    title="Fill Super Admin credentials"
+                  >
+                    ⚡ Super Admin
+                  </button>
+                  <button
+                    type="button"
+                    className="login-role-chip"
+                    onClick={() => {
+                      setUsername('finance.officer')
+                      setPassword('Finance123456!')
+                      if (loginError) setLoginError('')
+                    }}
+                    title="Fill Finance Officer credentials"
+                  >
+                    ⚡ Finance Officer
+                  </button>
+                  <button
+                    type="button"
+                    className="login-role-chip"
+                    onClick={() => {
+                      setUsername('finance.head')
+                      setPassword('Head123456!')
+                      if (loginError) setLoginError('')
+                    }}
+                    title="Fill Department Head credentials"
+                  >
+                    ⚡ Department Head
+                  </button>
+                  <button
+                    type="button"
+                    className="login-role-chip"
+                    onClick={() => {
+                      setUsername('frontoffice')
+                      setPassword('FrontOffice123456!')
+                      if (loginError) setLoginError('')
+                    }}
+                    title="Fill Front Office credentials"
+                  >
+                    ⚡ Front Office
+                  </button>
+                </div>
+              </div>
+
               <div className="login-footer">
-                <span>
-                  {accessRole === 'FINANCE_ADMIN'
-                    ? 'FINANCE ADMIN ACCESS'
-                    : accessRole === 'FINANCE_STAFF'
-                    ? 'FINANCE STAFF ACCESS'
-                    : accessRole === 'DEPARTMENT_HEAD'
-                    ? 'DEPARTMENT HEAD ACCESS'
-                    : accessRole === 'FRONT_OFFICE'
-                    ? 'FRONT OFFICE ACCESS'
-                    : 'FINANCE ACCESS'}
-                </span>
+                <span>ROLE-BASED DIRECT ACCESS</span>
                 <span><i /> SECURE API SIGN-IN</span>
               </div>
             </section>
@@ -573,15 +681,7 @@ function App() {
           <footer className="login-bottom">
             <span>© {today.getFullYear()} Grand Horizon Hotel</span>
             <span>
-              Secure staff access · {accessRole === 'FINANCE_ADMIN'
-                ? 'Finance Admin'
-                : accessRole === 'FINANCE_STAFF'
-                ? 'Finance Staff'
-                : accessRole === 'DEPARTMENT_HEAD'
-                ? 'Department Head'
-                : accessRole === 'FRONT_OFFICE'
-                ? 'Front Office'
-                : 'Finance'}
+              Role-Based Access Control · Direct Database Role Authentication
             </span>
           </footer>
         </div>

@@ -264,6 +264,74 @@ export default function OverviewView({
         </div>
       </section>
 
+      {/* Subsystem Integrations Status Bar */}
+      <div className="fin-surface" style={{ marginBottom: '20px' }}>
+        <div className="fin-surface-header">
+          <div>
+            <h3 className="fin-surface-title">Subsystem Integrations Overview</h3>
+            <p className="fin-surface-subtitle">Connected operations: Housekeeping room damages, Maintenance records, and Sales &amp; Marketing revenue.</p>
+          </div>
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            onClick={() => onNavigate('integrations')}
+            style={{ fontSize: '12px', padding: '6px 14px' }}
+          >
+            Open Integrations Panel →
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', padding: '14px 18px' }}>
+          <div
+            className="clickable-row"
+            style={{ background: 'rgba(212, 175, 55, 0.08)', border: '1px solid rgba(212, 175, 55, 0.25)', borderRadius: '8px', padding: '14px' }}
+            onClick={() => onNavigate('integrations')}
+          >
+            <span style={{ fontSize: '11px', color: '#d4af37', fontWeight: 700, textTransform: 'uppercase' }}>
+              🧹 HOUSEKEEPING INVENTORY DAMAGE
+            </span>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: '#f8fafc', margin: '4px 0' }}>
+              {dashboardData?.integrations?.housekeeping?.pendingDamageCount || 0} Incident(s)
+            </div>
+            <small style={{ color: '#94a3b8' }}>
+              ₱{Number(dashboardData?.integrations?.housekeeping?.pendingDamageAmount || 0).toLocaleString()} pending billing to guests
+            </small>
+          </div>
+
+          <div
+            className="clickable-row"
+            style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '8px', padding: '14px' }}
+            onClick={() => onNavigate('integrations')}
+          >
+            <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase' }}>
+              🛠️ MAINTENANCE FINANCE RECORDS
+            </span>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: '#f8fafc', margin: '4px 0' }}>
+              {dashboardData?.integrations?.maintenance?.engineeringExpenseCount || 0} Expense Vouchers
+            </div>
+            <small style={{ color: '#94a3b8' }}>
+              ₱{Number(dashboardData?.integrations?.maintenance?.engineeringApprovedTotal || 0).toLocaleString()} approved maintenance costs
+            </small>
+          </div>
+
+          <div
+            className="clickable-row"
+            style={{ background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.25)', borderRadius: '8px', padding: '14px' }}
+            onClick={() => onNavigate('integrations')}
+          >
+            <span style={{ fontSize: '11px', color: '#c084fc', fontWeight: 700, textTransform: 'uppercase' }}>
+              📈 MARKETING &amp; SALES REVENUE
+            </span>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: '#f8fafc', margin: '4px 0' }}>
+              {dashboardData?.integrations?.salesMarketing?.unbilledDealsCount || 0} Deals Ready
+            </div>
+            <small style={{ color: '#94a3b8' }}>
+              ₱{Number(dashboardData?.integrations?.salesMarketing?.unbilledDealsAmount || 0).toLocaleString()} ready to connect to Finance
+            </small>
+          </div>
+        </div>
+      </div>
+
       {/* Bottom Grid: Live Invoices Queue */}
       <div className="fin-surface" style={{ marginBottom: 0 }}>
         <div className="fin-surface-header">

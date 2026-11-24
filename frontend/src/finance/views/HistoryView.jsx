@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
+import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
 export default function HistoryView({ onNavigate, showToast }) {
   const [events, setEvents] = useState([])
@@ -49,241 +50,291 @@ export default function HistoryView({ onNavigate, showToast }) {
     loadAudit()
   }, [eventTypeFilter])
 
+  function handleBulkExportCsv() {
+    if (!events.length) {
+      showToast('No records to export.')
+      return
+    }
+    const headers = [
+      { key: 'id', label: 'Transaction Code' },
+      { key: 'activity', label: 'Activity' },
+      { key: 'ref', label: 'Reference Code' },
+      { key: 'amountLabel', label: 'Amount' },
+      { key: 'source', label: 'Department / Source' },
+      { key: 'user', label: 'Staff User' },
+      { key: 'when', label: 'Timestamp' },
+    ]
+    exportToCsv('hosis-financial-records', events, headers)
+    showToast('Exported financial records to CSV.')
+  }
+
+  function handleBulkExportJson() {
+    if (!events.length) {
+      showToast('No records to export.')
+      return
+    }
+    exportToJson('hosis-financial-records', events)
+    showToast('Exported financial records to JSON.')
+  }
+
   const filteredEvents = events.filter((ev) => {
     const matchSearch =
       ev.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       ev.activity.toLowerCase().includes(searchTerm.toLowerCase()) ||
       ev.ref.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ev.user.toLowerCase().includes(searchTerm.toLowerCase())
+      ev.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ev.source.toLowerCase().includes(searchTerm.toLowerCase())
     return matchSearch
   })
 
   const cashCollectionsCount = events.filter((e) => e.activity.toLowerCase().includes('payment')).length
   const expensesCount = events.filter((e) => e.activity.toLowerCase().includes('expense')).length
+  const invoicesCount = events.filter((e) => e.activity.toLowerCase().includes('invoice')).length
 
   return (
     <>
-      <div className="finance-breadcrumb">Finance &amp; Accounting / History</div>
+      <div className="finance-breadcrumb">Finance &amp; Accounting / Financial Records &amp; History</div>
       <header className="finance-header">
         <div className="finance-header-titles">
-          <h1>Financial Audit Trail &amp; Transaction History</h1>
-          <p>Trace immutable financial activity, linked source records, and user actions in PostgreSQL.</p>
+          <h1>Financial Records &amp; Audit Trail</h1>
+          <p>Immutable transactional ledger, source audit logs, and verified financial activities across departments.</p>
         </div>
-        <button
-          type="button"
-          className="fin-btn fin-btn-secondary"
-          onClick={() => showToast('Audit trail exported for security review.')}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          <span>Export Audit Log</span>
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            onClick={handleBulkExportCsv}
+            title="Bulk export financial records to CSV"
+          >
+            📥 Bulk Export CSV
+          </button>
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            onClick={handleBulkExportJson}
+            title="Bulk export financial records to JSON"
+          >
+            📋 Bulk Export JSON
+          </button>
+        </div>
       </header>
 
       {/* KPI Cards */}
       <section className="fin-kpi-grid fin-kpi-grid-3">
         <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Logged Audit Events</span>
+          <span className="fin-kpi-label">Logged Financial Transactions</span>
           <div className="fin-kpi-val">{loading ? 'Loading...' : `${events.length}`}</div>
           <span className="fin-kpi-note neutral">Immutable PostgreSQL audit log</span>
         </div>
         <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Payment Events</span>
-          <div className="fin-kpi-val">{cashCollectionsCount} Recorded</div>
+          <span className="fin-kpi-label">Payment Collections Logged</span>
+          <div className="fin-kpi-val" style={{ color: '#22c55e' }}>{cashCollectionsCount} Recorded</div>
           <span className="fin-kpi-note positive">Inflow payment postings</span>
         </div>
         <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Expense Events</span>
-          <div className="fin-kpi-val">{expensesCount} Recorded</div>
-          <span className="fin-kpi-note neutral">Operating vouchers recorded</span>
+          <span className="fin-kpi-label">Invoices &amp; Billing Logged</span>
+          <div className="fin-kpi-val" style={{ color: '#38bdf8' }}>{invoicesCount} Invoices</div>
+          <span className="fin-kpi-note neutral">Guest &amp; corporate folios</span>
         </div>
       </section>
 
-      {/* Main Grid */}
-      <div className="fin-grid-2-1">
-        {/* Left Column: Chronological Audit Log */}
-        <div className="fin-surface">
-          <div className="fin-surface-header">
-            <h3 className="fin-surface-title">Chronological Audit Log</h3>
-            <span style={{ fontSize: '11px', color: '#64748b' }}>Newest first · PHT</span>
+      {/* Filter Row */}
+      <div className="fin-surface" style={{ padding: '12px 18px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="fin-input-wrap" style={{ flex: 1, minWidth: '240px' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search transaction code, activity, reference or staff user..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
 
-          <div className="fin-filter-row">
-            <div className="fin-input-wrap">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Transaction, invoice, staff, or activity..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            <div className="fin-select-wrap">
-              <label>Event Type</label>
-              <select value={eventTypeFilter} onChange={(e) => setEventTypeFilter(e.target.value)}>
-                <option value="All">All events</option>
-                <option value="Payment">Payments</option>
-                <option value="Invoice">Invoices</option>
-                <option value="Expense">Expenses</option>
-                <option value="Payroll">Payroll</option>
-                <option value="Report">Reports</option>
-              </select>
-            </div>
+          <div className="fin-select-wrap">
+            <label>Event Classification</label>
+            <select value={eventTypeFilter} onChange={(e) => setEventTypeFilter(e.target.value)}>
+              <option value="All">All Activities</option>
+              <option value="Payment">Payments &amp; Collections</option>
+              <option value="Invoice">Invoicing &amp; Folios</option>
+              <option value="Expense">Expense Vouchers</option>
+              <option value="Payroll">Payroll Wage Disbursements</option>
+              <option value="Housekeeping">Housekeeping Damage Billings</option>
+              <option value="Sales">Sales &amp; Marketing Bookings</option>
+            </select>
           </div>
 
-          <div className="fin-table-scroll">
-            <table className="fin-table">
-              <thead>
-                <tr>
-                  <th>When / Event</th>
-                  <th>Activity / Reference</th>
-                  <th>Amount (PHP)</th>
-                  <th>By / Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td colSpan="4" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                      Loading audit events from database...
-                    </td>
-                  </tr>
-                )}
-                {!loading && filteredEvents.length === 0 && (
-                  <tr>
-                    <td colSpan="4" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                      No audit events match your filter.
-                    </td>
-                  </tr>
-                )}
-                {!loading && filteredEvents.map((ev) => (
-                  <tr
-                    key={ev.id}
-                    onClick={() => setSelectedTxn(ev)}
-                    style={{
-                      cursor: 'pointer',
-                      background: selectedTxn?.id === ev.id ? '#eff6ff' : 'transparent',
-                    }}
-                  >
-                    <td>
-                      <div><strong>{ev.when}</strong></div>
-                      <div style={{ fontSize: '10.5px', color: '#64748b' }}>{ev.id}</div>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{ev.activity}</div>
-                      <div style={{ fontSize: '11px', color: '#2563eb' }}>{ev.ref}</div>
-                    </td>
-                    <td style={{ fontWeight: 600 }}>{ev.amountLabel}</td>
-                    <td>
-                      <div>{ev.user}</div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>{ev.source}</div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Right Column: Selected Transaction Detail */}
-        <div>
-          {selectedTxn ? (
-            <div className="fin-surface">
-              <div className="fin-surface-header">
-                <div>
-                  <span className="fin-badge fin-badge-green" style={{ marginBottom: '6px' }}>Verified Record</span>
-                  <h3 className="fin-surface-title">{selectedTxn.activity}</h3>
-                  <p className="fin-surface-subtitle">
-                    {selectedTxn.id} · {selectedTxn.when}
-                  </p>
-                </div>
-              </div>
-
-              {/* Amount Banner */}
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '14px',
-                  textAlign: 'center',
-                  marginBottom: '16px',
-                }}
-              >
-                <div style={{ fontSize: '11px', color: '#16a34a', fontWeight: 700 }}>
-                  Financial Transaction Value
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 800, color: '#0d1238', margin: '4px 0' }}>
-                  {selectedTxn.amountLabel}
-                </div>
-                <span style={{ fontSize: '11.5px', color: '#64748b' }}>
-                  Reference: {selectedTxn.ref}
-                </span>
-              </div>
-
-              {/* Meta Table */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Audit Code</span>
-                  <strong>{selectedTxn.id}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Activity</span>
-                  <strong>{selectedTxn.activity}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Linked Reference</span>
-                  <span style={{ color: '#2563eb', fontWeight: 600 }}>{selectedTxn.ref}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>System Source</span>
-                  <span>{selectedTxn.source}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Executed By</span>
-                  <span>{selectedTxn.user}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Logged Timestamp</span>
-                  <span>{selectedTxn.when}</span>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-secondary"
-                  onClick={() => onNavigate('invoices')}
-                  style={{ fontSize: '11.5px', padding: '6px 12px', flex: 1, justifyContent: 'center' }}
-                >
-                  Go to Invoices
-                </button>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-secondary"
-                  onClick={() => onNavigate('payments')}
-                  style={{ fontSize: '11.5px', padding: '6px 12px', flex: 1, justifyContent: 'center' }}
-                >
-                  Go to Payments
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="fin-surface">
-              <p style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>
-                Select an audit entry from the table to view details.
-              </p>
-            </div>
-          )}
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            onClick={loadAudit}
+          >
+            🔄 Refresh
+          </button>
         </div>
       </div>
+
+      {/* Audit Log Table */}
+      <div className="fin-surface">
+        <div className="fin-surface-header">
+          <div>
+            <h3 className="fin-surface-title">Transaction Ledger &amp; Audit Trail</h3>
+            <p className="fin-surface-subtitle">Chronological record of every billing, payment, and expense action in the hotel.</p>
+          </div>
+          <span className="fin-badge fin-badge-blue">
+            {loading ? 'Loading...' : `${filteredEvents.length} Events`}
+          </span>
+        </div>
+
+        <div className="fin-table-scroll">
+          <table className="fin-table">
+            <thead>
+              <tr>
+                <th>TRANSACTION CODE</th>
+                <th>FINANCIAL ACTIVITY</th>
+                <th>REFERENCE CODE</th>
+                <th style={{ textAlign: 'right' }}>AMOUNT IMPACT</th>
+                <th>SUBSYSTEM / SOURCE</th>
+                <th>PERFORMED BY</th>
+                <th>TIMESTAMP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                    Loading audit trail from database...
+                  </td>
+                </tr>
+              )}
+              {!loading && filteredEvents.length === 0 && (
+                <tr>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                    No audit records match the current search.
+                  </td>
+                </tr>
+              )}
+              {!loading && filteredEvents.map((ev) => (
+                <tr
+                  key={ev.dbId}
+                  className="clickable-row"
+                  onClick={() => setSelectedTxn(ev)}
+                >
+                  <td>
+                    <strong style={{ color: '#d4af37' }}>{ev.id}</strong>
+                  </td>
+                  <td>
+                    <strong>{ev.activity}</strong>
+                  </td>
+                  <td>
+                    <span style={{ color: '#38bdf8' }}>{ev.ref}</span>
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                    <span
+                      style={{
+                        color: ev.amountLabel.includes('+')
+                          ? '#22c55e'
+                          : ev.amountLabel.includes('-')
+                          ? '#ef4444'
+                          : '#f8fafc',
+                      }}
+                    >
+                      {ev.amountLabel}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="fin-badge fin-badge-gold" style={{ fontSize: '11px' }}>
+                      {ev.source}
+                    </span>
+                  </td>
+                  <td style={{ fontSize: '13px' }}>{ev.user}</td>
+                  <td style={{ fontSize: '12px', color: '#94a3b8' }}>{ev.when}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Transaction Details Modal */}
+      {selectedTxn && (
+        <div className="fin-modal-overlay" onClick={() => setSelectedTxn(null)}>
+          <div className="fin-modal-window" onClick={(e) => e.stopPropagation()}>
+            <div className="fin-modal-header">
+              <h3 className="fin-modal-title">Transaction Audit Record</h3>
+              <button
+                type="button"
+                className="fin-modal-close-btn"
+                onClick={() => setSelectedTxn(null)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="fin-modal-body">
+              <div style={{ marginBottom: '16px' }}>
+                <span style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Transaction Code</span>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: '#d4af37' }}>{selectedTxn.id}</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Activity</span>
+                  <div style={{ fontWeight: 600 }}>{selectedTxn.activity}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Reference Code</span>
+                  <div style={{ color: '#38bdf8' }}>{selectedTxn.ref}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Amount Impact</span>
+                  <div style={{ fontSize: '16px', fontWeight: 700 }}>{selectedTxn.amountLabel}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Subsystem Source</span>
+                  <div>{selectedTxn.source}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Staff Member</span>
+                  <div>{selectedTxn.user}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Recorded Timestamp</span>
+                  <div style={{ color: '#cbd5e1' }}>{selectedTxn.when}</div>
+                </div>
+              </div>
+
+              {selectedTxn.details && Object.keys(selectedTxn.details).length > 0 && (
+                <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '6px', marginBottom: '14px' }}>
+                  <span style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                    METADATA &amp; AUDIT CONTEXT
+                  </span>
+                  <pre style={{ margin: 0, fontSize: '12px', color: '#e2e8f0', whiteSpace: 'pre-wrap' }}>
+                    {JSON.stringify(selectedTxn.details, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+            <div className="fin-modal-footer">
+              <button
+                type="button"
+                className="fin-btn fin-btn-secondary"
+                onClick={() => setSelectedTxn(null)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="fin-btn fin-btn-primary"
+                onClick={() => window.print()}
+              >
+                🖨️ Print Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

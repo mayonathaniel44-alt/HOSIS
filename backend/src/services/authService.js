@@ -10,24 +10,31 @@ const invalidCredentials = () => {
   return error
 }
 
-async function login(username, password, requestedRole) {
+async function login(username, password) {
   const user = await userModel.findByUsername(username)
-  const allowedRoles = ['FRONT_OFFICE', 'ADMIN', 'FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD']
-  if (!user || !user.is_active || !allowedRoles.includes(user.role)) {
+  const allowedRoles = [
+    'FRONT_OFFICE',
+    'ADMIN',
+    'SUPER_ADMIN',
+    'FINANCE',
+    'FINANCE_ADMIN',
+    'FINANCE_STAFF',
+    'FINANCE_OFFICER',
+    'OFFICER',
+    'DEPARTMENT_HEAD',
+    'HEAD',
+    'FINANCE_HEAD',
+  ]
+  const userRole = user?.role ? user.role.toUpperCase() : ''
+  if (!user || !user.is_active || !allowedRoles.includes(userRole)) {
     throw invalidCredentials()
   }
 
   const matches = await bcrypt.compare(password, user.password_hash)
-  const financeRoles = ['FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD']
-  const roleMatches = !requestedRole || user.role === requestedRole || (
-    (['FINANCE', 'ADMIN'].includes(user.role) && financeRoles.includes(requestedRole)) ||
-    (financeRoles.includes(user.role) && requestedRole === 'FINANCE')
-  )
-  if (!matches || !roleMatches) throw invalidCredentials()
+  if (!matches) throw invalidCredentials()
 
-  const effectiveRole = (['FINANCE', 'ADMIN'].includes(user.role) && ['FINANCE_ADMIN', 'FINANCE_STAFF', 'DEPARTMENT_HEAD'].includes(requestedRole))
-    ? requestedRole
-    : user.role
+  // Direct role-based access checking the account's database role
+  const effectiveRole = user.role
 
   const token = jwt.sign(
     { role: effectiveRole, sessionVersion: user.sessionVersion },
