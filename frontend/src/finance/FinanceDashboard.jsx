@@ -141,15 +141,6 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
               </div>
             )}
           </div>
-          <button
-            type="button"
-            className="finance-sidebar-toggle-btn"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {sidebarCollapsed ? '›' : '‹'}
-          </button>
         </div>
 
         {/* Navigation Items */}
@@ -277,14 +268,6 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
               <span>Finance</span>
               <span className="finance-strip-sep">/</span>
               <strong>{financialTasks.find((t) => t.id === activeTab)?.label || 'Overview'}</strong>
-            </div>
-          </div>
-
-          <div className="finance-strip-right">
-            <span className="finance-strip-role-pill">ROLE: {roleDisplay}</span>
-            <div className="finance-strip-user-badge">
-              <span className="finance-strip-avatar">{userInitials}</span>
-              <span className="finance-strip-username">{userDisplayName}</span>
             </div>
           </div>
         </header>
