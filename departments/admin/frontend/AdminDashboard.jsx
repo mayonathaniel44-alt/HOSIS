@@ -1,3 +1,4 @@
+import AdminReportsPage from './AdminReportsPage.jsx'
 import AdminAuditLog from './AdminAuditLog.jsx'
 import { useCallback, useEffect, useState } from 'react'
 import { adminApi, authApi } from '../../../frontend/src/services/api.js'
@@ -23,6 +24,7 @@ const departments = [
   { id: 'HR', name: 'Human Resources', detail: 'Employee assignments and leave requests.' },
   { id: 'SALES_MARKETING', name: 'Sales & Marketing', detail: 'Campaigns, promotions and sales.' },
 ]
+const salesPositions = { SALES_HEAD: 'Sales Head', SALES_STAFF: 'Sales Staff' }
 const positions = ['HOUSEKEEPER', 'INSPECTOR', 'SUPERVISOR']
 
 function dateTime(value, timeZone = 'UTC') {
@@ -37,8 +39,8 @@ function StatusTag({ tone, children }) {
   return <span className={`status status-${tone}`}><i />{children}</span>
 }
 
-export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, timeZone }) {
-  const [section, setSection] = useState('Overview')
+export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, timeZone, initialSection = 'Overview' }) {
+  const [section, setSection] = useState(initialSection)
   const [overview, setOverview] = useState(null)
   const [staff, setStaff] = useState([])
   const [staffEdit, setStaffEdit] = useState(null)
@@ -135,7 +137,7 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
       if ((staffEdit[field] || '') !== (original[field] || '')) changes[field] = staffEdit[field]
     }
     if (role !== original.role) changes.role = role
-    if (role === 'HOUSEKEEPING' && (role !== original.role || position !== original.position)) changes.position = position
+    if (['HOUSEKEEPING', 'SALES_MARKETING'].includes(role) && (role !== original.role || position !== original.position)) changes.position = position
     if (!Object.keys(changes).length) {
       setStaffEdit(null)
       return
@@ -189,7 +191,7 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
         </div>
         <div className="sidebar-label">ADMINISTRATION</div>
         <nav className="side-nav admin-nav" aria-label="Administrator navigation">
-          {['Overview', 'Staff & access', 'Audit log', 'Hotel settings', 'Integrations'].map((item) => (
+          {['Overview', 'Staff & access', 'Audit log', 'Reports', 'Hotel settings', 'Integrations'].map((item) => (
             <button key={item} className={`nav-item ${section === item ? 'nav-active' : ''}`} aria-current={section === item ? 'page' : undefined} onClick={() => { setSection(item); setError(''); setNotice('') }}>
               <i className="admin-nav-mark" aria-hidden="true">{item === 'Overview' ? '⌂' : item === 'Staff & access' ? '♙' : item === 'Audit log' ? '≡' : item === 'Hotel settings' ? '⚙' : '◇'}</i>
               <span>{item}</span>
@@ -233,6 +235,18 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
                 <article className="surface stat-card"><div className="stat-top"><span>ROOM OCCUPANCY</span><span className="stat-icon stat-mint">⌂</span></div><div className="stat-value">{occupancy}</div><span className="stat-note">{roomOccupied} of {roomTotal} occupied · {frontOffice?.rooms?.available ?? '—'} available</span></article>
                 <article className="surface stat-card"><div className="stat-top"><span>ACTIVITY · 24 HOURS</span><span className="stat-icon stat-peach">≡</span></div><div className="stat-value">{overview?.activity?.last24Hours ?? '—'}</div><span className="stat-note">{overview?.staff?.admins ?? '—'} active administrators</span></article>
               </div>
+              {!!overview?.escalationCount && <section className="surface data-surface" aria-label="Escalated guest requests">
+                <div className="section-heading admin-panel-heading"><div><h2>Escalated guest requests</h2><p>{overview.escalationCount} open urgent or overdue requests</p></div></div>
+                <div className="table-scroll"><table className="full-table">
+                  <thead><tr><th>Request</th><th>Room</th><th>Owner</th><th>Status</th><th>Due</th></tr></thead>
+                  <tbody>{overview.escalations.map(request => <tr key={request.id}>
+                    <td>REQ-{request.id}</td><td>{request.room || 'Unassigned'}</td>
+                    <td>{request.department}{request.assignee ? ` / ${request.assignee}` : ''}</td>
+                    <td>{request.status.replaceAll('_', ' ').toLowerCase()}{request.overdue ? ' / overdue' : ' / urgent'}</td>
+                    <td>{request.dueAt?.slice(0, 16) || 'No deadline'}</td>
+                  </tr>)}</tbody>
+                </table></div>
+              </section>}
               <div className="dashboard-grid admin-overview-grid">
                 <section className="surface admin-panel">
                   <div className="section-heading admin-panel-heading"><div><h2>Connected departments</h2><p>Department services available to administrators.</p></div><button className="link-button" onClick={() => setSection('Integrations')}>View all</button></div>
@@ -276,7 +290,10 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
                     <label>Last name<input value={newStaff.lastName} onChange={e=>setNewStaff({...newStaff,lastName:e.target.value})} /></label>
                     <label>Email<input type="email" value={newStaff.email} onChange={e=>setNewStaff({...newStaff,email:e.target.value})} /></label>
                     {newStaff.role==='HOUSEKEEPING' && <label>Position<select value={newStaff.position} onChange={e=>setNewStaff({...newStaff,position:e.target.value})}>{['HOUSEKEEPER','INSPECTOR','SUPERVISOR'].map(p=><option key={p}>{p}</option>)}</select></label>}
-                    <label>Department role<select value={newStaff.role} onChange={(event) => setNewStaff({ ...newStaff, role: event.target.value })}>{staffRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                  {newStaff.role === 'SALES_MARKETING' && <label>Sales position<select value={salesPositions[newStaff.position] ? newStaff.position : 'SALES_STAFF'} onChange={(event) => setNewStaff({ ...newStaff, position: event.target.value })}>
+                    {Object.entries(salesPositions).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select></label>}
+                    <label>Department role<select value={newStaff.role} onChange={(event) => setNewStaff({ ...newStaff, role: event.target.value, position: event.target.value === 'SALES_MARKETING' ? 'SALES_STAFF' : 'HOUSEKEEPER' })}>{staffRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                   </div>
                   <div className="admin-form-footer"><span>Use at least 12 characters (max 72 UTF-8 bytes). Staff must change an initial or reset password before using their workspace.</span><button className="button button-primary" disabled={busy}>Create account</button></div>
                 </form>
@@ -287,10 +304,13 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
                   <label>First name<input maxLength={100} value={staffEdit.firstName || ''} onChange={(event) => setStaffEdit({ ...staffEdit, firstName: event.target.value })} /></label>
                   <label>Last name<input maxLength={100} value={staffEdit.lastName || ''} onChange={(event) => setStaffEdit({ ...staffEdit, lastName: event.target.value })} /></label>
                   <label>Email<input type="email" maxLength={254} value={staffEdit.email || ''} onChange={(event) => setStaffEdit({ ...staffEdit, email: event.target.value })} /></label>
-                  <label>Department role<select required value={staffEdit.role} disabled={staffEdit.isSelf || busy} onChange={(event) => setStaffEdit({ ...staffEdit, role: event.target.value, position: '' })}>
+                  <label>Department role<select required value={staffEdit.role} disabled={staffEdit.isSelf || busy} onChange={(event) => setStaffEdit({ ...staffEdit, role: event.target.value, position: event.target.value === 'SALES_MARKETING' ? 'SALES_STAFF' : '' })}>
                     <option value="" disabled>Select a supported role</option>
                     {staffRoles.map(([value,label]) => <option key={value} value={value}>{label}</option>)}
                   </select></label>
+                  {staffEdit.role === 'SALES_MARKETING' && <label>Sales position<select value={salesPositions[staffEdit.position] ? staffEdit.position : 'SALES_STAFF'} onChange={(event) => setStaffEdit({ ...staffEdit, position: event.target.value })}>
+                    {Object.entries(salesPositions).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select></label>}
                   {staffEdit.role === 'HOUSEKEEPING' && <label>Position<select required value={staffEdit.position} onChange={(event) => setStaffEdit({ ...staffEdit, position: event.target.value })}>
                     <option value="" disabled>Select a position</option>
                     {positions.map((position) => <option key={position}>{position}</option>)}
@@ -314,7 +334,7 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
                     return (
                       <tr key={member.id}>
                         <td><strong>{member.username}</strong><small className="record-subtext">{[member.firstName, member.lastName].filter(Boolean).join(' ')}</small><small className="record-subtext">{member.email}</small>{isSelf && <small className="admin-self-label">You</small>}</td>
-                        <td>{staffRoles.find(([role]) => role === member.role)?.[1] || 'Retired role'}{member.role === 'HOUSEKEEPING' && <small className="record-subtext">{member.position}</small>}</td>
+                        <td>{staffRoles.find(([role]) => role === member.role)?.[1] || 'Retired role'}{member.role === 'HOUSEKEEPING' && <small className="record-subtext">{member.position}</small>}{member.role === 'SALES_MARKETING' && <small className="record-subtext">{salesPositions[member.position] || 'Sales Staff'}</small>}</td>
                         <td><span className={member.isActive ? 'admin-account-active' : 'admin-account-inactive'}>{member.isActive ? 'Active' : 'Inactive'}</span></td>
                         <td>{dateTime(member.createdAt, settings?.timeZone || timeZone)}</td>
                         <td className="admin-actions-cell">
@@ -334,6 +354,7 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
           )}
 
           {section === 'Audit log' && <AdminAuditLog timeZone={timeZone} refreshKey={refreshKey} />}
+          {section === 'Reports' && <AdminReportsPage timeZone={timeZone} refreshKey={refreshKey} />}
 
           {section === 'Hotel settings' && (
             <>

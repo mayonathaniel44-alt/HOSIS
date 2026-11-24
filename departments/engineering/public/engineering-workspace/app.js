@@ -130,7 +130,7 @@ async function initializeApplication() {
         const adminConsoleLink = document.getElementById('adminConsoleLink');
         if (adminConsoleLink && currentAccount.isAdministrator) {
             adminConsoleLink.hidden = false;
-            adminConsoleLink.addEventListener('click', () => window.location.assign('/'), { once: true });
+            adminConsoleLink.addEventListener('click', () => window.location.assign('/#/admin-integrations'), { once: true });
         }
         db = await apiRequest('/api/data');
         for (const collection of COLLECTIONS) {

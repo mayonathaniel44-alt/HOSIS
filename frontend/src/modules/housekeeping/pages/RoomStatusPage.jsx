@@ -89,7 +89,7 @@ function RoomDetail({ roomId, onSaved, readOnly }) {
   const historyPage = usePagination(detail.data?.history || [], 10, String(roomId))
 
   if (!detail.data) return <Card title="Room details"><LoadState loading={detail.loading} error={detail.error} /></Card>
-  const { room, history, currentTask, allowedStatuses } = detail.data
+  const { room, history, currentTask, allowedStatuses, salesPreparations = [] } = detail.data
 
   async function save() {
     setBusy(true)
@@ -108,6 +108,20 @@ function RoomDetail({ roomId, onSaved, readOnly }) {
     }
   }
 
+  async function completePreparation(reservationId) {
+    setBusy(true)
+    setMessage(null)
+    try {
+      await api.completeSalesPreparation(roomId, reservationId)
+      detail.reload()
+      setMessage({ tone: 'green', title: 'Sales preparation completed.' })
+    } catch (err) {
+      setMessage({ tone: 'red', title: 'Preparation not updated', text: err.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <Card title={`Room ${room.room_number} · ${room.room_type}`} subtitle={`Floor ${room.floor_number} · Last update ${formatDateTime(room.updated_at)}`}>
       <div className="hk-badges">
@@ -119,6 +133,17 @@ function RoomDetail({ roomId, onSaved, readOnly }) {
           {label(currentTask.task_type)} cleaning{currentTask.housekeeper?.trim() ? ` by ${currentTask.housekeeper}` : ', not yet assigned'}.
         </p>
       )}
+
+      {!!salesPreparations.length && <section>
+        <h3>Sales stay preparation</h3>
+        <ul>{salesPreparations.map((handoff) => <li key={handoff.reservation_id}>
+          <strong>{handoff.confirmation_code} | {handoff.check_in} to {handoff.check_out}</strong>
+          <p>{handoff.preparation}</p>
+          {handoff.completed_at ? <Badge value="COMPLETED" /> : !readOnly && (
+            <button type="button" disabled={busy} onClick={() => completePreparation(handoff.reservation_id)}>Mark prepared</button>
+          )}
+        </li>)}</ul>
+      </section>}
 
       {!readOnly && <>
         <div className="hk-form">

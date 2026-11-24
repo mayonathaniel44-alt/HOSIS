@@ -106,6 +106,59 @@ test(
           username: `${prefix}.sales`, password, role: 'ADMIN',
         }, 401)
       })
+      await t.test('Admin creates Sales positions with distinct workspace permissions', async () => {
+        const role = 'SALES_MARKETING'
+        const create = (suffix, position, department = role, status = 201) =>
+          api('POST', '/admin/staff', 'admin', {
+            username: prefix + '.' + suffix, password, role: department, position,
+          }, status)
+        const head = await create('head', 'SALES_HEAD')
+        assert.equal(head.position, 'SALES_HEAD')
+        assert.equal((await create('staff', 'SALES_STAFF')).position, 'SALES_STAFF')
+        assert.equal((await create('default-sales')).position, 'SALES_STAFF')
+        await create('wrong-department', 'SALES_HEAD', 'FRONT_OFFICE', 400)
+        const temporary = await api('POST', '/auth/login', null, { username: head.username, password, role })
+        const signedIn = await api('POST', '/auth/password', temporary, {
+          currentPassword: password, newPassword: password + 'permanent',
+        })
+        assert.equal(signedIn.user.position, 'SALES_HEAD')
+        const audit = '/sales-marketing/improved/audit'
+        await api('GET', audit, signedIn)
+        await api('GET', audit, 'sales', undefined, 403)
+        await api('GET', '/admin/staff', signedIn, undefined, 403)
+        const base = '/sales-marketing/improved'
+        const created = await api('POST', base + '/users', signedIn, {
+          username: prefix + '.salescreated', password, firstName: 'Sales', lastName: 'Tester', role: 'ADMIN',
+        }, 201)
+        assert.equal(created.account.role, 'SALES_MARKETING')
+        assert.equal(created.account.position, 'SALES_STAFF')
+        assert.ok((await api('GET', base + '/users', signedIn)).users.every((user) =>
+          ['SALES_HEAD', 'SALES_STAFF'].includes(user.position)))
+        await api('POST', base + '/users', signedIn, { position: 'SALES_HEAD' }, 403)
+        await api('GET', base + '/users', 'sales', undefined, 403)
+        await api('GET', base + '/backup', 'sales', undefined, 403)
+        const { account } = await api('GET', '/auth/account', signedIn)
+        assert.equal(account.position, 'SALES_HEAD')
+        const { today } = await api('GET', base + '/workspace', signedIn)
+        const inquiry = await api('POST', base + '/records/inquiries', 'sales', {
+          name: prefix, subject: 'Backup exercise', source: 'Referral', date: today, status: 'New',
+        }, 201)
+        const missing = await api('POST', base + '/records/inquiries', 'sales', {
+          name: prefix, subject: 'Missing record exercise', source: 'Referral', date: today, status: 'New',
+        }, 201)
+        const backup = await api('GET', base + '/backup', signedIn)
+        await api('POST', base + '/restore', 'sales', backup, 403)
+        await api('POST', base + '/restore', signedIn, { ...backup, payload: backup.payload + ' ' }, 400)
+        await api('POST', base + '/records/' + inquiry.id + '/archive', signedIn, { version: inquiry.version })
+        await pool.query("DELETE FROM sales_marketing_records WHERE kind='inquiry' AND id=$1", [missing.id])
+        assert.equal((await api('POST', base + '/restore', signedIn, backup)).restored, 2)
+        const records = (await api('GET', base + '/workspace', signedIn)).records
+        assert.equal(records.find((record) => record.id === inquiry.id).archived, false)
+        assert.equal(records.find((record) => record.id === missing.id).subject, missing.subject)
+        assert.equal((await api('POST', base + '/restore', signedIn, backup)).restored, 0)
+        await api('PATCH', '/admin/staff/' + head.id, 'admin', { position: 'SALES_STAFF' })
+        await api('GET', audit, signedIn, undefined, 401)
+      })
       await t.test('Finance uses shared sign-in and persists protected SAM101 operations', async () => {
         await api('GET', '/finance/dashboard', 'fo', undefined, 403)
         await api('GET', '/finance/dashboard', 'finance')
@@ -468,6 +521,23 @@ test(
         assert.ok(sales.rows.some((event) => event.action==='SALES_RECORD_CREATED'))
       })
 
+      await t.test('Admin can export one report, one department, or every subsystem', async () => {
+        await api('GET','/admin/reports','fo',undefined,403)
+        await api('GET','/admin/reports/export','fo',undefined,403)
+        const catalog = await api('GET','/admin/reports','admin')
+        assert.equal(catalog.length,6)
+        const single = await api('GET','/admin/reports/export?department=front-office&report=fo-reservations','admin')
+        assert.deepEqual(single.reports.map((report) => report.id),['fo-reservations'])
+        const department = await api('GET','/admin/reports/export?department=finance','admin')
+        assert.ok(department.reports.every((report) => report.department==='Finance'))
+        assert.ok(department.reports.some((report) => report.id==='fin-payroll'))
+        const bulk = await api('GET',`/admin/reports/export?period=day&date=${dates.today}`,'admin')
+        assert.equal(bulk.reports.length,catalog.flatMap((entry)=>entry.reports).length)
+        assert.ok(bulk.reports.every((report) => report.rows.every((row) => row.length===report.columns.length)))
+        await api('GET','/admin/reports/export?department=finance&report=fo-reservations','admin',undefined,404)
+        await api('GET','/admin/reports/export?period=quarter','admin',undefined,400)
+      })
+
       await t.test('Front Office rejects past bookings and invoices on cancelled stays', async () => {
         const { rows: [day] } = await pool.query("SELECT (CURRENT_DATE-1)::text AS yesterday")
         const draft = { guestId: guest.id, roomType: 'Suite', checkIn: day.yesterday, checkOut: dates.today }
@@ -579,6 +649,83 @@ test(
         await pool.query('DELETE FROM engineering.engineering_audit WHERE record_id = $1', ['HK-MR-' + request.id])
         await pool.query("DELETE FROM engineering.engineering_records WHERE collection = 'requests' AND record_id = $1", ['HK-MR-' + request.id])
         await pool.query('DELETE FROM hk_maintenance_requests WHERE request_id = $1', [request.id])
+      })
+
+      await t.test('Improved Sales workflow shares bookings and keeps financial entries separate', async () => {
+        const path = '/sales-marketing/improved'
+        const { today } = await api('GET', path + '/workspace', 'sales')
+        await api('GET', path + '/workspace', 'fo', undefined, 403)
+        const { rows: [period] } = await pool.query(
+          'SELECT ($1::date + 5)::text AS start, ($1::date + 6)::text AS finish', [today],
+        )
+        const { rows: [salesRoom] } = await pool.query(
+          "INSERT INTO rooms(room_number,room_type,floor) VALUES($1,'Suite','2') RETURNING id", [prefix.slice(-12) + '-sales'],
+        )
+        const availability = path + '/availability?checkIn=' + period.start + '&checkOut=' + period.finish
+        const free = (data) => data.roomTypes.find(item => item.roomType === 'Suite').available
+        const beforeBooking = free(await api('GET', availability, 'sales'))
+        const stay = await api('POST','/front-office/reservations','fo',{
+          guestId: guest.id, roomId: salesRoom.id, roomType: 'Suite', checkIn: period.start, checkOut: period.finish,
+        },201)
+        assert.equal(free(await api('GET', availability, 'sales')), beforeBooking - 1)
+        const inquiry = await api('POST', path + '/records/inquiries', 'sales', {
+          name: prefix, subject: 'Group stay', source: 'Referral', date: today, status: 'New',
+        }, 201)
+        const act = (record, action, who, values = {}, status = 200) =>
+          api('POST', path + '/records/' + record.id + '/action', who, {
+            ...values, action, version: record.version,
+          }, status)
+        const lead = await act(inquiry, 'convert', 'sales')
+        await act(inquiry, 'convert', 'sales', {}, 409)
+        const quote = await api('POST', path + '/records/quotations', 'sales', {
+          name: 'Group stay', leadId: lead.id, gross: 1500, date: today,
+          checkIn: period.start, checkOut: period.finish, validUntil: period.start,
+        }, 201)
+        await act(quote, 'confirm', 'sales', { availabilityConfirmed: true, reservationRef: 'MISSING' }, 400)
+        const sale = await act(quote, 'confirm', 'sales', {
+          availabilityConfirmed: true, reservationRef: stay.confirmationCode, preparation: 'Set up two extra towels',
+        })
+        assert.equal(sale.reservationRef, stay.confirmationCode)
+        const roomPath = '/housekeeping/rooms/' + salesRoom.id
+        const preparationPath = roomPath + '/sales-preparation/' + stay.id + '/complete'
+        assert.equal((await api('GET', roomPath, 'sup')).salesPreparations[0].preparation, sale.preparation)
+        await api('POST', preparationPath, 'sales', undefined, 403)
+        await api('POST', preparationPath, 'sup')
+        await api('POST', preparationPath, 'sup')
+        const reservationPath = '/front-office/reservations/' + stay.id
+        assert.ok((await api('GET', reservationPath, 'fo')).salesPreparationCompletedAt)
+        const linkedSale = async () => (await api('GET', path + '/workspace', 'sales')).records.find(row => row.id === sale.id)
+        assert.ok((await linkedSale()).stay.preparationCompletedAt)
+        const frontOfficeNotices = await api('GET', '/housekeeping/notifications?unread=1', 'fo')
+        assert.equal(frontOfficeNotices.notifications.filter(item =>
+          item.notice_type === 'SALES_PREPARATION' && item.reservation_id === stay.id).length, 1)
+        const payment = { type: 'Receipt', amount: 1500, date: today, externalReference: prefix + '-receipt' }
+        await act(sale, 'payment', 'sales', payment, 403)
+        const entry = await act(sale, 'payment', 'admin', payment)
+        assert.equal(entry.amount, payment.amount)
+        const { rows: [raw] } = await pool.query(
+          "SELECT details FROM sales_marketing_records WHERE kind='sale' AND id=$1", [sale.id],
+        )
+        assert.equal(raw.details.payment, 'Paid')
+        const { rows: [accounting] } = await pool.query(
+          'SELECT count(*)::int AS entries FROM payments WHERE reference = $1', [payment.externalReference],
+        )
+        assert.equal(accounting.entries, 0)
+        const { rows: [extension] } = await pool.query('SELECT ($1::date + 1)::text AS finish', [period.finish])
+        await api('PATCH', reservationPath, 'fo', { checkOut: extension.finish })
+        assert.equal((await linkedSale()).stay.checkOut, extension.finish)
+        assert.equal((await linkedSale()).stay.preparationCompletedAt, null)
+        await api('DELETE', reservationPath, 'fo', undefined, 204)
+        assert.equal((await linkedSale()).stay.status, 'CANCELLED')
+        assert.equal(free(await api('GET', availability, 'sales')), beforeBooking)
+        assert.deepEqual((await api('GET', roomPath, 'sup')).salesPreparations, [])
+        const salesNotices = await api('GET', path + '/notifications', 'sales')
+        assert.ok(salesNotices.items.some(item => item.recordId === sale.id && item.title === 'SALES_STAY_CANCELLED'))
+        const notices = await api('GET', path + '/notifications', 'admin')
+        assert.ok(notices.items.some(item => item.recordId === quote.id))
+        await api('POST', path + '/notifications/read', 'admin', {})
+        assert.equal((await api('GET', path + '/notifications', 'admin')).unread, 0)
+        assert.ok((await api('GET', path + '/audit', 'admin')).some(event => event.record_id === sale.id))
       })
 
       await t.test('Front Office applies an eligible promotion when billing a reservation', async () => {
@@ -955,6 +1102,7 @@ test(
               guestName: 'Test Guest',
               roomId: room.id,
               request: 'Please bring towels',
+              priority: 'URGENT',
             },
             201,
           )
@@ -990,6 +1138,11 @@ test(
           )
           const who =
             claimed.staff_id === accounts.cleaner ? 'cleaner' : 'other'
+          const frontDesk = (await api('GET', '/front-office/guest-requests', 'fo')).find(row => row.id === request.id)
+          assert.equal(frontDesk.housekeepingRequestId, hk.request_id)
+          assert.ok(frontDesk.assignedTo)
+          assert.ok((await api('GET', '/admin/dashboard', 'admin')).escalations.some(row =>
+            row.id === request.id && row.department === 'Housekeeping'))
           const stock = await api(
             'POST',
             '/housekeeping/inventory',
@@ -1061,6 +1214,9 @@ test(
             [request.id],
           )
           assert.equal(state.status, 'COMPLETED')
+          assert.ok((await api('GET', '/housekeeping/notifications?unread=1', 'fo')).notifications.some(row =>
+            row.notice_type === 'REQUEST_COMPLETED' && row.guest_request_id === request.id))
+          assert.ok(!(await api('GET', '/admin/dashboard', 'admin')).escalations.some(row => row.id === request.id))
           const {
             rows: [item],
           } = await pool.query(

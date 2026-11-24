@@ -1,7 +1,7 @@
 const pool = require('../../../backend/src/config/database.js')
 const frontOfficeModel = require('../../front-office/backend/frontOfficeModel.js')
 const { appError } = require('../../../backend/src/lib/errors.js')
-const { staffRoles } = require('./adminValidation.js')
+const { staffRoles, salesPositions } = require('./adminValidation.js')
 
 async function transaction(work) {
   const client = await pool.connect()
@@ -31,7 +31,7 @@ async function recordActivity(client, userId, action, description) {
 }
 
 async function dashboard() {
-  const [staff, activity, frontOffice, recentActivity] = await Promise.all([
+  const [staff, activity, frontOffice, recentActivity, escalations] = await Promise.all([
     pool.query(
       `SELECT COUNT(*)::integer AS total,
               COUNT(*) FILTER (WHERE is_active)::integer AS active,
@@ -45,12 +45,24 @@ async function dashboard() {
     ),
     frontOfficeModel.dashboard(),
     listActivity(5),
+    pool.query(`SELECT q.id, q.priority, q.status, r.room_number AS room,
+      q.due_at::text AS "dueAt", q.due_at < LOCALTIMESTAMP AS overdue,
+      CASE WHEN h.request_id IS NOT NULL THEN 'Housekeeping' ELSE 'Front Office' END AS department,
+      u.username AS assignee, COUNT(*) OVER ()::int AS total
+      FROM guest_requests q
+      LEFT JOIN rooms r ON r.id=q.room_id
+      LEFT JOIN hk_guest_requests h ON h.front_office_request_id=q.id
+      LEFT JOIN users u ON u.id=h.staff_id
+      WHERE q.status <> 'COMPLETED' AND (q.priority='URGENT' OR q.due_at < LOCALTIMESTAMP)
+      ORDER BY q.due_at ASC NULLS LAST, q.id DESC LIMIT 8`),
   ])
   return {
     staff: staff.rows[0],
     activity: activity.rows[0],
     frontOffice,
     recentActivity,
+    escalations: escalations.rows,
+    escalationCount: escalations.rows[0]?.total ?? 0,
   }
 }
 
@@ -72,14 +84,26 @@ async function requirePasswordChange(client, id, userId) {
   )
 }
 
+function accountPosition(role, position) {
+  if (role === 'SALES_MARKETING') {
+    if (position === undefined || position === 'HOUSEKEEPER') return 'SALES_STAFF'
+    if (salesPositions.has(position)) return position
+    throw appError(400, 'INVALID_POSITION', 'Choose Sales Head or Sales Staff.')
+  }
+  if (salesPositions.has(position)) {
+    throw appError(400, 'INVALID_POSITION', 'Sales positions require the Sales & Marketing department.')
+  }
+  return position || 'HOUSEKEEPER'
+}
+
 async function createStaff(staff, userId) {
   return transaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO users (username, password_hash, role,first_name,last_name,email,position)
        VALUES ($1, $2, $3,$4,$5,$6,$7)
-       RETURNING id, username, role, is_active AS "isActive",
+       RETURNING id, username, role, position, is_active AS "isActive",
                  created_at AS "createdAt", updated_at AS "updatedAt"`,
-      [staff.username.toLowerCase(), staff.passwordHash, staff.role,staff.firstName || staff.username,staff.lastName || '',staff.email || null,staff.position || 'HOUSEKEEPER'],
+      [staff.username.toLowerCase(), staff.passwordHash, staff.role,staff.firstName || staff.username,staff.lastName || '',staff.email || null,accountPosition(staff.role, staff.position)],
     )
     await requirePasswordChange(client, rows[0].id, userId)
     await recordActivity(client, userId, 'ADMIN_STAFF_CREATED', `Created ${staff.role} account "${rows[0].username}".`)
@@ -110,8 +134,10 @@ async function updateStaff(id, fields, userId) {
     if (nextRole === 'HOUSEKEEPING' && current.role !== 'HOUSEKEEPING' && !fields.position) {
       throw appError(400, 'HOUSEKEEPING_POSITION_REQUIRED', 'Select a Housekeeping position for this transfer.')
     }
-    if (fields.role && current.role !== nextRole && nextRole !== 'HOUSEKEEPING') {
-      fields.position = 'HOUSEKEEPER'
+    if (fields.position !== undefined) {
+      fields.position = accountPosition(nextRole, fields.position)
+    } else if (current.role !== nextRole && nextRole !== 'HOUSEKEEPING') {
+      fields.position = accountPosition(nextRole)
     }
     if (current.role === 'HOUSEKEEPING' && current.is_active && (nextRole !== 'HOUSEKEEPING' || !nextActive)) {
       const { rows: [work] } = await client.query(

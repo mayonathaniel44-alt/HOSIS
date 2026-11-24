@@ -1,6 +1,7 @@
 const { appError } = require('../../../backend/src/lib/errors.js')
 
 const staffRoles = new Set(['ADMIN', 'FRONT_OFFICE', 'HOUSEKEEPING', 'HR', 'FINANCE', 'SALES_MARKETING', 'ENGINEERING', 'TECHNICIAN'])
+const salesPositions = new Set(['SALES_HEAD', 'SALES_STAFF'])
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function requiredText(value, field, maxLength) {
@@ -47,7 +48,7 @@ function staffProfile(body) {
  const profile = {}
  for (const key of ['firstName','lastName','email']) if (Object.hasOwn(body,key)) profile[key]=optionalText(body[key],key,key==='email'?254:100) || ''
  if (profile.email && !emailPattern.test(profile.email)) throw appError(400,'INVALID_EMAIL','Enter a valid staff email.')
- if (Object.hasOwn(body,'position')) { if (!['HOUSEKEEPER','INSPECTOR','SUPERVISOR'].includes(body.position)) throw appError(400,'INVALID_POSITION','Choose a supported housekeeping position.'); profile.position=body.position }
+ if (Object.hasOwn(body,'position')) { if (!['HOUSEKEEPER','INSPECTOR','SUPERVISOR'].includes(body.position) && !salesPositions.has(body.position)) throw appError(400,'INVALID_POSITION','Choose a supported staff position.'); profile.position=body.position }
  return profile
 }
 
@@ -113,6 +114,7 @@ function hotelSettings(body) {
 
 module.exports = {
   staffProfile,
+  salesPositions,
   staffUsername,
   staffPassword,
   staffRole,

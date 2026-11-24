@@ -1,979 +1,1417 @@
-
-import { useEffect, useState } from 'react';
-import { departmentApi } from '../../../frontend/src/services/api.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  LayoutDashboard, Megaphone, MessageSquare, Users, Building2, Tag,
-  Receipt, ChartNoAxesCombined, Settings, Bell, Search, Plus,
-  CalendarDays, ArrowUpRight, Menu, X, BedDouble, Download,
-  Target, FileSpreadsheet, Trash2, Check, RefreshCw, ChevronDown, LogOut
-} from "lucide-react";
+  LayoutDashboard,
+  Megaphone,
+  MessageSquare,
+  Target,
+  Building2,
+  Tag,
+  FileText,
+  Receipt,
+  BarChart3,
+  ShieldCheck,
+  History,
+  Users,
+  Database,
+  UserCircle,
+  Menu,
+  RefreshCw,
+  Plus,
+  Download,
+  LogOut,
+} from 'lucide-react'
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, PieChart, Pie, Cell
-} from "recharts";
-import "./sales-marketing.css";
-import logo from "./logo.png";
+  AreaChart,
+  Area,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+} from 'recharts'
+import SalesAvailability from './SalesAvailability.jsx'
+import SalesSettings from './SalesSettings.jsx'
+import Notifications from './Notifications'
+import Dialog, { Feedback } from './Dialog'
+import PagedTable from './PagedTable'
+import { request } from '../../../frontend/src/services/api.js'
+import { spreadsheetText } from '@housekeeping/exportReport.js'
+import logo from './logo.png'
+import QuoteDialog from './QuoteDialog'
+import { analytics, peso } from './analytics'
+import './workspace.css'
 
-const navigation = [
-  { name: "Dashboard", icon: LayoutDashboard },
-  { name: "Campaigns", icon: Megaphone },
-  { name: "Inquiries", icon: MessageSquare },
-  { name: "Sales Leads", icon: Target },
-  { name: "Corporate Clients", icon: Building2 },
-  { name: "Promotions", icon: Tag },
-  { name: "Sales Records", icon: Receipt },
-  { name: "Reports", icon: ChartNoAxesCombined },
-];
-
-const colors = ["#2463A5", "#D5B77D", "#63A89A", "#D58C83"];
-
-const currency = (value) =>
-  new Intl.NumberFormat("en-PH", {
-    style: "currency", currency: "PHP", maximumFractionDigits: 0,
-  }).format(Number(value) || 0);
-
-function StatusBadge({ status }) {
-  return <span className={`status-badge ${String(status).toLowerCase().replaceAll(" ", "-")}`}>{status}</span>;
+const campaignTypes = [
+  'Social Media',
+  'Email Marketing',
+  'Corporate',
+  'Promotional',
+  'Website',
+]
+const channels = [
+  'Website',
+  'Social Media',
+  'Email',
+  'Referral',
+  'Corporate',
+  'Walk-in',
+  'Other',
+]
+const singular = {
+  campaigns: 'campaign',
+  inquiries: 'inquiry',
+  leads: 'lead',
+  clients: 'client',
+  promotions: 'promotion',
+  quotations: 'quotation',
 }
-
-function AddRecordModal({ config, onClose, onSave, saving, error }) {
-  const [form, setForm] = useState(() => Object.fromEntries(
-    config.fields.filter(([, , type]) => type === "select").map(([key, , , options]) => [key, options[0]])
-  ));
-
-  function submit(event) {
-    event.preventDefault();
-    onSave(form);
-  }
-
+const nav = [
+  ['Dashboard', LayoutDashboard],
+  ['Availability', Building2],
+  ['Campaigns', Megaphone, 'campaigns'],
+  ['Inquiries', MessageSquare, 'inquiries'],
+  ['Sales Leads', Target, 'leads'],
+  ['Corporate Clients', Building2, 'clients'],
+  ['Promotions', Tag, 'promotions'],
+  ['Quotations', FileText, 'quotations'],
+  ['Sales Records', Receipt, 'sales'],
+  ['Reports', BarChart3],
+  ['Audit History', History],
+  ['Users', Users],
+  ['Backup & Restore', Database],
+  ['My Account', UserCircle],
+]
+const field = (key, label, type = 'text', options, required = true) => ({
+  key,
+  label,
+  type,
+  options,
+  required,
+})
+const commonContact = [
+  field('email', 'Email', 'email', null, false),
+  field('phone', 'Phone', 'tel', null, false),
+]
+const definitions = {
+  campaigns: [
+    field('name', 'Campaign name'),
+    field('type', 'Campaign type', 'select', campaignTypes),
+    field('start', 'Start date', 'date'),
+    field('end', 'End date', 'date'),
+    field('budget', 'Approved budget (PHP)', 'number'),
+    field('spent', 'Actual spend to date (PHP)', 'number'),
+    field('status', 'Status', 'select', [
+      'Draft',
+      'Active',
+      'Completed',
+      'Cancelled',
+    ]),
+  ],
+  inquiries: [
+    field('name', 'Guest / company'),
+    ...commonContact,
+    field('date', 'Inquiry date', 'date'),
+    field('subject', 'Subject'),
+    field('source', 'Source', 'select', channels),
+    field('campaignId', 'Campaign', 'link', 'campaigns', false),
+    field('clientId', 'Corporate client', 'link', 'clients', false),
+    field('status', 'Status', 'select', ['New', 'In Progress', 'Resolved']),
+    field('followUp', 'Follow-up date', 'date', null, false),
+    field('notes', 'Notes', 'textarea', null, false),
+  ],
+  leads: [
+    field('name', 'Guest / company'),
+    ...commonContact,
+    field('date', 'Lead date', 'date'),
+    field('subject', 'Opportunity'),
+    field('source', 'Source', 'select', channels),
+    field('campaignId', 'Campaign', 'link', 'campaigns', false),
+    field('clientId', 'Corporate client', 'link', 'clients', false),
+    field('status', 'Status', 'select', ['New', 'Qualified', 'Lost']),
+    field('followUp', 'Follow-up date', 'date', null, false),
+    field('notes', 'Notes', 'textarea', null, false),
+  ],
+  clients: [
+    field('name', 'Company name'),
+    field('contact', 'Contact person'),
+    ...commonContact,
+    field('address', 'Business address', 'textarea', null, false),
+  ],
+  promotions: [
+    field('name', 'Promotion name'),
+    field('campaignId', 'Campaign', 'link', 'campaigns', false),
+    field('start', 'Valid from', 'date'),
+    field('end', 'Valid until', 'date'),
+    field('discount', 'Discount (%)', 'number'),
+    field('terms', 'Eligibility and terms', 'textarea'),
+  ],
+  quotations: [
+    field('name', 'Room / package description'),
+    field('leadId', 'Lead', 'link', 'leads'),
+    field('date', 'Quotation date', 'date'),
+    field('validUntil', 'Valid until', 'date'),
+    field('checkIn', 'Check-in', 'date'),
+    field('checkOut', 'Check-out', 'date'),
+    field('gross', 'Price before discount (PHP)', 'number'),
+    field('promotionId', 'Approved promotion', 'link', 'promotions', false),
+    field('notes', 'Notes', 'textarea', null, false),
+  ],
+}
+const columns = {
+  campaigns: [
+    ['name', 'Campaign'],
+    ['type', 'Campaign type'],
+    ['start', 'Start'],
+    ['end', 'End'],
+    ['budget', 'Budget'],
+    ['spent', 'Actual spend'],
+    ['status', 'Status'],
+  ],
+  inquiries: [
+    ['name', 'Guest / company'],
+    ['subject', 'Subject'],
+    ['date', 'Date'],
+    ['followUp', 'Follow-up'],
+    ['campaignId', 'Campaign'],
+    ['status', 'Status'],
+  ],
+  leads: [
+    ['name', 'Guest / company'],
+    ['subject', 'Opportunity'],
+    ['source', 'Source'],
+    ['followUp', 'Follow-up'],
+    ['campaignId', 'Campaign'],
+    ['status', 'Status'],
+  ],
+  clients: [
+    ['name', 'Company'],
+    ['contact', 'Contact'],
+    ['email', 'Email'],
+    ['phone', 'Phone'],
+  ],
+  promotions: [
+    ['name', 'Promotion'],
+    ['discount', 'Discount %'],
+    ['start', 'From'],
+    ['end', 'Until'],
+    ['status', 'Approval'],
+  ],
+  quotations: [
+    ['leadId', 'Customer'],
+    ['name', 'Room / package'],
+    ['amount', 'Guest pays'],
+    ['checkIn', 'Check-in'],
+    ['checkOut', 'Check-out'],
+    ['validUntil', 'Reply deadline'],
+    ['status', 'Status'],
+  ],
+  sales: [
+    ['name', 'Customer'],
+    ['reservationRef', 'Reservations reference'],
+    ['stay', 'Front Office stay'],
+    ['preparation', 'Housekeeping preparation'],
+    ['date', 'Sale date'],
+    ['amount', 'Booked value'],
+    ['balance', 'Outstanding'],
+    ['cancellationFee', 'Cancellation fee'],
+    ['refundable', 'Refund due'],
+    ['status', 'Status'],
+  ],
+}
+function api(path, method = 'GET', body) {
+  return request('/sales-marketing/improved' + path, {
+    method,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+const accountLabel = (u) =>
+  u.username?.toLowerCase() === 'superadmin' ? 'Admin' : u.username
+function Badge({ children }) {
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="campaign-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-heading">
-          <div><h2>{config.title}</h2><p>Complete the information below.</p></div>
-          <button className="modal-close" type="button" onClick={onClose}><X size={20} /></button>
-        </div>
-
-        <form onSubmit={submit}>
-          {config.fields.map(([key, label, type, options]) => (
-            <div key={key} className="modal-field">
-              <label>{label} *</label>
-
-              {type === "select" ? (
-                <select required value={form[key] || options[0]} onChange={(event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))}>
-                  {options.map((option) => <option key={option}>{option}</option>)}
-                </select>
-              ) : (
-                <input
-                  required type={type}
-                  min={type === "number" ? 0 : undefined}
-                  step={type === "number" ? "0.01" : undefined}
-                  max={key === "discount" ? 100 : undefined}
-                  value={form[key] || ""}
-                  onChange={(event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))}
-                  placeholder={`Enter ${label.toLowerCase()}`}
-                />
-              )}
-            </div>
-          ))}
-
-          <div className="modal-actions">{error && <p role="alert">{error}</p>}
-            <button type="button" className="outline-button" onClick={onClose}>Cancel</button>
-            <button type="submit" disabled={saving} className="primary-button"><Plus size={16} /> Save Record</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+    <span
+      className={`ws-badge ${['Confirmed', 'Approved', 'Converted', 'Paid', 'Active', 'Accepted', 'Receipt'].includes(children) ? 'positive' : ['Cancelled', 'Lost', 'Expired', 'Refund', 'Overdue'].includes(children) ? 'negative' : ''}`}
+    >
+      {children}
+    </span>
+  )
 }
-
-function Dashboard({ user, signOut }) {
-  const [busy, setBusy] = useState(false);
-
-  async function endSession() {
-    setBusy(true);
+function Workspace({ user, signOut, onSessionChange }) {
+  const [records, setRecords] = useState([]),
+    [date, setDate] = useState(''),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState(''),
+    [notice, setNotice] = useState(''),
+    [page, setPage] = useState('Dashboard'),
+    [search, setSearch] = useState(''),
+    [showArchived, setShowArchived] = useState(false),
+    [busy, setBusy] = useState(false),
+    [dialog, setDialog] = useState(null),
+    [dialogError, setDialogError] = useState(''),
+    [menu, setMenu] = useState(false)
+  const [notificationRevision, setNotificationRevision] = useState(0)
+  const [from, setFrom] = useState(''),
+    [to, setTo] = useState(''),
+    [audit, setAudit] = useState([])
+  const isManager = ['Sales Head', 'Super Admin'].includes(user.role)
+  const navItems = nav.filter(
+    ([name]) =>
+      isManager ||
+      !['Audit History', 'Users', 'Backup & Restore'].includes(name),
+  )
+  const latestLoad = useRef(0)
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    const revision = ++latestLoad.current
+    if (!quiet) setError('')
     try {
-      await signOut();
+      const data = await api('/workspace')
+      if (revision !== latestLoad.current) return
+      setRecords(data.records)
+      setDate(data.today)
+      setFrom((v) => v || `${data.today.slice(0, 4)}-01-01`)
+      setTo((v) => v || data.today)
+    } catch (e) {
+      if (!quiet && revision === latestLoad.current) setError(e.message)
     } finally {
-      setBusy(false);
+      if (revision === latestLoad.current) setLoading(false)
     }
-  }
-  const [activePage, setActivePage] = useState("Dashboard");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-
-  const [notifications, setNotifications] = useState([]);
-  const [overview, setOverview] = useState(null);
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const { campaign: campaigns = [], inquiry: inquiries = [], lead: leads = [],
-    client: clients = [], promotion: promotions = [], sale: sales = [] } = overview?.collections || {};
-  const salesData = overview?.monthly || [];
-  const channels = new Map();
-  for (const { source } of leads) channels.set(source, (channels.get(source) || 0) + 1);
-  const channelData = [...channels].map(([name, value]) => ({ name, value }));
-
+  }, [])
   useEffect(() => {
-    let active = true;
-    departmentApi.sales().then(
-      (result) => { if (active) setOverview(result); },
-      (failure) => { if (active) setError(failure.message); },
-    );
-    return () => { active = false; };
-  }, []);
-
-  const [modal, setModal] = useState("");
-  const [search, setSearch] = useState("");
-  const [reportType, setReportType] = useState("All Records");
-  const [reportDate, setReportDate] = useState("2026");
-
-  const unreadCount = notifications.filter((item) => !item.read).length;
-
-  const pageDescriptions = {
-    Dashboard: "Monitor your hotel's sales and marketing performance.",
-    Campaigns: "Create and monitor your marketing campaigns.",
-    Inquiries: "Manage guest questions, requests, and reservations.",
-    "Sales Leads": "Manage potential guests and business opportunities.",
-    "Corporate Clients": "Manage corporate accounts and partnerships.",
-    Promotions: "Create discounts, packages, and special offers.",
-    "Sales Records": "Manage and review hotel sales transactions.",
-    Reports: "Generate and export your sales and marketing reports.",
-    Settings: "Manage your HOSIS application preferences.",
-  };
-
-  function notify(text) {
-    setNotifications((previous) => [
-      { id: Date.now(), text, time: "Just now", read: false }, ...previous,
-    ]);
-  }
-
-  async function changeRecords(action, message) {
-    if (saving) return false;
-    setSaving(true);
-    setError("");
+    const timer = setTimeout(load, 0)
+    return () => clearTimeout(timer)
+  }, [load])
+  useEffect(() => {
+    if (
+      loading ||
+      busy ||
+      !['Dashboard', 'Sales Records', 'Reports'].includes(page)
+    )
+      return
+    const refresh = () => {
+      if (!document.hidden) void load({ quiet: true })
+    }
+    const timer = setInterval(refresh, 20000)
+    window.addEventListener('focus', refresh)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [busy, loading, load, page])
+  async function loadExtra(name) {
+    if (name !== 'Audit History') return
     try {
-      await action();
-      notify(message);
-      try {
-        setOverview(await departmentApi.sales());
-      } catch (failure) {
-        setError(failure.message);
-      }
-      return true;
-    } catch (failure) {
-      setError(failure.message);
-      return false;
+      setAudit(await api('/audit'))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+  useEffect(() => {
+    const timer = setTimeout(() => loadExtra(page), 0)
+    return () => clearTimeout(timer)
+  }, [page])
+  const periodValid = !!from && !!to && from <= to
+  const visibleRecords = records
+  const stats = useMemo(
+    () => analytics(visibleRecords, from, to),
+    [visibleRecords, from, to],
+  )
+  const selected = nav.find((n) => n[0] === page),
+    kind = selected?.[2]
+  const list = visibleRecords.filter(
+    (r) =>
+      r.kind === kind &&
+      r.archived === showArchived &&
+      (!search ||
+        Object.values(r)
+          .join(' ')
+          .toLowerCase()
+          .includes(search.toLowerCase())),
+  )
+  function open(config) {
+    setDialogError('')
+    setDialog(config)
+  }
+  async function mutate(fn, message = 'Changes saved.') {
+    setBusy(true)
+    setDialogError('')
+    setError('')
+    try {
+      await fn()
+      setDialog(null)
+      setNotice(message)
+      setNotificationRevision((v) => v + 1)
+      await load()
+      await loadExtra(page)
+    } catch (e) {
+      setDialogError(e.message)
+      setError(e.message)
     } finally {
-      setSaving(false);
+      setBusy(false)
     }
   }
-
-  async function addRecord(type, data) {
-    if (await changeRecords(() => departmentApi.addSalesRecord(type, data), "Record added.")) setModal("");
+  function quote(r, lead) {
+    open({
+      type: 'quote',
+      title: r ? 'Edit price quote' : 'New price quote',
+      initial: r || { leadId: lead?.id || '', name: lead?.subject || '' },
+      onSave: (v) =>
+        mutate(async () => {
+          await api(
+            r ? `/records/${r.id}` : '/records/quotations',
+            r ? 'PUT' : 'POST',
+            { ...v, ...(r ? { version: r.version } : {}) },
+          )
+          setPage('Quotations')
+          setSearch('')
+          setShowArchived(false)
+        }, 'Price quote saved. Confirm the booking after the guest agrees and Reservations confirms availability.'),
+    })
   }
-
-  function deleteRecord(type, id) {
-    if (window.confirm("Are you sure you want to delete this record?")) {
-      void changeRecords(() => departmentApi.deleteSalesRecord(type, id), "Record deleted.");
+  function edit(r) {
+    if (kind === 'quotations') {
+      quote(r)
+      return
     }
+    open({
+      title: r ? `Edit ${r.name}` : `Add ${singular[kind]}`,
+      fields: definitions[kind],
+      initial: r
+        ? {
+            ...r,
+            type:
+              r.type ||
+              {
+                Email: 'Email Marketing',
+                Referral: 'Promotional',
+                'Walk-in': 'Promotional',
+                Other: 'Promotional',
+              }[r.channel] ||
+              r.channel,
+          }
+        : { date, spent: 0 },
+      onSave: (v) =>
+        mutate(() =>
+          api(r ? `/records/${r.id}` : `/records/${kind}`, r ? 'PUT' : 'POST', {
+            ...v,
+            ...(r ? { version: r.version } : {}),
+          }),
+        ),
+    })
+  }
+  function action(r, action, values = {}) {
+    return api(`/records/${r.id}/action`, 'POST', {
+      ...values,
+      action,
+      version: r.version,
+    })
+  }
+  function confirmDialog(title, description, fn) {
+    open({ title, description, fields: [], onSave: () => mutate(fn) })
+  }
+  const refName = (id) => records.find((r) => r.id === id)?.name || '—'
+  function sharedValue(record, key) {
+    if (key === 'stay') {
+      const stay = record.stay
+      return stay
+        ? [
+            stay.status.replaceAll('_', ' '),
+            stay.checkIn + ' to ' + stay.checkOut,
+            stay.room
+              ? stay.roomType + ' ' + stay.room
+              : stay.roomType + ' (unassigned)',
+            stay.roomStatus?.replaceAll('_', ' '),
+          ]
+            .filter(Boolean)
+            .join(' | ')
+        : ''
+    }
+    if (key === 'preparation')
+      return record.preparation
+        ? record.preparation +
+            ' (' +
+            (record.stay?.preparationCompletedAt ? 'Completed' : 'Pending') +
+            ')'
+        : ''
+    return record[key]
   }
 
-  function updateStatus(type, id, status) {
-    void changeRecords(() => departmentApi.updateSalesStatus(type, id, status), "Status updated.");
+  function cell(r, k) {
+    if (k === 'balance') return peso(stats.balance(r))
+    if (k === 'cancellationFee')
+      return r.status === 'Cancelled' ? peso(r.cancellationFee || 0) : '—'
+    if (k === 'refundable')
+      return r.status === 'Cancelled' ? peso(stats.refundable(r)) : '—'
+    if (['amount', 'budget', 'spent', 'gross'].includes(k)) return peso(r[k])
+    if (k.endsWith('Id')) return refName(r[k])
+    if (k === 'status' && r.kind === 'quotations')
+      return (
+        <Badge>
+          {r.status === 'Accepted'
+            ? 'Booked'
+            : r.validUntil < date || r.checkIn < date
+              ? 'Expired'
+              : 'Not booked'}
+        </Badge>
+      )
+    if (k === 'status') return <Badge>{r[k]}</Badge>
+    return sharedValue(r, k) || '—'
   }
-
-  function markAllRead() {
-    setNotifications((previous) => previous.map((item) => ({ ...item, read: true })));
-  }
-
-  async function exportExcel() {
-
-    const datasets = {
-      Campaigns: campaigns,
-      Inquiries: inquiries,
-      SalesLeads: leads,
-      CorporateClients: clients,
-      Promotions: promotions,
-      SalesRecords: sales,
-    };
-
-    const selected = reportType === "All Records"
-      ? datasets
-      : { [reportType]: datasets[reportType] || [] };
-
-    const totalSales = sales.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-
-    const summary = [
-      ["HOSIS - HOTEL OPERATIONS AND SERVICES INTEGRATED SYSTEM"],
-      ["SALES AND MARKETING REPORT"],
-      [],
-      ["Report Year", reportDate],
-      ["Generated Date", new Date().toLocaleString()],
-      [],
-      ["Report Category", "Total Records"],
-      ["Campaigns", campaigns.length],
-      ["Inquiries", inquiries.length],
-      ["Sales Leads", leads.length],
-      ["Corporate Clients", clients.length],
-      ["Promotions", promotions.length],
-      ["Sales Records", sales.length],
-      [],
-      ["TOTAL RECORDED SALES", totalSales],
-    ];
-
-    await saveWorkbook(
-      [...Object.entries(selected).map(([sheet, records]) => ({ sheet, data: spreadsheetRows(records) })),
-        { sheet: "Report Summary", data: summary }],
-      `HOSIS_Sales_Marketing_Report_${reportDate}.xlsx`,
-    );
-  }
-
-  function spreadsheetRows(records) {
-    const keys = [...new Set(records.flatMap(Object.keys))];
-    return keys.length ? [keys, ...records.map((record) => keys.map((key) => record[key] ?? null))] : [["No records"]];
-  }
-
-  async function saveWorkbook(sheets, filename) {
+  async function exportReport() {
+    if (!periodValid) {
+      setError('Choose a valid reporting date range.')
+      return
+    }
+    setBusy(true)
+    setError('')
     try {
-      const { default: writeExcelFile } = await import("write-excel-file/browser");
-      await writeExcelFile(sheets).toFile(filename);
-      notify("Excel file downloaded.");
-    } catch {
-      notify("Could not download the Excel file.");
+      const { default: writeExcelFile } = await import(
+        'write-excel-file/browser'
+      )
+      const sheets = Object.entries(columns).map(([recordKind, fields]) => ({
+        sheet: nav.find((item) => item[2] === recordKind)?.[0] || recordKind,
+        data: [
+          fields.map(([, label]) => ({ value: label, fontWeight: 'bold' })),
+          ...records
+            .filter((record) => {
+              const day =
+                record.date || record.start || record.createdAt?.slice(0, 10)
+              return (
+                record.kind === recordKind &&
+                !record.archived &&
+                day >= from &&
+                day <= to
+              )
+            })
+            .map((record) =>
+              fields.map(([key]) => {
+                const value =
+                  key === 'balance'
+                    ? stats.balance(record)
+                    : key === 'refundable'
+                      ? stats.refundable(record)
+                      : key.endsWith('Id')
+                        ? refName(record[key])
+                        : sharedValue(record, key)
+                return {
+                  value:
+                    typeof value === 'number'
+                      ? value
+                      : spreadsheetText(String(value ?? '')),
+                }
+              }),
+            ),
+        ],
+      }))
+      const ledger = records.filter(
+        (r) => r.kind === 'payments' && r.date >= from && r.date <= to,
+      )
+      sheets.push({
+        sheet: 'Finance reconciliation',
+        data: [
+          ['Date', 'Type', 'Amount', 'Customer', 'Finance reference'].map(
+            (value) => ({ value, fontWeight: 'bold' }),
+          ),
+          ...ledger.map((r) =>
+            [r.date, r.type, r.amount, r.name, r.externalReference].map(
+              (value) => ({
+                value:
+                  typeof value === 'number'
+                    ? value
+                    : spreadsheetText(String(value ?? '')),
+              }),
+            ),
+          ),
+        ],
+      })
+      if (user.role === 'Super Admin')
+        sheets.forEach((sheet) =>
+          sheet.data.push([{ value: 'Exported by Admin' }]),
+        )
+      await writeExcelFile(sheets).toFile(
+        'HOSIS-sales-' + from + '-to-' + to + '.xlsx',
+      )
+      setNotice('Excel report downloaded.')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
     }
   }
-
-  function exportCSV(records, filename) {
-    return saveWorkbook([{ sheet: "Records", data: spreadsheetRows(records) }], filename);
-  }
-
-  function filtered(records) {
-    const query = search.trim().toLowerCase();
-
-    if (!query) return records;
-
-    return records.filter((item) =>
-      Object.values(item).join(" ").toLowerCase().includes(query)
-    );
-  }
-
-  function openAdd(type) {
-    setModal(type);
-  }
-
-  function PageHeader({ title, description, addType, addLabel }) {
+  function recordActions(r) {
     return (
-      <div className="section-heading">
-        <div><h2>{title}</h2><p>{description}</p></div>
-        {addType && <button className="primary-button" onClick={() => openAdd(addType)}><Plus size={17} /> {addLabel}</button>}
-      </div>
-    );
-  }
-
-  function Table({ columns, records, type, onStatus }) {
-    return (
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              {columns.map((column) => <th key={column.key}>{column.label}</th>)}
-              <th>ACTION</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {records.length === 0 ? (
-              <tr><td colSpan={columns.length + 1} className="no-data">No records found.</td></tr>
-            ) : records.map((record) => (
-              <tr key={record.id}>
-                {columns.map((column) => (
-                  <td key={column.key}>
-                    {column.key === "status" || column.key === "payment" ? (
-                      column.key === "status" && onStatus ? (
-                        <select className="status-select" value={record.status} onChange={(event) => onStatus(record.id, event.target.value)}>
-                          {column.options.map((option) => <option key={option}>{option}</option>)}
-                        </select>
-                      ) : <StatusBadge status={record[column.key]} />
-                    ) : column.key === "budget" || column.key === "amount" ? currency(record[column.key])
-                      : column.key === "discount" ? `${record.discount}%`
-                      : record[column.key]}
-                  </td>
-                ))}
-                <td>
-                  <button className="icon-action danger" title="Delete record" onClick={() => deleteRecord(type, record.id)}>
-                    <Trash2 size={15} />
+      <div className="ws-row-actions">
+        {r.archived ? (
+          <button
+            disabled={busy}
+            onClick={() =>
+              confirmDialog('Restore archived record', r.name, () =>
+                api(`/records/${r.id}/archive`, 'POST', { version: r.version }),
+              )
+            }
+          >
+            Restore
+          </button>
+        ) : (
+          <>
+            {definitions[kind] &&
+              !['Converted', 'Accepted'].includes(r.status) &&
+              (!['campaigns', 'promotions'].includes(kind) || isManager) && (
+                <button disabled={busy} onClick={() => edit(r)}>
+                  Edit
+                </button>
+              )}
+            {kind === 'inquiries' && r.status !== 'Converted' && (
+              <button
+                disabled={busy}
+                onClick={() =>
+                  confirmDialog(
+                    'Convert inquiry to lead',
+                    'The inquiry stays linked to its new lead. Repeat conversion is prevented.',
+                    () => action(r, 'convert'),
+                  )
+                }
+              >
+                Convert to lead
+              </button>
+            )}
+            {kind === 'promotions' &&
+              r.status === 'Pending' &&
+              isManager &&
+              r.createdBy !== user.id && (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    confirmDialog(
+                      'Approve promotion',
+                      'Approval is recorded under your account. Editing the promotion will require approval again.',
+                      () => action(r, 'approve'),
+                    )
+                  }
+                >
+                  Approve
+                </button>
+              )}
+            {kind === 'leads' && !['Converted', 'Lost'].includes(r.status) && (
+              <button disabled={busy} onClick={() => quote(null, r)}>
+                Create price quote
+              </button>
+            )}
+            {kind === 'quotations' &&
+              r.status === 'Draft' &&
+              r.validUntil >= date &&
+              r.checkIn >= date && (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    open({
+                      title: 'Confirm booking',
+                      description: `${refName(r.leadId)} · ${r.name} · ${peso(r.amount)}. Continue only after the guest accepts this quote and Reservations confirms room availability.`,
+                      fields: [
+                        field(
+                          'reservationRef',
+                          'Booking confirmation number from Reservations',
+                        ),
+                        field(
+                          'preparation',
+                          'Room setup and amenities for Housekeeping',
+                          'textarea',
+                          null,
+                          false,
+                        ),
+                        field(
+                          'availabilityConfirmed',
+                          'Reservations confirmed a room is available for these dates',
+                          'checkbox',
+                        ),
+                      ],
+                      onSave: (v) =>
+                        mutate(
+                          () => action(r, 'confirm', v),
+                          'Booking confirmed. You can find it in Sales Records.',
+                        ),
+                    })
+                  }
+                >
+                  Confirm booking
+                </button>
+              )}
+            {kind === 'sales' &&
+              ['CONFIRMED', 'CHECKED_IN'].includes(r.stay?.status) &&
+              r.status !== 'Cancelled' && (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    open({
+                      title: 'Room preparation',
+                      description:
+                        'Front Office and Housekeeping can see these instructions.',
+                      fields: [
+                        field(
+                          'preparation',
+                          'Room setup and amenities',
+                          'textarea',
+                          null,
+                          false,
+                        ),
+                      ],
+                      initial: { preparation: r.preparation || '' },
+                      onSave: (values) =>
+                        mutate(() => action(r, 'preparation', values)),
+                    })
+                  }
+                >
+                  Room preparation
+                </button>
+              )}
+            {kind === 'sales' && isManager && !r.legacy && (
+              <>
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    open({
+                      title: 'Reconcile Finance payment',
+                      description:
+                        'A unique receipt or refund number is generated when you save. Enter the reference from Finance. This records a reconciliation entry only.',
+                      fields: [
+                        field(
+                          'type',
+                          'Entry type',
+                          'select',
+                          r.status === 'Cancelled'
+                            ? stats.balance(r) > 0
+                              ? ['Receipt']
+                              : ['Refund']
+                            : ['Receipt', 'Refund'],
+                        ),
+                        field('amount', 'Amount (PHP)', 'number'),
+                        field('date', 'Finance entry date', 'date'),
+                        field(
+                          'externalReference',
+                          'External Finance reference',
+                        ),
+                        field(
+                          'notes',
+                          'Reconciliation notes',
+                          'textarea',
+                          null,
+                          false,
+                        ),
+                      ],
+                      initial: { date },
+                      onSave: (v) => mutate(() => action(r, 'payment', v)),
+                    })
+                  }
+                >
+                  Payment / refund
+                </button>
+                {r.status === 'Confirmed' && (
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      open({
+                        title: 'Cancel sale',
+                        description:
+                          'Cancel the Sales record? Handle the reservation separately in Front Office. The cancellation fee is 10% of its full booking value: ' +
+                          peso(Math.round(r.amount * 10) / 100) +
+                          '. Net payments received: ' +
+                          peso(stats.collected(r)) +
+                          '. Refund available after the fee: ' +
+                          peso(
+                            Math.max(
+                              0,
+                              Math.round(
+                                (stats.collected(r) -
+                                  Math.round(r.amount * 10) / 100) *
+                                  100,
+                              ) / 100,
+                            ),
+                          ) +
+                          '. No money is moved automatically.',
+                        fields: [
+                          field('reason', 'Cancellation reason', 'textarea'),
+                        ],
+                        onSave: (v) => mutate(() => action(r, 'cancel', v)),
+                      })
+                    }
+                  >
+                    Cancel sale
                   </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                )}
+              </>
+            )}
+            {isManager &&
+              !['sales', 'payments'].includes(kind) &&
+              !['Converted', 'Accepted'].includes(r.status) && (
+                <button
+                  className="ws-danger"
+                  disabled={busy}
+                  onClick={() =>
+                    confirmDialog(
+                      'Delete record',
+                      'Move this record to trash? Linked records and financial history are protected. You can restore it later.',
+                      () =>
+                        api(`/records/${r.id}/delete`, 'POST', {
+                          version: r.version,
+                        }),
+                    )
+                  }
+                >
+                  Delete
+                </button>
+              )}
+          </>
+        )}
       </div>
-    );
+    )
   }
-
-  function renderDashboard() {
-    const totalRevenue = sales.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-
-    const stats = [
-      { title: "Recorded Revenue", value: currency(totalRevenue), icon: Receipt, color: "blue" },
-      { title: "Active Campaigns", value: campaigns.filter((item) => item.status === "Active").length, icon: Megaphone, color: "sand" },
-      { title: "Guest Inquiries", value: inquiries.length, icon: MessageSquare, color: "green" },
-      { title: "Hotel Bookings", value: overview?.bookings ?? "—", icon: BedDouble, color: "rose" },
-    ];
-
+  function metric(label, value, sub) {
     return (
-      <>
-        <div className="welcome-row">
-          <div>
-            <p className="eyebrow">OVERVIEW</p>
-            <h2>Welcome to HOSIS!</h2>
-            <p className="muted">Here's your hotel's sales and marketing overview.</p>
-          </div>
-          <div className="date-pill"><CalendarDays size={16} /> November 2026</div>
-        </div>
-
-        <div className="stats-grid">
-          {stats.map((stat) => {
-            const Icon = stat.icon;
-
-            return (
-              <div className="stat-card" key={stat.title}>
-                <div className={`stat-icon ${stat.color}`}><Icon size={21} /></div>
-                <p>{stat.title}</p>
-                <h3>{stat.value}</h3>
-                <span className="positive"><ArrowUpRight size={14} /> Updated from records</span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="dashboard-grid">
-          <div className="panel">
-            <div className="panel-heading">
-              <div><h3>Sales Performance</h3><p>Payments recorded in HOSIS by month</p></div>
-              <span className="year-label">2026</span>
-            </div>
-
-            <div className="chart-summary">{currency(salesData.reduce((sum, row) => sum + row.sales, 0))} <span>Collected over 12 months</span></div>
-
-            <div className="chart-container">
+      <div className="ws-metric">
+        <p>{label}</p>
+        <strong>{value}</strong>
+        <small>{sub}</small>
+      </div>
+    )
+  }
+  function charts() {
+    return (
+      <div className="ws-chart-grid">
+        <section className="ws-panel">
+          <h2>Booked sales by month</h2>
+          <p className="ws-muted">Confirmed sales in the selected period</p>
+          {stats.chart.length ? (
+            <div className="ws-chart">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={salesData}>
-                  <defs>
-                    <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#245D9B" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#245D9B" stopOpacity={0.01} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eeeaf0" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                  <YAxis axisLine={false} tickLine={false} />
-                  <Tooltip formatter={(value) => currency(value)} />
-                  <Area type="monotone" dataKey="sales" stroke="#245D9B" strokeWidth={3} fill="url(#blueGradient)" />
+                <AreaChart data={stats.chart}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={peso} />
+                  <Area
+                    isAnimationActive={false}
+                    dot={{ r: 4 }}
+                    type="monotone"
+                    dataKey="booked"
+                    stroke="#153870"
+                    fill="#dce6f4"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-          </div>
-
-          <div className="panel">
-            <div className="panel-heading">
-              <div><h3>Marketing Channels</h3><p>Sales leads by source</p></div>
-            </div>
-
-            <div className="pie-container">
+          ) : (
+            <div className="ws-empty">Confirmed sales will appear here.</div>
+          )}
+        </section>
+        <section className="ws-panel">
+          <h2>Where leads come from</h2>
+          <p className="ws-muted">Saved lead sources in the selected period</p>
+          {stats.channels.length ? (
+            <div className="ws-chart">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={channelData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={83} paddingAngle={4}>
-                    {channelData.map((item, index) => <Cell key={item.name} fill={colors[index % colors.length]} />)}
-                  </Pie>
+                <BarChart data={stats.channels}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
                   <Tooltip />
-                </PieChart>
+                  <Bar
+                    isAnimationActive={false}
+                    dataKey="leads"
+                    fill="#be9546"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
               </ResponsiveContainer>
             </div>
-
-            {channelData.map((item, index) => (
-              <div className="legend-item" key={item.name}>
-                <span><i style={{ background: colors[index % colors.length] }} />{item.name}</span>
-                <strong>{item.value}</strong>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-heading">
-            <div><h3>Recent Campaigns</h3><p>Your latest marketing activities</p></div>
-            <button className="text-button" onClick={() => setActivePage("Campaigns")}>View all <ArrowUpRight size={15} /></button>
-          </div>
-
-          <Table
-            columns={[
-              { key: "name", label: "CAMPAIGN" },
-              { key: "type", label: "TYPE" },
-              { key: "budget", label: "BUDGET" },
-              { key: "status", label: "STATUS" }
-            ]}
-            records={campaigns.slice(0, 5)}
-            type="campaign"
-          />
-        </div>
-      </>
-    );
-  }
-
-  function renderCampaigns() {
-    return (
-      <>
-        <PageHeader title="Campaign Management" description={pageDescriptions.Campaigns} addType="campaign" addLabel="Add Campaign" />
-
-        <div className="panel">
-          <div className="table-toolbar">
-            <Search size={17} />
-            <input className="toolbar-input" placeholder="Search campaigns..." value={search} onChange={(event) => setSearch(event.target.value)} />
-            <button className="outline-button" onClick={() => exportCSV(campaigns, "HOSIS_Campaigns.xlsx")}><Download size={16} /> Export</button>
-          </div>
-
-          <Table
-            columns={[
-              { key: "name", label: "CAMPAIGN NAME" },
-              { key: "type", label: "TYPE" },
-              { key: "budget", label: "BUDGET" },
-              { key: "start", label: "START DATE" },
-              { key: "end", label: "END DATE" },
-              { key: "status", label: "STATUS", options: ["Active", "Pending", "Completed"] }
-            ]}
-            records={filtered(campaigns)}
-            type="campaign"
-            onStatus={(id, status) => updateStatus("campaign", id, status)}
-          />
-        </div>
-      </>
-    );
-  }
-
-  function renderInquiries() {
-    return (
-      <>
-        <PageHeader title="Guest Inquiries" description={pageDescriptions.Inquiries} addType="inquiry" addLabel="Add inquiries" />
-
-        <div className="panel">
-          <div className="table-toolbar">
-            <Search size={17} />
-            <input className="toolbar-input" placeholder="Search inquiries..." value={search} onChange={(event) => setSearch(event.target.value)} />
-            <button className="outline-button" onClick={() => exportCSV(inquiries, "HOSIS_Inquiries.xlsx")}><Download size={16} /> Export</button>
-          </div>
-
-          <Table
-            columns={[
-              { key: "id", label: "INQUIRY ID" },
-              { key: "guest", label: "GUEST NAME" },
-              { key: "subject", label: "SUBJECT" },
-              { key: "date", label: "DATE" },
-              { key: "status", label: "STATUS", options: ["New", "In Progress", "Resolved"] }
-            ]}
-            records={filtered(inquiries)}
-            type="inquiry"
-            onStatus={(id, status) => updateStatus("inquiry", id, status)}
-          />
-        </div>
-      </>
-    );
-  }
-
-  function renderLeads() {
-    return (
-      <>
-        <PageHeader title="Sales Leads" description={pageDescriptions["Sales Leads"]} addType="lead" addLabel="Add Lead" />
-
-        <div className="panel">
-          <div className="table-toolbar">
-            <Search size={17} />
-            <input className="toolbar-input" placeholder="Search leads..." value={search} onChange={(event) => setSearch(event.target.value)} />
-            <button className="outline-button" onClick={() => exportCSV(leads, "HOSIS_Leads.xlsx")}><Download size={16} /> Export</button>
-          </div>
-
-          <Table
-            columns={[
-              { key: "id", label: "LEAD ID" },
-              { key: "name", label: "COMPANY / LEAD" },
-              { key: "contact", label: "CONTACT PERSON" },
-              { key: "email", label: "EMAIL" },
-              { key: "source", label: "SOURCE" },
-              { key: "status", label: "STATUS", options: ["New", "Qualified", "Converted", "Lost"] }
-            ]}
-            records={filtered(leads)}
-            type="lead"
-            onStatus={(id, status) => updateStatus("lead", id, status)}
-          />
-        </div>
-      </>
-    );
-  }
-
-  function renderClients() {
-    return (
-      <>
-        <PageHeader title="Corporate Clients" description={pageDescriptions["Corporate Clients"]} addType="client" addLabel="Add Client" />
-
-        <div className="panel">
-          <div className="table-toolbar">
-            <Search size={17} />
-            <input className="toolbar-input" placeholder="Search clients..." value={search} onChange={(event) => setSearch(event.target.value)} />
-            <button className="outline-button" onClick={() => exportCSV(clients, "HOSIS_Clients.xlsx")}><Download size={16} /> Export</button>
-          </div>
-
-          <Table
-            columns={[
-              { key: "id", label: "CLIENT ID" },
-              { key: "company", label: "COMPANY" },
-              { key: "contact", label: "CONTACT PERSON" },
-              { key: "email", label: "EMAIL" },
-              { key: "phone", label: "PHONE" }
-            ]}
-            records={filtered(clients)}
-            type="client"
-          />
-        </div>
-      </>
-    );
-  }
-
-  function renderPromotions() {
-    return (
-      <>
-        <PageHeader title="Promotions" description={pageDescriptions.Promotions} addType="promotion" addLabel="Add Promotion" />
-
-        <div className="stats-grid promotion-stats">
-          <div className="stat-card"><div className="stat-icon sand"><Tag /></div><p>Total Promotions</p><h3>{promotions.length}</h3></div>
-          <div className="stat-card"><div className="stat-icon green"><Check /></div><p>Active Promotions</p><h3>{promotions.filter((item) => item.status === "Active").length}</h3></div>
-          <div className="stat-card"><div className="stat-icon blue"><CalendarDays /></div><p>Pending Promotions</p><h3>{promotions.filter((item) => item.status === "Pending").length}</h3></div>
-          <div className="stat-card"><div className="stat-icon rose"><Tag /></div><p>Average Discount</p><h3>{promotions.length ? Math.round(promotions.reduce((sum, item) => sum + Number(item.discount), 0) / promotions.length) : 0}%</h3></div>
-        </div>
-
-        <div className="panel">
-          <div className="table-toolbar">
-            <Search size={17} />
-            <input className="toolbar-input" placeholder="Search promotions..." value={search} onChange={(event) => setSearch(event.target.value)} />
-            <button className="outline-button" onClick={() => exportCSV(promotions, "HOSIS_Promotions.xlsx")}><Download size={16} /> Export</button>
-          </div>
-
-          <Table
-            columns={[
-              { key: "id", label: "PROMOTION ID" },
-              { key: "name", label: "PROMOTION NAME" },
-              { key: "type", label: "TYPE" },
-              { key: "discount", label: "DISCOUNT" },
-              { key: "start", label: "START DATE" },
-              { key: "end", label: "END DATE" },
-              { key: "status", label: "STATUS", options: ["Active", "Pending", "Expired"] }
-            ]}
-            records={filtered(promotions)}
-            type="promotion"
-            onStatus={(id, status) => updateStatus("promotion", id, status)}
-          />
-        </div>
-      </>
-    );
-  }
-
-  function renderSales() {
-    return (
-      <>
-        <PageHeader title="Sales Records" description={pageDescriptions["Sales Records"]} addType="sale" addLabel="Add Sales Record" />
-
-        <div className="panel">
-          <div className="table-toolbar">
-            <Search size={17} />
-            <input className="toolbar-input" placeholder="Search sales..." value={search} onChange={(event) => setSearch(event.target.value)} />
-            <button className="outline-button" onClick={() => exportCSV(sales, "HOSIS_Sales.xlsx")}><Download size={16} /> Export</button>
-          </div>
-
-          <Table
-            columns={[
-              { key: "id", label: "SALES ID" },
-              { key: "customer", label: "CUSTOMER" },
-              { key: "item", label: "PRODUCT / SERVICE" },
-              { key: "amount", label: "AMOUNT" },
-              { key: "date", label: "DATE" },
-              { key: "payment", label: "PAYMENT" }
-            ]}
-            records={filtered(sales)}
-            type="sale"
-          />
-        </div>
-      </>
-    );
-  }
-
-  function renderReports() {
-    const total = sales.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-
-    return (
-      <>
-        <PageHeader title="Reports & Analytics" description={pageDescriptions.Reports} />
-
-        <div className="report-controls panel">
-          <div>
-            <label>Report Category</label>
-            <select value={reportType} onChange={(event) => setReportType(event.target.value)}>
-              <option>All Records</option>
-              <option>Campaigns</option>
-              <option>Inquiries</option>
-              <option>SalesLeads</option>
-              <option>CorporateClients</option>
-              <option>Promotions</option>
-              <option>SalesRecords</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Report Year</label>
-            <select value={reportDate} onChange={(event) => setReportDate(event.target.value)}>
-              <option>2026</option>
-              <option>2027</option>
-              <option>2025</option>
-            </select>
-          </div>
-
-          <button className="primary-button generate-button" onClick={exportExcel}>
-            <FileSpreadsheet size={18} /> Generate Excel Report
-          </button>
-        </div>
-
-        <div className="stats-grid report-stats">
-          <div className="stat-card"><div className="stat-icon blue"><Receipt /></div><p>Total Recorded Revenue</p><h3>{currency(total)}</h3></div>
-          <div className="stat-card"><div className="stat-icon sand"><Megaphone /></div><p>Campaigns</p><h3>{campaigns.length}</h3></div>
-          <div className="stat-card"><div className="stat-icon green"><Users /></div><p>Corporate Clients</p><h3>{clients.length}</h3></div>
-          <div className="stat-card"><div className="stat-icon rose"><Tag /></div><p>Promotions</p><h3>{promotions.length}</h3></div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-heading">
-            <div><h3>Sales Summary</h3><p>Payments recorded in HOSIS by month</p></div>
-            <button className="outline-button" onClick={exportExcel}><Download size={16} /> Export Excel</button>
-          </div>
-
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => currency(value)} />
-                <Bar dataKey="sales" fill="#245D9B" radius={[5, 5, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  function renderSettings() {
-    return (
-      <div className="panel settings-panel">
-        <h3>System Settings</h3>
-        <p>HOSIS — Hotel Operations and Services Integrated System</p>
-
-        <div className="setting-row">
-          <div><strong>Application Name</strong><span>HOSIS</span></div>
-          <StatusBadge status="Active" />
-        </div>
-
-        <div className="setting-row">
-          <div><strong>System Module</strong><span>Sales and Marketing</span></div>
-        </div>
-
-        <div className="setting-row">
-          <div><strong>Color Theme</strong><span>Rich Blue and Sand</span></div>
-        </div>
-
-        <div className="setting-row">
-          <div><strong>Version</strong><span>1.0.0</span></div>
-        </div>
-
-        <button className="outline-button" onClick={() => { setSearch(""); notify("System view refreshed."); }}>
-          <RefreshCw size={16} /> Refresh system
-        </button>
-      </div>
-    );
-  }
-
-  const modalConfigs = {
-    inquiry: {
-      title: "Add Inquiry",
-      fields: [
-        ["guest", "Guest Name", "text"],
-        ["subject", "Subject", "text"],
-        ["date", "Inquiry Date", "date"],
-        ["status", "Status", "select", ["New", "In Progress", "Resolved"]]
-      ]
-    },
-    campaign: {
-      title: "Add New Campaign",
-      fields: [
-        ["name", "Campaign Name", "text"],
-        ["type", "Campaign Type", "select", ["Social Media", "Email Marketing", "Corporate", "Promotional", "Website"]],
-        ["budget", "Budget (PHP)", "number"],
-        ["start", "Start Date", "date"],
-        ["end", "End Date", "date"],
-        ["status", "Status", "select", ["Active", "Pending", "Completed"]]
-      ]
-    },
-
-    promotion: {
-      title: "Add New Promotion",
-      fields: [
-        ["name", "Promotion Name", "text"],
-        ["type", "Promotion Type", "select", ["Room Discount", "Corporate Discount", "Package Deal", "Seasonal Offer", "Other"]],
-        ["discount", "Discount (%)", "number"],
-        ["start", "Start Date", "date"],
-        ["end", "End Date", "date"],
-        ["status", "Status", "select", ["Active", "Pending", "Expired"]]
-      ]
-    },
-
-    lead: {
-      title: "Add Sales Lead",
-      fields: [
-        ["name", "Company / Lead Name", "text"],
-        ["contact", "Contact Person", "text"],
-        ["email", "Email Address", "email"],
-        ["source", "Lead Source", "select", ["Website", "Social Media", "Referral", "Walk-in", "Other"]],
-        ["status", "Status", "select", ["New", "Qualified", "Converted", "Lost"]]
-      ]
-    },
-
-    client: {
-      title: "Add Corporate Client",
-      fields: [
-        ["company", "Company Name", "text"],
-        ["contact", "Contact Person", "text"],
-        ["email", "Email Address", "email"],
-        ["phone", "Phone Number", "tel"]
-      ]
-    },
-
-    sale: {
-      title: "Add Sales Record",
-      fields: [
-        ["customer", "Customer Name", "text"],
-        ["item", "Product / Service", "text"],
-        ["amount", "Amount (PHP)", "number"],
-        ["date", "Sales Date", "date"],
-        ["payment", "Payment Status", "select", ["Paid", "Pending"]]
-      ]
-    },
-  };
-
-  function renderCurrentPage() {
-    switch (activePage) {
-      case "Dashboard": return renderDashboard();
-      case "Campaigns": return renderCampaigns();
-      case "Inquiries": return renderInquiries();
-      case "Sales Leads": return renderLeads();
-      case "Corporate Clients": return renderClients();
-      case "Promotions": return renderPromotions();
-      case "Sales Records": return renderSales();
-      case "Reports": return renderReports();
-      case "Settings": return renderSettings();
-      default: return renderDashboard();
-    }
-  }
-
-  return (
-    <div className="app-shell">
-      {sidebarOpen && <div className="mobile-overlay" onClick={() => setSidebarOpen(false)} />}
-
-      <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
-        <div className="brand">
-
-          {/* ONLY LOGO CHANGE */}
-          <div className="brand-logo">
-            <img
-              src={logo}
-              alt="HOSIS Logo"
-              onError={(event) => {
-                event.currentTarget.style.display = "none";
-                event.currentTarget.nextSibling.style.display = "grid";
-              }}
-            />
-            <span className="logo-fallback">H</span>
-          </div>
-
-          <button className="mobile-close" onClick={() => setSidebarOpen(false)}>
-            <X />
-          </button>
-        </div>
-
-        <div className="nav-caption">MAIN MENU</div>
-
-        <nav className="navigation">
-          {navigation.map((item) => {
-            const Icon = item.icon;
-
-            return (
-              <button
-                key={item.name}
-                className={`nav-link ${activePage === item.name ? "active" : ""}`}
-                onClick={() => {
-                  setActivePage(item.name);
-                  setSearch("");
-                  setSidebarOpen(false);
-                }}
-              >
-                <Icon size={19} />
-                <span>{item.name}</span>
-                {item.name === "Inquiries" && <span className="nav-count">{inquiries.length}</span>}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="nav-caption settings-caption">PREFERENCES</div>
-
-        <button
-          className={`nav-link ${activePage === "Settings" ? "active" : ""}`}
-          onClick={() => {
-            setActivePage("Settings");
-            setSidebarOpen(false);
-          }}
-        >
-          <Settings size={19} />
-          <span>Settings</span>
-        </button>
-
-        <div className="sidebar-bottom">
-          <div className="help-card">
-            <div className="help-symbol">✦</div>
-            <strong>Need assistance?</strong>
-            <p>Contact your system administrator for help.</p>
-            <button onClick={() => window.alert("Please contact your system administrator.")}>
-              Get Support
-            </button>
-          </div>
-
-          <div className="sidebar-version">
-            HOSIS SALES & MARKETING
-            <span>v1.0.0</span>
-          </div>
-        </div>
-      </aside>
-
-      <main className="main-area">
-        {error && <p role="alert">{error} <button type="button" onClick={() =>
-          departmentApi.sales().then((result) => { setOverview(result); setError(""); },
-            (failure) => setError(failure.message))}>Reload records</button></p>}
-        {activePage === "Dashboard" && overview && <p>Available rooms now: {overview.available}</p>}
-        <header className="topbar">
-          <div className="topbar-left">
-            <button className="menu-button" onClick={() => setSidebarOpen(true)}>
-              <Menu size={22} />
-            </button>
-            <div className="breadcrumb">Pages <span>/</span> <strong>{activePage}</strong></div>
-          </div>
-
-          <div className="topbar-right">
-            <div className="global-search">
-              <Search size={16} />
-              <input
-                placeholder="Search anything..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
+          ) : (
+            <div className="ws-empty">
+              Add or convert a lead to see its source.
             </div>
-
-            <div className="notification-wrap">
-              <button
-                className="notification-button"
-                onClick={() => setNotificationOpen((open) => !open)}
-                aria-label="Notifications"
-              >
-                <Bell size={20} />
-                {unreadCount > 0 && <i />}
-              </button>
-
-              {notificationOpen && (
-                <div className="notification-dropdown">
-                  <div className="notification-head">
-                    <strong>Notifications</strong>
-                    <button onClick={markAllRead}>Mark all read</button>
-                  </div>
-
-                  {notifications.length === 0 ? (
-                    <p className="no-notifications">You're all caught up!</p>
-                  ) : notifications.map((item) => (
-                    <button
-                      className={`notification-item ${item.read ? "read" : ""}`}
-                      key={item.id}
-                      onClick={() => setNotifications((prev) =>
-                        prev.map((notice) =>
-                          notice.id === item.id ? { ...notice, read: true } : notice
-                        )
-                      )}
-                    >
-                      <span className="notification-dot" />
-                      <span>
-                        <strong>{item.text}</strong>
-                        <small>{item.time}</small>
-                      </span>
-                    </button>
-                  ))}
-
-                  <button className="clear-notifications" onClick={() => setNotifications([])}>
-                    Clear all notifications
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* ONLY NAME CHANGE */}
-            <div className="profile">
-              <div className="avatar">{user.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase()}</div>
-              <div className="profile-info">
-                <strong>{user.name}</strong>
-                <span>Sales &amp; Marketing</span>
-              </div>
-              <ChevronDown size={15} />
-            </div>
-            <button className="signout-button" onClick={endSession} disabled={busy}><LogOut size={16} />{busy ? 'Signing out…' : 'Sign out'}</button>
-          </div>
-        </header>
-
-        <section className="page-content">
-          <div className="page-title-row">
-            <div>
-              <p className="eyebrow">HOTEL OPERATIONS & SERVICES INTEGRATED SYSTEM</p>
-              <h1>{activePage}</h1>
-            </div>
-
-            {activePage === "Dashboard" && (
-              <button className="primary-button" onClick={() => openAdd("campaign")}>
-                <Plus size={17} /> Create Campaign
-              </button>
-            )}
-          </div>
-
-          {renderCurrentPage()}
+          )}
         </section>
-      </main>
-
-      {modal && modalConfigs[modal] && (
-        <AddRecordModal saving={saving} error={error}
-          config={modalConfigs[modal]}
-          onClose={() => setModal("")}
-          onSave={(data) => addRecord(modal, data)}
+      </div>
+    )
+  }
+  const followUps = visibleRecords.filter(
+    (r) =>
+      !r.archived &&
+      ['inquiries', 'leads'].includes(r.kind) &&
+      r.followUp &&
+      r.followUp <= date &&
+      !['Converted', 'Resolved', 'Lost'].includes(r.status),
+  )
+  return (
+    <div className="ws-app">
+      {menu && (
+        <button
+          aria-label="Close navigation"
+          className="ws-scrim"
+          onClick={() => setMenu(false)}
         />
       )}
+      <aside className={`ws-sidebar ${menu ? 'open' : ''}`}>
+        <div className="ws-brand">
+          <img src={logo} alt="Grand Horizon Hotel" />
+          <span>SALES & MARKETING</span>
+        </div>
+        <p className="ws-nav-label">WORKSPACE</p>
+        <nav>
+          {navItems.map(([name, Icon]) => (
+            <button
+              key={name}
+              className={page === name ? 'active' : ''}
+              onClick={() => {
+                setPage(name)
+                setSearch('')
+                setShowArchived(false)
+                setMenu(false)
+                setError('')
+              }}
+            >
+              <Icon size={18} />
+              {name}
+            </button>
+          ))}
+        </nav>
+        <div className="ws-profile">
+          <strong>{accountLabel(user)}</strong>
+          <span>{user.role === 'Super Admin' ? 'Admin' : user.role}</span>
+          {signOut && (
+            <button onClick={signOut}>
+              <LogOut size={16} />
+              Sign out
+            </button>
+          )}
+        </div>
+      </aside>
+      <main className="ws-main">
+        <header className="ws-topbar">
+          <button
+            className="ws-menu-button"
+            aria-label="Open navigation"
+            onClick={() => setMenu(true)}
+          >
+            <Menu />
+          </button>
+          <span>HOTEL OPERATIONS & SERVICES</span>
+          <div>
+            <span>{date} · Manila</span>
+            <Notifications
+              api={api}
+              key={user.id}
+              refreshKey={notificationRevision}
+              onOpenRecord={(n) => {
+                const target = nav.find((item) => item[2] === n.kind)
+                if (target) {
+                  setPage(target[0])
+                  setSearch(n.recordId || '')
+                  void load()
+                  setShowArchived(false)
+                }
+              }}
+            />
+            <button
+              onClick={load}
+              disabled={loading || busy}
+              aria-label="Refresh records"
+            >
+              <RefreshCw size={16} />
+            </button>
+          </div>
+        </header>
+        <div className="ws-content">
+          <div className="ws-heading">
+            <div>
+              <p className="ws-eyebrow">GRAND HORIZON HOTEL</p>
+              <h1>{page}</h1>
+              <p className="ws-muted">
+                {page === 'Dashboard'
+                  ? 'Your sales pipeline, connected to the numbers that matter.'
+                  : page === 'Quotations'
+                    ? 'Prepare a price quote, share the price with the guest, then confirm their booking.'
+                    : kind
+                      ? 'Manage your records and keep every opportunity connected.'
+                      : 'Review, reconcile, and manage your sales workspace.'}
+              </p>
+            </div>
+            {kind &&
+              definitions[kind] &&
+              (!['campaigns', 'promotions'].includes(kind) || isManager) && (
+                <button
+                  className="ws-primary ws-add"
+                  onClick={() => edit()}
+                  disabled={busy || loading || !!error}
+                >
+                  <Plus size={17} />
+                  {kind === 'quotations'
+                    ? 'New price quote'
+                    : `Add ${singular[kind]}`}
+                </button>
+              )}
+          </div>
+          {error && (
+            <div role="alert" className="ws-error">
+              {error}{' '}
+              <button
+                onClick={() => {
+                  load()
+                  loadExtra(page)
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {notice && (
+            <Feedback message={notice} onClose={() => setNotice('')} />
+          )}
+          {loading ? (
+            <div className="ws-panel ws-empty">Loading saved records…</div>
+          ) : (
+            <>
+              {['Dashboard', 'Reports'].includes(page) && (
+                <>
+                  <div className="ws-period">
+                    <label>
+                      From
+                      <input
+                        type="date"
+                        value={from}
+                        onChange={(e) => setFrom(e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      To
+                      <input
+                        type="date"
+                        value={to}
+                        onChange={(e) => setTo(e.target.value)}
+                      />
+                    </label>
+                    {page === 'Reports' && (
+                      <button
+                        className="ws-primary"
+                        onClick={exportReport}
+                        disabled={!periodValid || busy}
+                      >
+                        <Download size={16} />
+                        Export Excel
+                      </button>
+                    )}
+                    <span>
+                      {periodValid
+                        ? 'Sales use sale dates. Collections use Finance entry dates.'
+                        : 'Choose a valid date range.'}
+                    </span>
+                  </div>
+                  {periodValid && (
+                    <>
+                      <div className="ws-metrics">
+                        {metric(
+                          'Confirmed booked value',
+                          peso(stats.booked),
+                          'Excludes cancelled sales',
+                        )}
+                        {metric(
+                          'Net collections',
+                          peso(stats.net),
+                          `Receipts ${peso(stats.receipts)} · refunds ${peso(stats.refunds)}`,
+                        )}
+                        {metric(
+                          'Outstanding balance',
+                          peso(stats.outstanding),
+                          'Current balance of confirmed sales dated in period',
+                        )}
+                        {metric(
+                          'Leads converted in period',
+                          `${stats.converted.length} / ${stats.leads.length}`,
+                          'Leads created and sold within this date range',
+                        )}
+                      </div>
+                      {charts()}
+                    </>
+                  )}
+                </>
+              )}
+              {page === 'Dashboard' && (
+                <>
+                  <section className="ws-panel">
+                    <h2>Follow-ups due</h2>
+                    <p className="ws-muted">
+                      Today and overdue · across all dates
+                    </p>
+                    {followUps.length ? (
+                      <ul className="ws-followups">
+                        {followUps.map((r) => (
+                          <li key={r.id}>
+                            <div>
+                              <strong>{r.name}</strong>
+                              <p>{r.subject}</p>
+                            </div>
+                            <Badge>
+                              {r.followUp < date ? 'Overdue' : 'Due today'}
+                            </Badge>
+                            <button
+                              onClick={() => {
+                                setPage(
+                                  r.kind === 'leads'
+                                    ? 'Sales Leads'
+                                    : 'Inquiries',
+                                )
+                                setSearch(r.name)
+                              }}
+                            >
+                              Open record
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="ws-empty">
+                        No follow-ups due. Keep the next contact date on your
+                        inquiries and leads.
+                      </div>
+                    )}
+                  </section>
+                  <div className="ws-boundary">
+                    <ShieldCheck size={22} />
+                    <p>
+                      <strong>
+                        Reservations and Finance remain the source of
+                        confirmation.
+                      </strong>{' '}
+                      Sales records require an availability check and
+                      Reservations reference. Payment entries reconcile Finance
+                      receipts; they do not process payments.
+                    </p>
+                  </div>
+                </>
+              )}
+              {kind === 'quotations' && (
+                <section
+                  className="quote-guide"
+                  aria-label="How price quotes work"
+                >
+                  <div>
+                    <strong>1. Create a price quote</strong>
+                    <p>Choose a customer, stay dates, and full stay price.</p>
+                  </div>
+                  <div>
+                    <strong>2. Share it with the guest</strong>
+                    <p>
+                      A saved quote is a price offer. No room is booked yet.
+                    </p>
+                  </div>
+                  <div>
+                    <strong>3. Confirm the booking</strong>
+                    <p>
+                      When the guest agrees, get confirmation from Reservations.
+                    </p>
+                  </div>
+                </section>
+              )}
+              {kind && (
+                <>
+                  <div className="ws-table-tools">
+                    <label className="ws-search">
+                      Search records
+                      <input
+                        type="search"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Name, reference, status…"
+                      />
+                    </label>
+                    {isManager && kind !== 'sales' && (
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={showArchived}
+                          onChange={(e) => setShowArchived(e.target.checked)}
+                        />{' '}
+                        Show trash / archived
+                      </label>
+                    )}
+                    <span>{list.length} records</span>
+                  </div>
+                  <section className="ws-panel ws-table-panel">
+                    <PagedTable>
+                      <table>
+                        <thead>
+                          <tr>
+                            {columns[kind].map(([k, l]) => (
+                              <th key={k}>{l}</th>
+                            ))}
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {list.map((r) => (
+                            <tr key={r.id}>
+                              {columns[kind].map(([k]) => (
+                                <td key={k}>{cell(r, k)}</td>
+                              ))}
+                              <td>{recordActions(r)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </PagedTable>
+                    {!list.length && (
+                      <div className="ws-empty">
+                        No {showArchived ? 'archived ' : ''}records found.
+                        {search
+                          ? ' Try another search.'
+                          : ' New records are saved permanently.'}
+                      </div>
+                    )}
+                  </section>
+                  {kind === 'promotions' && (
+                    <p className="ws-footnote">
+                      Promotions require approval from a different manager.
+                      Editing an approved offer returns it to Pending. Existing
+                      quotations retain their agreed price.
+                    </p>
+                  )}
+                  {kind === 'sales' && (
+                    <>
+                      <p className="ws-footnote">
+                        Booked value is a sales commitment, not accounting
+                        revenue. Payment history is immutable; enter a refund to
+                        reverse a receipt. Cancelled sales retain a fee of 10%
+                        of the full booking value; refunds are limited to
+                        payments received less that fee.
+                      </p>
+                      <section className="ws-panel">
+                        <h2>Finance reconciliation ledger</h2>
+                        <PagedTable>
+                          <table>
+                            <thead>
+                              <tr>
+                                {[
+                                  'Date',
+                                  'Customer',
+                                  'Type',
+                                  'Amount',
+                                  'Finance reference',
+                                  'Sale reference',
+                                ].map((x) => (
+                                  <th key={x}>{x}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {visibleRecords
+                                .filter(
+                                  (r) => r.kind === 'payments' && !r.archived,
+                                )
+                                .map((r) => (
+                                  <tr key={r.id}>
+                                    <td>{r.date}</td>
+                                    <td>{r.name}</td>
+                                    <td>
+                                      <Badge>{r.type}</Badge>
+                                    </td>
+                                    <td>{peso(r.amount)}</td>
+                                    <td>{r.reference}</td>
+                                    <td>
+                                      {
+                                        records.find((s) => s.id === r.saleId)
+                                          ?.reservationRef
+                                      }
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </PagedTable>
+                      </section>
+                    </>
+                  )}
+                </>
+              )}
+              {page === 'Reports' && periodValid && (
+                <>
+                  <section className="ws-panel">
+                    <h2>Campaign attribution</h2>
+                    <p className="ws-muted">
+                      Period leads and bookings; spend and ROAS cover the
+                      campaign lifetime. ROAS is booked value ÷ actual spend,
+                      not profit ROI.
+                    </p>
+                    <PagedTable>
+                      <table>
+                        <thead>
+                          <tr>
+                            {[
+                              'Campaign',
+                              'Lifetime spend',
+                              'Period leads',
+                              'Period bookings',
+                              'Period booked value',
+                              'Period conversion',
+                              'Lifetime ROAS',
+                            ].map((x) => (
+                              <th key={x}>{x}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stats.campaigns.map((c) => (
+                            <tr key={c.campaign}>
+                              <td>{c.campaign}</td>
+                              <td>{peso(c.lifetimeSpend)}</td>
+                              <td>{c.periodLeads}</td>
+                              <td>{c.periodBookings}</td>
+                              <td>{peso(c.periodBookedValue)}</td>
+                              <td>{c.conversion}</td>
+                              <td>
+                                {c.lifetimeROAS == null
+                                  ? 'N/A'
+                                  : `${c.lifetimeROAS.toFixed(2)}×`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </PagedTable>
+                  </section>
+                  <p className="ws-footnote">
+                    Refunds still due for cancelled sales dated in this period:{' '}
+                    {peso(stats.refundDue)}. Confirmed bookings, collections,
+                    and outstanding balances are reported separately.
+                    Cancellation fees: {peso(stats.cancellationFees)}; unpaid
+                    fees: {peso(stats.cancellationFeesDue)}. The Excel client
+                    master list is a current snapshot and is not filtered by
+                    these dates.
+                  </p>
+                </>
+              )}
+              {page === 'Availability' && (
+                <SalesAvailability api={api} today={date} />
+              )}
+              {['Users', 'Backup & Restore', 'My Account'].includes(page) && (
+                <SalesSettings
+                  key={page}
+                  page={page}
+                  api={api}
+                  user={user}
+                  onSessionChange={onSessionChange}
+                  onRestore={load}
+                />
+              )}
+              {page === 'Audit History' && (
+                <section className="ws-panel">
+                  <h2>Latest 1,000 changes</h2>
+                  <p className="ws-muted">
+                    Each successful transaction records the actor, time, and
+                    before / after values. Times are displayed in Manila.
+                  </p>
+                  <PagedTable>
+                    <table>
+                      <thead>
+                        <tr>
+                          {['Time', 'User', 'Action', 'Record', 'Changes'].map(
+                            (s) => (
+                              <th key={s}>{s}</th>
+                            ),
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {audit.map((r) => (
+                          <tr key={r.seq}>
+                            <td>
+                              {new Date(r.at).toLocaleString('en-PH', {
+                                timeZone: 'Asia/Manila',
+                              })}
+                            </td>
+                            <td>{r.actor}</td>
+                            <td>{r.action}</td>
+                            <td>{r.record_id || 'Workspace'}</td>
+                            <td>
+                              <details>
+                                <summary>View</summary>
+                                <pre>
+                                  {JSON.stringify(
+                                    {
+                                      before: r.before_json
+                                        ? JSON.parse(r.before_json)
+                                        : null,
+                                      after: r.after_json
+                                        ? JSON.parse(r.after_json)
+                                        : null,
+                                    },
+                                    null,
+                                    2,
+                                  )}
+                                </pre>
+                              </details>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </PagedTable>
+                </section>
+              )}
+            </>
+          )}
+          <footer className="ws-footer">
+            Grand Horizon Hotel · Sales & Marketing · Records stored locally on
+            this laptop
+          </footer>
+        </div>
+      </main>
+      {dialog?.type === 'quote' ? (
+        <QuoteDialog
+          key={dialog.initial?.id || dialog.initial?.leadId || 'new-quote'}
+          {...dialog}
+          records={records}
+          date={date}
+          busy={busy}
+          error={dialogError}
+          onClose={() => setDialog(null)}
+          onAddCustomer={() => {
+            setDialog(null)
+            setPage('Sales Leads')
+            setSearch('')
+            setShowArchived(false)
+          }}
+        />
+      ) : (
+        dialog && (
+          <Dialog
+            key={dialog.title}
+            {...dialog}
+            records={records}
+            busy={busy}
+            error={dialogError}
+            onClose={() => setDialog(null)}
+          />
+        )
+      )}
     </div>
-  );
+  )
 }
-
-export default function SalesMarketingApp({ user, onSignOut }) {
+export default function SalesMarketingApp({
+  user,
+  onSignOut,
+  onSessionChange,
+}) {
+  const isAdmin = user.role === 'ADMIN'
   return (
-    <div className="sales-marketing">
-      <Dashboard user={user} signOut={onSignOut} />
-    </div>
-  );
+    <Workspace
+      user={{
+        ...user,
+        role: isAdmin
+          ? 'Super Admin'
+          : user.position === 'SALES_HEAD'
+            ? 'Sales Head'
+            : 'Sales Staff',
+      }}
+      signOut={isAdmin ? undefined : onSignOut}
+      onSessionChange={onSessionChange}
+    />
+  )
 }

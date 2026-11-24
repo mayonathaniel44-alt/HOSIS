@@ -117,6 +117,7 @@ async function deleteGuest(id, userId) {
 
 const reservationColumns = `
   r.quoted_promotion AS "quotedPromotion",
+  sales.preparation AS "salesPreparation", sales.completed_at AS "salesPreparationCompletedAt",
   r.id, r.confirmation_code AS "confirmationCode", r.guest_id AS "guestId",
   r.room_id AS "roomId", r.room_type AS "roomType",
   r.check_in::text AS "checkIn", r.check_out::text AS "checkOut", r.status,
@@ -128,6 +129,7 @@ const reservationJoins = `
   FROM reservations r
   JOIN guests g ON g.id = r.guest_id
   LEFT JOIN rooms rm ON rm.id = r.room_id
+  LEFT JOIN sales_stay_handoffs sales ON sales.reservation_id = r.id
 `
 
 async function listReservations(search = '') {
@@ -632,9 +634,12 @@ async function listRequests(search = '') {
             q.request_text AS request, q.priority, q.status,
             q.created_at AS "createdAt", q.due_at::text AS "dueAt",
             h.completion_notes AS "completionNotes", h.completed_at AS "completedAt",
+            h.request_id AS "housekeepingRequestId",
+            COALESCE(NULLIF(TRIM(CONCAT_WS(' ', assignee.first_name, assignee.last_name)), ''), assignee.username) AS "assignedTo",
             q.status <> 'COMPLETED' AND q.due_at < LOCALTIMESTAMP AS "isLate"
      FROM guest_requests q
      LEFT JOIN hk_guest_requests h ON h.front_office_request_id=q.id
+     LEFT JOIN users assignee ON assignee.id=h.staff_id
      LEFT JOIN rooms rm ON rm.id = q.room_id
      WHERE ($1 = '' OR q.guest_name ILIKE $2 OR q.request_text ILIKE $2
        OR rm.room_number ILIKE $2 OR q.status ILIKE $2)
@@ -768,7 +773,7 @@ async function getInvoice(id) {
 const availablePromotions = `
   SELECT p.id, p.details->>'name' AS name, (p.details->>'discount')::numeric AS percent
     FROM sales_marketing_records p
-   WHERE p.kind = 'promotion' AND p.details->>'status' = 'Active'
+   WHERE p.kind = 'promotion' AND NOT p.archived AND p.details->>'status' = 'Active'
      AND p.details->>'start' <= $1::date::text
      AND p.details->>'end' >= ($2::date - 1)::text
      AND (CASE WHEN jsonb_typeof(p.details->'discount') = 'number'

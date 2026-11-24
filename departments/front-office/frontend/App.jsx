@@ -31,6 +31,7 @@ const HumanResourcesApp = lazy(() => import('../../hr/frontend/HumanResourcesApp
 const humanResourcesHash = '#/human-resources'
 const engineeringHash = '#/engineering'
 const engineeringHandoffHash = '#/engineering-handoff'
+const adminIntegrationsHash = '#/admin-integrations'
 
 function EngineeringEntry({ technician }) {
   const target = technician ? '/engineering-workspace/technician.html' : '/engineering-workspace/index.html'
@@ -465,6 +466,23 @@ function App() {
     }
   }
 
+  function openNotice(notice) {
+    if (notice.reservation_id) {
+      const stay = reservations.find((item) => String(item.id) === String(notice.reservation_id))
+      if (stay) {
+        openModal('reservation-details', stay)
+        return
+      }
+    }
+    if (notice.guest_request_id) {
+      setActivePage('Guest requests')
+      setSearch(`REQ-${notice.guest_request_id}`)
+    } else {
+      setActivePage('Rooms')
+      setSearch(notice.room_number || '')
+    }
+  }
+
   async function acknowledgeNotice(id) {
     if (acknowledgingNotice !== null) return
     setAcknowledgingNotice(id)
@@ -718,8 +736,8 @@ function App() {
   }
 
   function returnToAdmin() {
-    replaceWorkspaceHash()
-    setWorkspaceHash('')
+    replaceWorkspaceHash(adminIntegrationsHash)
+    setWorkspaceHash(adminIntegrationsHash)
     setShowAdminConsole(true)
   }
 
@@ -729,22 +747,22 @@ function App() {
   function replaceSession(next) { authApi.saveSession(next, authApi.isRemembered()); setUser(next.user) }
   if (publicLostFoundCode) return <PublicLostFoundPage code={decodeURIComponent(publicLostFoundCode)} />
   if (signedIn && (['HOUSEKEEPING', 'HOUSEKEEPING_VIEWER'].includes(user?.role) || user?.mustChangePassword || showHousekeeping)) {
-    return <HousekeepingErrorBoundary onSignOut={signOut}>
-      {user?.role==='ADMIN' && <button className="button button-secondary" onClick={() => {
-        replaceWorkspaceHash()
-        setWorkspaceHash('')
-        setShowAdminConsole(true)
-      }}>Administrator console</button>}
-      <HousekeepingApp session={{token:authApi.getToken(),user}} onLogout={signOut} onSessionChange={replaceSession} />
-    </HousekeepingErrorBoundary>
+    return <>
+      {user?.role === 'ADMIN' && !user.mustChangePassword && <BackToAdmin onClick={returnToAdmin} />}
+      <HousekeepingErrorBoundary onSignOut={signOut}>
+        <HousekeepingApp session={{token:authApi.getToken(),user}} onLogout={signOut} onSessionChange={replaceSession} />
+      </HousekeepingErrorBoundary>
+    </>
   }
   if (signedIn && ['FINANCE', 'HR', 'SALES_MARKETING'].includes(adminDepartment)) {
-    return <Suspense fallback={<p>Loading department workspace</p>}>
-      <button type="button" className="button button-secondary" onClick={returnToAdmin}>Administrator console</button>
-      {adminDepartment === 'FINANCE' && <FinanceApp onSignOut={signOut} />}
-      {adminDepartment === 'HR' && <HumanResourcesApp user={user} onSignOut={signOut} />}
-      {adminDepartment === 'SALES_MARKETING' && <SalesMarketingApp user={user} onSignOut={signOut} />}
-    </Suspense>
+    return <>
+      <BackToAdmin onClick={returnToAdmin} />
+      <Suspense fallback={<p>Loading department workspace</p>}>
+        {adminDepartment === 'FINANCE' && <FinanceApp onSignOut={signOut} />}
+        {adminDepartment === 'HR' && <HumanResourcesApp user={user} onSignOut={signOut} />}
+        {adminDepartment === 'SALES_MARKETING' && <SalesMarketingApp user={user} onSignOut={signOut} onSessionChange={replaceSession} />}
+      </Suspense>
+    </>
   }
   if (signedIn && ['ENGINEERING', 'TECHNICIAN'].includes(user?.role)) {
     if (user.role === 'ENGINEERING' && workspaceHash === engineeringHandoffHash) {
@@ -762,7 +780,7 @@ function App() {
   }
   if (signedIn && user?.role === 'SALES_MARKETING') {
     return <Suspense fallback={<p>Loading Sales &amp; Marketing…</p>}>
-      <SalesMarketingApp user={user} onSignOut={signOut} />
+      <SalesMarketingApp user={user} onSignOut={signOut} onSessionChange={replaceSession} />
     </Suspense>
   }
   if (signedIn && user?.role === 'HR') {
@@ -771,7 +789,7 @@ function App() {
     </Suspense>
   }
   if (signedIn && user?.role === 'ADMIN' && showAdminConsole) {
-    return <AdminDashboard username={user.username} timeZone={user.timeZone} onOpenWorkspace={openAdminWorkspace} onSignOut={signOut} />
+    return <AdminDashboard initialSection={workspaceHash === adminIntegrationsHash ? 'Integrations' : 'Overview'} username={user.username} timeZone={user.timeZone} onOpenWorkspace={openAdminWorkspace} onSignOut={signOut} />
   }
 
   if (!signedIn) {
@@ -970,7 +988,7 @@ function App() {
         <PageIntro eyebrow="ROOMS & AVAILABILITY" title="Room overview" description="A clear view of room status across the hotel." action={<button className="button button-secondary" onClick={() => performAction(refreshData, 'Room availability refreshed.')}><Icon name="filter" size={16} /> Refresh rooms</button>} />
         <RoomAvailability today={todayISO} search={search} />
         <div className="room-summary">{[['Available', roomCounts.available, 'green'], ['Occupied', roomCounts.occupied, 'blue'], ['Reserved', roomCounts.reserved, 'lavender'], ['Needs attention', roomCounts.attention, 'amber']].map(([label, count, tone]) => <div key={label} className="surface room-summary-card"><span className={`room-summary-dot dot-${tone}`} /><span><small>{label}</small><strong>{count}</strong></span></div>)}</div>
-        <section className="surface rooms-surface"><div className="list-heading"><div><h2>All rooms</h2><p>Release inspected rooms here. Assign guests from Reservations.</p></div><button type="button" className="button button-secondary" onClick={() => downloadReport('Room occupancy', `room-occupancy-${todayISO}`, ['Room', 'Type', 'Floor', 'Status'], () => filteredRooms.map((room) => [room.number, room.type, room.floor, room.status]))}>Download room occupancy</button></div><RoomNoticeList notices={notices} error={noticeError} loading={loadingWorkspace} acknowledging={acknowledgingNotice} onAcknowledge={acknowledgeNotice} onRetry={() => performAction(refreshData, 'Front Office data refreshed.')} /><div className="room-grid">{filteredRooms.map((room) => <article key={room.number} className="room-tile"><div className="room-tile-top"><span className={`room-tile-icon room-${room.status.toLowerCase().replaceAll(' ', '-')}`}><Icon name="bed" size={18} /></span></div><div><h3>{room.label}</h3>
+        <section className="surface rooms-surface"><div className="list-heading"><div><h2>All rooms</h2><p>Release inspected rooms here. Assign guests from Reservations.</p></div><button type="button" className="button button-secondary" onClick={() => downloadReport('Room occupancy', `room-occupancy-${todayISO}`, ['Room', 'Type', 'Floor', 'Status'], () => filteredRooms.map((room) => [room.number, room.type, room.floor, room.status]))}>Download room occupancy</button></div><RoomNoticeList notices={notices} error={noticeError} loading={loadingWorkspace} acknowledging={acknowledgingNotice} onAcknowledge={acknowledgeNotice} onOpen={openNotice} onRetry={() => performAction(refreshData, 'Front Office data refreshed.')} /><div className="room-grid">{filteredRooms.map((room) => <article key={room.number} className="room-tile"><div className="room-tile-top"><span className={`room-tile-icon room-${room.status.toLowerCase().replaceAll(' ', '-')}`}><Icon name="bed" size={18} /></span></div><div><h3>{room.label}</h3>
           {room.cleaningStatus && <p>Cleaning: {displayStatus(room.cleaningStatus).label}</p>}
           {room.maintenance && <p>Repair #{room.maintenance.id}: {displayStatus(room.maintenance.status).label}<br />{room.maintenance.description}</p>}</div><div className="room-tile-bottom"><small>{room.floor}</small><small>{room.manualHold ? room.status + ' · manual hold' : ['Available', 'Reserved'].includes(room.status) && !room.readyForAssignment ? 'Cleaning pending' : room.status}</small></div><button type="button" className="small-action small-action-quiet" onClick={() => openModal('maintenance', room)}>Report issue</button>{room.status === 'Inspected' && <button type="button" className="small-action" onClick={() => performAction(() => frontOfficeApi.releaseRoom(room.id), 'Room released for assignment.')}>Release room</button>}</article>)}</div>{!loadingWorkspace && filteredRooms.length === 0 && <EmptyState text="No rooms match your search." />}</section>
       </>
@@ -982,7 +1000,7 @@ function App() {
       <>
         <PageIntro eyebrow="GUEST EXPERIENCE" title="Guest requests" description="Keep every guest request visible and moving." action={<button className="button button-primary" onClick={() => openModal('request')}><Icon name="plus" size={17} /> New request</button>} />
         <div className="request-counters"><span><i className="counter-amber" />{requests.filter((item) => item.status === 'NEW').length} new</span><span><i className="counter-blue" />{requests.filter((item) => item.status === 'IN_PROGRESS').length} in progress</span><span><i className="counter-green" />{requests.filter((item) => item.status === 'COMPLETED').length} completed</span></div>
-        <section className="surface data-surface"><div className="list-heading"><div><h2>Request log</h2><p>Updates from guests staying with us today.</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Guest requests refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>REQUEST</th><th>GUEST</th><th>ROOM</th><th>RECEIVED</th><th>STATUS</th><th></th></tr></thead><tbody>{filteredRequests.map((item) => <tr key={item.id}><td><div className="request-title"><span>{item.request}</span><small>{item.code}</small>{item.dueAt && <small>Due {item.dueAt.slice(0, 16)}{item.isLate ? ' (overdue)' : ''}</small>}{item.completionNotes && <small>Outcome: {item.completionNotes}</small>}</div></td><td>{item.guest}</td><td>{item.room}</td><td>{item.time}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{!item.roomId && item.status !== 'COMPLETED' && <button type="button" className="small-action" onClick={() => openModal('send-request', item)}>Send to Housekeeping</button>}{item.roomId && item.status !== 'COMPLETED' ? <span>Managed by Housekeeping</span> : item.status === 'NEW' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'IN_PROGRESS')}>Start</button> : item.status === 'IN_PROGRESS' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'COMPLETED')}>Mark done</button> : <Icon name="check" size={18} className="done-check" />}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredRequests.length === 0 && <EmptyState text="No guest requests match your search." />}</div></section>
+        <section className="surface data-surface"><div className="list-heading"><div><h2>Request log</h2><p>Updates from guests staying with us today.</p></div><button className="button button-secondary" onClick={() => performAction(refreshData, 'Guest requests refreshed.')}><Icon name="filter" size={16} /> Refresh</button></div><div className="table-scroll"><table className="full-table"><thead><tr><th>REQUEST</th><th>GUEST</th><th>ROOM</th><th>RECEIVED</th><th>STATUS</th><th></th></tr></thead><tbody>{filteredRequests.map((item) => <tr key={item.id}><td><div className="request-title"><span>{item.request}</span><small>{item.code}</small>{item.dueAt && <small>Due {item.dueAt.slice(0, 16)}{item.isLate ? ' (overdue)' : ''}</small>}{item.completionNotes && <small>Outcome: {item.completionNotes}</small>}</div></td><td>{item.guest}</td><td>{item.room}</td><td>{item.time}</td><td><Status tone={item.tone}>{item.statusLabel}</Status></td><td>{!item.roomId && item.status !== 'COMPLETED' && <button type="button" className="small-action" onClick={() => openModal('send-request', item)}>Send to Housekeeping</button>}{item.housekeepingRequestId && item.status !== 'COMPLETED' ? <span>{item.assignedTo ? `Housekeeping: ${item.assignedTo}` : 'Housekeeping: Awaiting assignment'}</span> : item.status === 'NEW' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'IN_PROGRESS')}>Start</button> : item.status === 'IN_PROGRESS' ? <button className="small-action small-action-quiet" onClick={() => updateGuestRequest(item.id, 'COMPLETED')}>Mark done</button> : <Icon name="check" size={18} className="done-check" />}</td></tr>)}</tbody></table>{!loadingWorkspace && filteredRequests.length === 0 && <EmptyState text="No guest requests match your search." />}</div></section>
       </>
     )
   }
@@ -1034,14 +1052,15 @@ function App() {
 
   return (
     <div className="app-shell">
+      {user?.role === 'ADMIN' && <BackToAdmin onClick={returnToAdmin} />}
       <aside className="sidebar">
         <div className="sidebar-brand"><Brand /></div>
         <div className="sidebar-label">FRONT OFFICE</div>
-        <nav className="side-nav" aria-label="Workspace navigation">{user?.role === 'ADMIN' && <button className="nav-item" onClick={() => setShowAdminConsole(true)}><Icon name="lock" size={18} /><span>Admin console</span></button>}{navigation.map((item) => <button key={item.id} className={`nav-item ${activePage === item.id ? 'nav-active' : ''}`} onClick={() => { setActivePage(item.id); setSearch(''); setArrivalFilter('All arrivals') }}><Icon name={item.icon} size={18} /><span>{item.id}</span>{item.id === 'Guest requests' && requests.filter((request) => request.status === 'NEW').length > 0 && <span className="nav-count">{requests.filter((request) => request.status === 'NEW').length}</span>}</button>)}</nav>
+        <nav className="side-nav" aria-label="Workspace navigation">{navigation.map((item) => <button key={item.id} className={`nav-item ${activePage === item.id ? 'nav-active' : ''}`} onClick={() => { setActivePage(item.id); setSearch(''); setArrivalFilter('All arrivals') }}><Icon name={item.icon} size={18} /><span>{item.id}</span>{item.id === 'Guest requests' && requests.filter((request) => request.status === 'NEW').length > 0 && <span className="nav-count">{requests.filter((request) => request.status === 'NEW').length}</span>}</button>)}</nav>
         <div className="sidebar-bottom"><div className="help-card"><span className="help-icon"><Icon name="sparkle" size={18} /></span><strong>Here to help</strong><p>Need a hand? Your hotel admin is one message away.</p><button onClick={() => notify('Please contact your hotel administrator for support.')}>Get support <Icon name="arrow" size={14} /></button></div><button className="profile-button" onClick={() => notify(`Signed in as ${displayName} · ${accessLabel}`)}><Avatar initials={displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="dots" size={18} /></button></div>
       </aside>
       <main className="main-panel">
-        <header className="topbar"><button className="mobile-brand" onClick={() => setActivePage('Dashboard')}><Brand compact /></button><div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activePage}</strong></div><div className="topbar-tools"><label className="global-search"><Icon name="search" size={17} /><input type="search" aria-label={`Search ${activePage}`} placeholder={`Search ${activePage}`} value={search} onChange={(event) => setSearch(event.target.value)} /></label><span className="topbar-date"><Icon name="sun" size={17} />{dateLabel}</span><FrontOfficeNotifications key={user?.id} notices={notices} error={noticeError} loading={loadingWorkspace} acknowledging={acknowledgingNotice} onAcknowledge={acknowledgeNotice} onRetry={() => performAction(refreshData, 'Front Office data refreshed.')} /><span className="topbar-divider" /><button className="topbar-profile" onClick={signOut} aria-label="Sign out"><Avatar initials={initials(displayName)} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="logout" size={16} /></button></div></header>
+        <header className="topbar"><button className="mobile-brand" onClick={() => setActivePage('Dashboard')}><Brand compact /></button><div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activePage}</strong></div><div className="topbar-tools"><label className="global-search"><Icon name="search" size={17} /><input type="search" aria-label={`Search ${activePage}`} placeholder={`Search ${activePage}`} value={search} onChange={(event) => setSearch(event.target.value)} /></label><span className="topbar-date"><Icon name="sun" size={17} />{dateLabel}</span><FrontOfficeNotifications key={user?.id} notices={notices} error={noticeError} loading={loadingWorkspace} acknowledging={acknowledgingNotice} onAcknowledge={acknowledgeNotice} onOpen={openNotice} onRetry={() => performAction(refreshData, 'Front Office data refreshed.')} /><span className="topbar-divider" /><button className="topbar-profile" onClick={signOut} aria-label="Sign out"><Avatar initials={initials(displayName)} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="logout" size={16} /></button></div></header>
         <section className="content-area">{dataError && <div className="api-error" role="alert"><strong>Couldn’t load Front Office records.</strong><span>{dataError}</span><button className="small-action" onClick={() => performAction(refreshData, 'Front Office data refreshed.')}>Retry</button></div>}{loadingWorkspace && <div className="loading-banner">Loading Front Office records…</div>}{pageRenderer[activePage]()}</section>
         <footer className="app-footer"><span>© {today.getFullYear()} Grand Horizon Hotel</span><span><i /> Connected to HOSIS API</span></footer>
       </main>
@@ -1061,7 +1080,13 @@ function App() {
   )
 }
 
-function RoomNoticeList({ notices, error, loading, acknowledging, onAcknowledge, onRetry }) {
+function BackToAdmin({ onClick }) {
+  return <button type="button" className="button button-primary workspace-back-to-admin" onClick={onClick}>
+    Back to Admin
+  </button>
+}
+
+function RoomNoticeList({ notices, error, loading, acknowledging, onAcknowledge, onOpen, onRetry }) {
   return <div className="front-office-notices">
     {error && <p role="alert">Room notices could not be loaded. <button type="button" className="small-action" onClick={onRetry}>Retry</button></p>}
     {loading && notices.length === 0 && <p role="status">Loading room notices</p>}
@@ -1069,6 +1094,7 @@ function RoomNoticeList({ notices, error, loading, acknowledging, onAcknowledge,
     {notices.length > 0 && <ul>
       {notices.map((notice) => <li key={notice.notification_id}>
         <span>{notice.message}</span>
+        {onOpen && <button type="button" className="small-action" onClick={() => onOpen(notice)}>Open</button>}
         <button type="button" className="small-action" disabled={acknowledging !== null} onClick={() => onAcknowledge(notice.notification_id)}>
           {acknowledging === notice.notification_id ? 'Acknowledging' : 'Acknowledge'}
         </button>
@@ -1109,7 +1135,7 @@ function FrontOfficeNotifications(props) {
     </button>
     {open && <section id="front-office-notification-panel" className="surface front-office-notification-panel" aria-label="Notifications">
       <h2>Notifications</h2>
-      <RoomNoticeList {...props} />
+      <RoomNoticeList {...props} onOpen={(notice) => { setOpen(false); props.onOpen(notice) }} />
     </section>}
   </div>
 }
@@ -1260,6 +1286,7 @@ export function Modal({ modal, selectedRecord, guests, rooms, reservations, onCl
           <dt>Room</dt><dd>{selectedRecord.roomLabel}</dd>
           <dt>Stay dates</dt><dd>{selectedRecord.dates}</dd>
           <dt>Status</dt><dd>{selectedRecord.statusLabel}</dd>
+          {selectedRecord.salesPreparation && <><dt>Sales preparation</dt><dd>{selectedRecord.salesPreparation} ({selectedRecord.salesPreparationCompletedAt ? 'Completed by Housekeeping' : 'Awaiting Housekeeping'})</dd></>}
           {selectedRecord.quotedPromotion && <><dt>Quoted promotion</dt><dd>{selectedRecord.quotedPromotion.name} ({Number(selectedRecord.quotedPromotion.percent)}% off)</dd></>}
         </dl>
         <button type="button" className="button button-secondary" onClick={onClose} autoFocus>Close</button>

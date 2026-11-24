@@ -57,7 +57,7 @@ export default function AdminAuditLog({ timeZone, refreshKey }) {
       await exporter({
         title: `Administrator audit (${all.startDate} to ${all.endDate})`,
         fileName: `administrator-audit-${all.startDate}-${all.endDate}`,
-        columns, rows: all.rows,
+        columns, rows: all.rows, footer: 'Exported by Admin',
       })
     } catch (error) {
       setExportError(error.message)

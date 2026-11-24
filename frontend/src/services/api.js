@@ -133,6 +133,8 @@ export const adminApi = {
   staff: () => request('/admin/staff'),
   createStaff: (staff) => request('/admin/staff', json('POST', staff)),
   updateStaff: (id, fields) => request(`/admin/staff/${id}`, json('PATCH', fields)),
+  reportCatalog: () => request('/admin/reports'),
+  exportReports: (filters) => request(`/admin/reports/export?${new URLSearchParams(filters)}`),
   audit: (filters) => request(`/admin/audit?${new URLSearchParams(filters)}`),
   activity: (limit = 50) => request(`/admin/activity?limit=${limit}`),
   settings: () => request('/admin/settings'),

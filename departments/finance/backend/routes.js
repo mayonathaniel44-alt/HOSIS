@@ -30,7 +30,8 @@ router.get('/overview', async (req, res) => {
       ) l ON l.emp = e.id GROUP BY e.dept ORDER BY e.dept`),
     db.query(`SELECT details->>'payment' AS status, count(*)::int AS records,
       sum((details->>'amount')::numeric) AS amount
-      FROM sales_marketing_records WHERE kind = 'sale' GROUP BY details->>'payment' ORDER BY status`),
+      FROM sales_marketing_records WHERE kind = 'sale' AND NOT archived
+        AND details->>'status' IS DISTINCT FROM 'Cancelled' GROUP BY details->>'payment' ORDER BY status`),
   ])
   res.json({ invoices: invoices.rows, totals: totals.rows[0], expenses: expenses.rows, staffing: staffing.rows, sales: sales.rows })
 })

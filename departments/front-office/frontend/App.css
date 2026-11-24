@@ -2661,3 +2661,11 @@ tbody tr:last-child td {
 .front-office-report-feedback {
   margin: 12px 18px;
 }
+
+.workspace-back-to-admin {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  z-index: 8;
+  box-shadow: 0 4px 16px rgba(19, 14, 65, .22);
+}

@@ -78,14 +78,63 @@ router.get('/:id', async (req, res) => {
       ORDER BY t.created_at DESC LIMIT 1`,
     [roomId]
   );
+  const { rows: salesPreparations } = await db.query(
+    `SELECT reservation_id, confirmation_code, check_in, check_out, preparation, completed_at
+     FROM sales_stay_handoffs
+     WHERE room_id=$1 AND preparation IS NOT NULL AND status IN ('CONFIRMED','CHECKED_IN')
+     ORDER BY check_in, reservation_id`, [roomId]
+  );
   res.json({
     room,
     history,
     currentTask: tasks[0] || null,
+    salesPreparations,
     allowedStatuses: canOverride(req.user)
       ? SUPERVISOR_MANUAL_STATUSES.filter((status) => status !== room.room_status)
       : [],
   });
+});
+
+router.post('/:id/sales-preparation/:reservationId/complete', async (req, res) => {
+  if (isViewer(req.user)) throw new HttpError(403, 'Housekeeping staff access required.');
+  const roomId = v.id(req.params.id, 'room id');
+  const reservationId = v.id(req.params.reservationId, 'reservation id');
+  await db.withTransaction(async (client) => {
+    const { rowCount } = await client.query(
+      `SELECT id FROM reservations
+       WHERE id=$1 AND room_id=$2 AND status IN ('CONFIRMED','CHECKED_IN') FOR UPDATE`,
+      [reservationId, roomId]
+    );
+    if (!rowCount) throw new HttpError(409, 'The stay changed. Refresh the room details.');
+    const { rows: [handoff] } = await client.query(
+      'SELECT * FROM sales_stay_handoffs WHERE reservation_id=$1 AND preparation IS NOT NULL',
+      [reservationId]
+    );
+    if (!handoff) throw new HttpError(404, 'Sales preparation not found.');
+    if (handoff.completed_at) return;
+    await client.query(
+      `INSERT INTO sales_preparation_acknowledgments
+         (reservation_id, room_id, check_in, check_out, preparation, completed_by)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (reservation_id) DO UPDATE SET room_id=EXCLUDED.room_id,
+         check_in=EXCLUDED.check_in, check_out=EXCLUDED.check_out, preparation=EXCLUDED.preparation,
+         completed_by=EXCLUDED.completed_by, completed_at=NOW()`,
+      [reservationId, roomId, handoff.check_in, handoff.check_out, handoff.preparation, req.user.id]
+    );
+    await client.query(
+      `INSERT INTO front_office_activity
+         (user_id, action, description, sales_record_id, sales_kind)
+       VALUES ($1,'SALES_PREPARATION_COMPLETED',$2,$3,'sales')`,
+      [req.user.id, 'Housekeeping completed preparation for ' + handoff.confirmation_code, handoff.sale_id]
+    );
+    await client.query(
+      `INSERT INTO hk_front_office_notifications
+         (room_id, notice_type, message, created_by, reservation_id)
+       VALUES ($1,'SALES_PREPARATION',$2,$3,$4)`,
+      [roomId, 'Housekeeping completed preparation for ' + handoff.confirmation_code, req.user.id, reservationId]
+    );
+  });
+  res.json({ completed: true });
 });
 
 // HK-003: routine dirty changes and logged Housekeeping overrides.

@@ -124,6 +124,7 @@ export const api = {
 
   rooms: (q = '') => request('GET', `${HK}/rooms${q}`),
   room: (id) => request('GET', `${HK}/rooms/${id}`),
+  completeSalesPreparation: (roomId, reservationId) => request('POST', `${HK}/rooms/${roomId}/sales-preparation/${reservationId}/complete`),
   setRoomStatus: (id, body) => request('PATCH', `${HK}/rooms/${id}/status`, body),
 
   tasks: (q = '') => request('GET', `${HK}/tasks${q}`),

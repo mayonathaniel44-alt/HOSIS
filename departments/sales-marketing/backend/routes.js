@@ -52,12 +52,17 @@ function recordFields(kind, body) {
   return details
 }
 
+const { manager } = require('./workflow')
+const { router: improvedRouter, lockSales } = require('./improvedRoutes')
 const router = express.Router()
 router.use(authenticate, authorize('SALES_MARKETING', 'ADMIN'))
+router.use('/improved', improvedRouter)
 
 router.get('/overview', async (req, res) => {
   const [records, counts, monthly] = await Promise.all([
-    db.query('SELECT kind, id, details FROM sales_marketing_records ORDER BY created_at DESC, id'),
+    db.query(`SELECT kind, id, details FROM sales_marketing_records
+      WHERE NOT archived AND kind IN ('campaign','inquiry','lead','client','promotion','sale')
+      ORDER BY created_at DESC, id`),
     db.query(`SELECT (SELECT count(*)::int FROM reservations WHERE status <> 'CANCELLED') AS bookings,
       (SELECT count(*)::int FROM rooms WHERE status = 'AVAILABLE') AS available`),
     db.query(`SELECT to_char(month, 'Mon YYYY') AS month, COALESCE(sum(amount), 0)::float8 AS sales
@@ -74,6 +79,9 @@ router.get('/overview', async (req, res) => {
 
 router.use('/records/:kind', (req, res, next) => {
   if (!Object.hasOwn(fields, req.params.kind)) throw appError(404, 'UNKNOWN_COLLECTION', 'Sales collection not found.')
+  if (['campaign', 'promotion'].includes(req.params.kind) && !manager(req.user)) {
+    throw appError(403, 'SALES_POSITION_REQUIRED', 'Sales Head or Admin access required.')
+  }
   next()
 })
 
@@ -93,24 +101,34 @@ router.patch('/records/:kind/:id', async (req, res) => {
   const { kind, id } = req.params
   const { status } = req.body ?? {}
   if (!statuses[kind]?.includes(status)) throw appError(400, 'INVALID_SALES_STATUS', 'Choose a valid status.')
-  const { rows: [record] } = await db.query(`WITH updated AS (
-    UPDATE sales_marketing_records SET details=jsonb_set(details,'{status}',to_jsonb($3::text))
-    WHERE kind=$1 AND id=$2 RETURNING details,id,kind
+  const { rows: [record] } = await db.withTransaction(async (client) => {
+    await lockSales(client)
+    return client.query(`WITH updated AS (
+    UPDATE sales_marketing_records SET details=jsonb_set(details,'{status}',to_jsonb($3::text)), version=version+1, updated_at=NOW()
+    WHERE kind=$1 AND id=$2 AND NOT archived AND NOT (details ? 'workspaceManaged') RETURNING details,id,kind
   ), logged AS (
     INSERT INTO front_office_activity(user_id,action,description)
     SELECT $4,'SALES_RECORD_UPDATED',CONCAT('Changed ',kind,' record ',id,' to ',$3::text,'.') FROM updated
   ) SELECT details FROM updated`, [kind, id, status, req.user.id])
+  })
   if (!record) throw appError(404, 'RECORD_NOT_FOUND', 'Sales record not found.')
   res.json({ ...record.details, id })
 })
 
 router.delete('/records/:kind/:id', async (req, res) => {
-  const { rowCount } = await db.query(`WITH removed AS (
-    DELETE FROM sales_marketing_records WHERE kind=$1 AND id=$2 RETURNING id,kind
+  const { rowCount } = await db.withTransaction(async (client) => {
+    await lockSales(client)
+    return client.query(`WITH removed AS (
+    UPDATE sales_marketing_records SET archived=TRUE, version=version+1, updated_at=NOW()
+    WHERE kind=$1 AND id=$2 AND NOT archived AND NOT (details ? 'workspaceManaged')
+      AND NOT EXISTS (SELECT 1 FROM sales_marketing_records linked, jsonb_each_text(linked.details) entry
+        WHERE right(entry.key, 2) = 'Id' AND entry.value = $2)
+    RETURNING id,kind
   )
   INSERT INTO front_office_activity(user_id,action,description)
   SELECT $3,'SALES_RECORD_DELETED',CONCAT('Deleted ',kind,' record ',id,'.') FROM removed`,
     [req.params.kind, req.params.id, req.user.id])
+  })
   if (!rowCount) throw appError(404, 'RECORD_NOT_FOUND', 'Sales record not found.')
   res.sendStatus(204)
 })
