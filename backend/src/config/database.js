@@ -1,13 +1,29 @@
-const { Pool, types } = require('pg')
-const env = require('./env')
 
-process.env.TZ = env.timeZone
-types.setTypeParser(1082, value => value)
-types.setTypeParser(20, value => { const n = Number(value); if (!Number.isSafeInteger(n)) throw new Error('ID exceeds the supported safe integer range.'); return n })
-const pool = new Pool({ connectionString: env.databaseUrl,
- options: `-c TimeZone=${env.timeZone}`, connectionTimeoutMillis: 5000, statement_timeout: 15000, idle_in_transaction_session_timeout: 30000 })
-pool.on('error', (error) => {
-  console.error('Unexpected PostgreSQL pool error:', error.message)
-})
+const Database = require("better-sqlite3");
+const fs = require("fs");
+const path = require("path");
 
-module.exports = pool
+const databasePath = process.env.HOSIS_DB_PATH || path.resolve(
+  __dirname,
+  "../../../database/hotel_sales.db"
+);
+
+const schemaPath = path.resolve(
+  __dirname,
+  "../../../database/schema/schema.sql"
+);
+
+fs.mkdirSync(path.dirname(databasePath), {
+  recursive: true
+});
+
+const db = new Database(databasePath);
+
+db.pragma("foreign_keys = ON");
+
+const schema = fs.readFileSync(schemaPath, "utf8");
+db.exec(schema);
+
+console.log("SQLite database connected successfully!");
+
+module.exports = db;

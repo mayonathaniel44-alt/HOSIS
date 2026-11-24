@@ -1,0 +1,45 @@
+.auth-loading { min-height: 100vh; display: grid; place-items: center; color: var(--navy); }
+.login-page { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
+.login-brand-panel { background: radial-gradient(ellipse at 80% 10%, #20315d 0%, transparent 55%), linear-gradient(155deg, #101b49, #080f35); color: white; padding: 38px 52px 28px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.login-brand-panel::after { content: ''; position: absolute; width: 640px; height: 640px; border: 1px solid #e8b84e16; border-radius: 50%; bottom: -440px; left: -80px; box-shadow: 0 0 0 65px #e8b84e06, 0 0 0 130px #e8b84e04; pointer-events: none; }
+.login-brand-top { font-size: 14px; font-weight: 800; letter-spacing: 2px; display: flex; align-items: center; gap: 12px; }
+.login-brand-top > span:last-child { border-left: 1px solid #ffffff35; padding-left: 12px; font-size: 9px; font-weight: 500; color: #c0c8df; letter-spacing: 1.8px; }
+.brand-dot { width: 7px; height: 7px; background: var(--gold); border-radius: 50%; }
+.login-brand-content { margin: auto; width: 100%; max-width: 490px; padding: 25px 0 55px; position: relative; z-index: 1; }
+.login-logo { display: block; width: 310px; height: 250px; object-fit: contain; margin: -20px auto 22px; }
+.login-gold-rule { width: 40px; height: 2px; background: var(--gold); margin-bottom: 25px; }
+.login-eyebrow { color: var(--gold); font-size: 10px; font-weight: 800; letter-spacing: 2px; margin-bottom: 16px; }
+.login-brand-content h1 { font-family: 'Playfair Display', serif; font-size: clamp(32px, 3.1vw, 48px); line-height: 1.25; font-weight: 600; letter-spacing: -.8px; }
+.login-brand-content h1 em { color: #edce87; font-weight: 600; }
+.login-brand-description { color: #b9c3db; font-size: 14px; line-height: 1.9; max-width: 350px; margin-top: 23px; }
+.login-brand-footer { display: flex; justify-content: space-between; gap: 16px; color: #a1acc8; letter-spacing: 1.7px; font-size: 8px; padding-top: 22px; border-top: 1px solid #ffffff1c; }
+.login-form-panel { padding: 38px 48px 26px; display: flex; flex-direction: column; background: var(--sand); }
+.login-top-label { display: flex; gap: 8px; align-items: center; justify-content: flex-end; color: #748097; letter-spacing: 1.5px; font-size: 9px; font-weight: 700; }
+.login-form-wrap { width: 100%; max-width: 395px; margin: auto; padding: 65px 0; }
+.login-lock { width: 55px; height: 55px; border: 1px solid #e5d8b8; background: #eee6d4; color: #8c6a26; display: grid; place-items: center; border-radius: 15px; margin-bottom: 28px; }
+.login-form-wrap .login-eyebrow { color: #947235; font-size: 9px; letter-spacing: 1.5px; margin-bottom: 12px; }
+.login-form-wrap h2 { color: var(--navy); font-family: 'Playfair Display', serif; font-size: 40px; font-weight: 600; letter-spacing: -1px; }
+.login-description { color: #7b8597; font-size: 13px; line-height: 1.8; margin-top: 11px; }
+.login-form { margin-top: 33px; }
+.login-form > label { display: block; font-size: 12px; font-weight: 700; margin: 20px 0 9px; }
+.login-input-wrap { display: flex; align-items: center; gap: 12px; padding: 0 15px; border: 1px solid #dfdfd8; border-radius: 9px; background: white; color: #8c96a8; min-height: 52px; transition: border-color .2s, box-shadow .2s; }
+.login-input-wrap:focus-within { border-color: #c8a453; box-shadow: 0 0 0 3px #e8b84e18; }
+.login-input-wrap input { border: 0; background: transparent; outline: none; min-width: 0; width: 100%; height: 50px; color: var(--text); font-size: 13px; }
+.login-input-wrap input:focus-visible { outline: none; }
+.login-input-wrap input::placeholder { color: #a0a6b2; }
+.login-visibility { display: grid; place-items: center; padding: 8px; margin-right: -8px; border: 0; background: transparent; color: #7b8597; border-radius: 5px; }
+.login-submit { width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 12px; background: var(--gold); border: 1px solid #dcae49; border-radius: 9px; color: var(--navy); font-size: 13px; font-weight: 800; margin-top: 28px; box-shadow: 0 5px 15px #be94251b; transition: background .2s; }
+.login-submit:hover { background: #efc568; }
+.login-submit:disabled { opacity: .65; cursor: wait; }
+.login-error { color: #a33333; background: #fae9e5; border: 1px solid #ecc8c0; border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.5; margin-top: 18px; }
+.login-access-note { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 28px; color: #9a844f; }
+.login-access-note p { font-size: 11px; line-height: 1.8; color: #6e788b; }
+.login-access-note span { color: #949baa; font-size: 10px; }
+.login-footer { text-align: center; font-size: 10px; color: #8991a0; line-height: 1.8; }
+.login-footer span { display: block; font-size: 9px; color: #a2a7b0; }
+.signout-button { display: flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; background: white; color: var(--navy); font-size: 12px; white-space: nowrap; }
+.signout-button:hover { background: var(--sand); }
+.auth-signout-error { position: fixed; bottom: 24px; right: 24px; z-index: 1000; }
+@media (min-width: 1600px) { .login-brand-panel { padding-left: 80px; padding-right: 80px; } }
+@media (max-width: 900px) { .login-brand-panel { padding: 30px; } .login-form-panel { padding: 30px; } .login-brand-content h1 { font-size: 33px; } .login-brand-footer span:last-child { display: none; } }
+@media (max-width: 640px) { .login-page { grid-template-columns: 1fr; } .login-brand-panel { padding: 22px 26px; } .login-brand-content { padding: 0; text-align: center; } .login-logo { height: 155px; width: 220px; margin: 5px auto 0; } .login-brand-content h1, .login-brand-description, .login-brand-footer, .login-gold-rule, .login-brand-content .login-eyebrow { display: none; } .login-form-panel { padding: 25px; } .login-top-label { justify-content: center; } .login-form-wrap { padding: 32px 0; } .login-lock { display: none; } .login-form-wrap h2 { font-size: 34px; } .signout-button { padding: 8px; font-size: 11px; } }
