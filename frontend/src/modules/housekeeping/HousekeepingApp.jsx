@@ -150,7 +150,7 @@ export default function HousekeepingApp({ session: shellSession = null, onLogout
         <main className="hk-content hk-content--narrow">
           <PageHeader
             title="Choose a new password"
-            subtitle="Your supervisor gave you a temporary password. Choose your own before you continue."
+            subtitle="Choose your own password to replace the temporary one before continuing."
             actions={<button type="button" className="hk-btn hk-btn--secondary" onClick={logout}>Sign out</button>}
           />
           <PasswordForm

@@ -10,12 +10,13 @@ const { appError } = require('../../../backend/src/lib/errors.js');
 const router = express.Router();
 const run = (fn) => fn;
 const head = authorize('head');
-router.use(authenticate, authorize('ENGINEERING', 'TECHNICIAN'), (req, res, next) => {
+router.use(authenticate, authorize('ENGINEERING', 'TECHNICIAN', 'ADMIN'), (req, res, next) => {
     req.user = {
         id: req.user.id,
         full_name: req.user.name,
         email: req.user.username,
-        role: req.user.role === 'ENGINEERING' ? 'head' : 'technician',
+        role: req.user.role === 'TECHNICIAN' ? 'technician' : 'head',
+        isAdministrator: req.user.role === 'ADMIN',
         active: true
     };
     next();
@@ -28,7 +29,8 @@ const publicUser = (user) => ({
     role: user.role,
     active: user.active,
     staffId: String(user.id),
-    integrated: true
+    integrated: true,
+    isAdministrator: !!user.isAdministrator
 });
 
 const staffDirectory = (client = pool) => client.query(

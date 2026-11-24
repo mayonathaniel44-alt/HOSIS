@@ -8,6 +8,7 @@ const router = express.Router()
 router.use(authenticate, authorize('FRONT_OFFICE', 'ADMIN'))
 
 router.get('/dashboard', controller.dashboard)
+router.get('/reports/activity', controller.activityReport)
 router.get('/reports/stay-activity', controller.stayActivity)
 
 router.route('/guests')

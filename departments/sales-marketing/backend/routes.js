@@ -81,7 +81,11 @@ router.post('/records/:kind', async (req, res) => {
   const { kind } = req.params
   const details = recordFields(kind, req.body)
   const id = randomUUID()
-  await db.query('INSERT INTO sales_marketing_records (kind, id, details) VALUES ($1, $2, $3)', [kind, id, details])
+  await db.query(`WITH created AS (
+    INSERT INTO sales_marketing_records (kind, id, details) VALUES ($1, $2, $3) RETURNING id,kind
+  )
+  INSERT INTO front_office_activity(user_id,action,description)
+  SELECT $4,'SALES_RECORD_CREATED',CONCAT('Created ',kind,' record ',id,'.') FROM created`, [kind, id, details, req.user.id])
   res.status(201).json({ ...details, id })
 })
 
@@ -89,16 +93,24 @@ router.patch('/records/:kind/:id', async (req, res) => {
   const { kind, id } = req.params
   const { status } = req.body ?? {}
   if (!statuses[kind]?.includes(status)) throw appError(400, 'INVALID_SALES_STATUS', 'Choose a valid status.')
-  const { rows: [record] } = await db.query(`UPDATE sales_marketing_records
-    SET details = jsonb_set(details, '{status}', to_jsonb($3::text))
-    WHERE kind = $1 AND id = $2 RETURNING details`, [kind, id, status])
+  const { rows: [record] } = await db.query(`WITH updated AS (
+    UPDATE sales_marketing_records SET details=jsonb_set(details,'{status}',to_jsonb($3::text))
+    WHERE kind=$1 AND id=$2 RETURNING details,id,kind
+  ), logged AS (
+    INSERT INTO front_office_activity(user_id,action,description)
+    SELECT $4,'SALES_RECORD_UPDATED',CONCAT('Changed ',kind,' record ',id,' to ',$3::text,'.') FROM updated
+  ) SELECT details FROM updated`, [kind, id, status, req.user.id])
   if (!record) throw appError(404, 'RECORD_NOT_FOUND', 'Sales record not found.')
   res.json({ ...record.details, id })
 })
 
 router.delete('/records/:kind/:id', async (req, res) => {
-  const { rowCount } = await db.query('DELETE FROM sales_marketing_records WHERE kind = $1 AND id = $2',
-    [req.params.kind, req.params.id])
+  const { rowCount } = await db.query(`WITH removed AS (
+    DELETE FROM sales_marketing_records WHERE kind=$1 AND id=$2 RETURNING id,kind
+  )
+  INSERT INTO front_office_activity(user_id,action,description)
+  SELECT $3,'SALES_RECORD_DELETED',CONCAT('Deleted ',kind,' record ',id,'.') FROM removed`,
+    [req.params.kind, req.params.id, req.user.id])
   if (!rowCount) throw appError(404, 'RECORD_NOT_FOUND', 'Sales record not found.')
   res.sendStatus(204)
 })

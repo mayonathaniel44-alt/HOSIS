@@ -28,6 +28,16 @@ async function lockRoom(client, roomId) {
   return rows[0];
 }
 
+// Use the same room-before-task lock order as Front Office room moves.
+async function lockCleaningTaskRoom(client, taskId) {
+  const { rows: [task] } = await client.query(
+    'SELECT room_id FROM hk_cleaning_tasks WHERE task_id = $1',
+    [taskId]
+  );
+  if (!task) throw new HttpError(404, 'Cleaning task not found.');
+  return lockRoom(client, task.room_id);
+}
+
 async function notifyFrontOffice(client, roomId, message, staffId, noticeType = 'ROOM_READY') {
   await client.query(
     'INSERT INTO hk_front_office_notifications (room_id, message, created_by, notice_type) VALUES ($1, $2, $3, $4)',
@@ -111,6 +121,7 @@ module.exports = {
   FRONT_OFFICE_HELD,
   changeRoomStatus,
   lockRoom,
+  lockCleaningTaskRoom,
   notifyFrontOffice,
   assertNotOutOfOrder,
 };

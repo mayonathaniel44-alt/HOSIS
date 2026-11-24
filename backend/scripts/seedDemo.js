@@ -310,8 +310,8 @@ async function main() {
       VALUES ($1, $2, 'AIRCON', 'Air-conditioning unit is not cooling and requires Engineering inspection', true)`, [roomId(104), ids.housekeeping])
     await ensureHousekeepingInventory(db)
     const { rows: [lodging] } = await db.query(`INSERT INTO invoices
-      (invoice_number, guest_id, reservation_id, amount, status, notes, created_by)
-      VALUES ('INV-RM-2026-001', $1, $2, 2500, 'PAID', 'Standard room accommodation charge', $3) RETURNING id`,
+      (invoice_number, guest_id, reservation_id, amount, status, notes, created_by, charge_type)
+      VALUES ('INV-RM-2026-001', $1, $2, 2500, 'PAID', 'Standard room accommodation charge', $3, 'LODGING') RETURNING id`,
     [guest.id, stay.id, ids.front_office])
     await db.query(`INSERT INTO payments (invoice_id, amount, payment_method, reference, recorded_by)
       VALUES ($1, 2500, 'CASH', 'OR-2026-001', $2)`, [lodging.id, ids.front_office])

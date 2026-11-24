@@ -127,6 +127,11 @@ async function apiRequest(url, options = {}) {
 async function initializeApplication() {
     try {
         currentAccount = await apiRequest('/api/me');
+        const adminConsoleLink = document.getElementById('adminConsoleLink');
+        if (adminConsoleLink && currentAccount.isAdministrator) {
+            adminConsoleLink.hidden = false;
+            adminConsoleLink.addEventListener('click', () => window.location.assign('/'), { once: true });
+        }
         db = await apiRequest('/api/data');
         for (const collection of COLLECTIONS) {
             if (!Array.isArray(db[collection])) db[collection] = [];

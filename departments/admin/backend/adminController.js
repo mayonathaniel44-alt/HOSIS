@@ -13,6 +13,7 @@ module.exports = {
   listStaff: controller(() => service.listStaff()),
   createStaff: controller((req) => service.createStaff(req.body, req.user.id), 201),
   updateStaff: controller((req) => service.updateStaff(Number(req.params.id), req.body, req.user.id)),
+  auditReport: controller((req) => service.auditReport(req.query)),
   listActivity: controller((req) => service.listActivity(req.query.limit)),
   getSettings: controller(() => service.getSettings()),
   updateSettings: controller((req) => service.updateSettings(req.body, req.user.id)),

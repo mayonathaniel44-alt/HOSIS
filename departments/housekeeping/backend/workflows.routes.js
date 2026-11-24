@@ -196,6 +196,8 @@ router.patch('/integrations/finance/charge-findings/:id', authorize('FINANCE'), 
     const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
     let invoiceId = null;
     if (decision === 'APPROVE') {
+      // Checkout and new stay charges share the reservation lock.
+      if (row.reservation_id) await client.query('SELECT id FROM reservations WHERE id=$1 FOR UPDATE', [row.reservation_id]);
       const code = `HK-${String(row.finding_id).padStart(8, '0')}`;
       const { rows: invoices } = await client.query(
         `INSERT INTO finance_invoices

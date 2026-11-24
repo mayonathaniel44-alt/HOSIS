@@ -3,7 +3,7 @@ const db = require('../../../backend/src/config/db.js');
 const HttpError = require('../../../backend/src/utils/httpError.js');
 const v = require('./validate.js');
 const { requirePosition } = require('../../../backend/src/middleware/auth.js');
-const { changeRoomStatus, assertNotOutOfOrder, FRONT_OFFICE_HELD } = require('./roomStatus.js');
+const { lockCleaningTaskRoom, changeRoomStatus, assertNotOutOfOrder, FRONT_OFFICE_HELD } = require('./roomStatus.js');
 
 const router = express.Router();
 const REQUIRED_CHECKS = ['bed', 'bathroom', 'amenities', 'floors', 'fixtures'];
@@ -66,6 +66,7 @@ router.post('/', requirePosition('INSPECTOR', 'SUPERVISOR'), async (req, res) =>
   }
 
   const result = await db.withTransaction(async (client) => {
+    await lockCleaningTaskRoom(client, taskId);
     const { rows: tasks } = await client.query(
       'SELECT * FROM hk_cleaning_tasks WHERE task_id = $1 FOR UPDATE',
       [taskId]

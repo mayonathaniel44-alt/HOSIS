@@ -37,7 +37,10 @@ async function getSettings() {
 async function updateSettings(body, userId) {
   const settings=validation.hotelSettings(body)
   if(settings.timeZone !== env.timeZone) throw require('../../../backend/src/lib/errors.js').appError(400,'SERVER_TIME_ZONE','Set DB_TIME_ZONE on the backend and restart to change the hotel time zone.')
-  return model.updateSettings(settings, userId)
+  if (typeof body.revision !== 'string' || !Number.isFinite(Date.parse(body.revision))) {
+    throw require('../../../backend/src/lib/errors.js').appError(400, 'SETTINGS_REVISION_REQUIRED', 'Refresh hotel settings before saving.')
+  }
+  return model.updateSettings({ ...settings, revision: body.revision }, userId)
 }
 
 module.exports = {
@@ -46,6 +49,7 @@ module.exports = {
   createStaff,
   updateStaff,
   listActivity,
+  auditReport: (query) => model.auditReport(validation.auditFilters(query)),
   getSettings,
   updateSettings,
 }

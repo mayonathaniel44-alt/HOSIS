@@ -24,11 +24,6 @@
   color: #fff;
 }
 
-.admin-front-office-link {
-  margin-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, .13);
-}
-
 .admin-sidebar-bottom .help-card {
   margin-top: 12px;
 }
@@ -491,10 +486,6 @@
     display: inline-grid;
   }
 
-  .admin-front-office-link {
-    margin-top: 4px;
-  }
-
   .admin-topbar-actions {
     gap: 8px;
   }
@@ -570,4 +561,9 @@
   .admin-info-strip {
     align-items: flex-start;
   }
+}
+
+.admin-audit-filters {
+  padding: 16px 20px;
+  align-items: end;
 }

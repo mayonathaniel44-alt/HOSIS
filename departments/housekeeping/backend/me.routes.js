@@ -112,7 +112,8 @@ router.get('/me/reports', async (req, res) => {
   const { rows } = await db.query(
     `SELECT * FROM (
        SELECT 'FRONT_OFFICE' AS sent_to, CONCAT('FINDING-', f.finding_id) AS id, r.room_number,
-              CONCAT(REPLACE(f.category, '_', ' '), ': ', f.description,
+              CONCAT(CASE WHEN f.category='EXCESSIVE_CLEANING' AND f.description ILIKE 'Excessive mess:%'
+                          THEN f.description ELSE CONCAT(REPLACE(f.category, '_', ' '), ': ', f.description) END,
                 CASE WHEN f.final_amount IS NULL THEN '' ELSE CONCAT(' - final charge PHP ', f.final_amount) END) AS details,
               f.status, f.reported_at
          FROM hk_charge_findings f JOIN hk_rooms r ON r.room_id = f.room_id

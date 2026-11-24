@@ -43,6 +43,14 @@ test(
       assert.equal(response.status, status, `${method} ${path}: ${raw}`)
       return data?.data ?? data
     }
+    async function settleLodging(reservationId, guestId) {
+      const invoice = await api('POST','/front-office/invoices','fo',{
+        guestId, reservationId, amount: '50.00', chargeType: 'LODGING',
+      },201)
+      await api('POST',`/front-office/invoices/${invoice.id}/payments`,'fo',{
+        amount: '50.00', paymentMethod: 'CASH',
+      },201)
+    }
     try {
       await pool.query('DELETE FROM auth_attempts')
     const hash = await bcrypt.hash(password, 10)
@@ -406,6 +414,70 @@ test(
           )
         },
       )
+      await t.test('Admin staff controls, audit exports and workspace access preserve permissions', async () => {
+        const username = prefix + '.new'
+        const newStaff = await api('POST','/admin/staff','admin',{username,password,role:'FRONT_OFFICE'},201)
+        const fresh = await api('POST','/auth/login',null,{username,password,role:'FRONT_OFFICE'})
+        assert.equal(fresh.user.mustChangePassword,true)
+        await api('GET','/front-office/dashboard',fresh,undefined,403)
+        const permanent = await api('POST','/auth/password',fresh,{currentPassword:password,newPassword:password+'permanent'})
+        assert.equal(permanent.user.mustChangePassword,false)
+        await api('PATCH',`/admin/staff/${newStaff.id}`,'admin',{firstName:'Test'})
+        await api('GET','/front-office/dashboard',permanent)
+        await api('PATCH',`/admin/staff/${newStaff.id}`,'admin',{password})
+        await api('GET','/front-office/dashboard',permanent,undefined,401)
+        const reset = await api('POST','/auth/login',null,{username,password,role:'FRONT_OFFICE'})
+        assert.equal(reset.user.mustChangePassword,true)
+        await api('PATCH',`/admin/staff/${newStaff.id}`,'admin',{role:'HOUSEKEEPING'},400)
+        await api('PATCH',`/admin/staff/${newStaff.id}`,'admin',{role:'HOUSEKEEPING',position:'HOUSEKEEPER'})
+        const { rows:[newRoom] } = await pool.query(
+          "INSERT INTO rooms(room_number,room_type,floor,status) VALUES($1,'Suite','2','DIRTY') RETURNING id", [prefix.slice(-10)+'admin'],
+        )
+        const task = await api('POST','/housekeeping/tasks','sup',{roomId:newRoom.id,taskType:'TOUCH_UP',staffId:newStaff.id},201)
+        await api('PATCH',`/admin/staff/${newStaff.id}`,'admin',{isActive:false},409)
+        await api('PATCH',`/housekeeping/tasks/${task.task.task_id}`,'sup',{staffId:null})
+        await api('PATCH',`/admin/staff/${newStaff.id}`,'admin',{isActive:false})
+        const { rows:[retired] } = await pool.query("INSERT INTO users(username,password_hash,role,is_active) VALUES($1,'test-only','FOOD_BEVERAGE',false) RETURNING id",[prefix+'.retired'])
+        await api('PATCH',`/admin/staff/${retired.id}`,'admin',{isActive:true},409)
+        const settings = await api('GET','/admin/settings','admin')
+        const saved = await api('PUT','/admin/settings','admin',{...settings,supportPhone:'555-0100'})
+        assert.equal(saved.supportPhone,'555-0100')
+        await api('PUT','/admin/settings','admin',{...settings,supportPhone:'555-0101'},409)
+        await api('GET','/hr/bootstrap','admin')
+        await api('GET','/engineering/data','admin')
+        await api('GET','/finance/overview','admin')
+        await api('GET','/sales-marketing/overview','admin')
+        await api('GET','/admin/audit','fo',undefined,403)
+        for (const period of ['day','week','month','year']) {
+          const query = `period=${period}&date=${dates.today}&actor=${prefix}.admin`
+          const report = await api('GET','/admin/audit?'+query,'admin')
+          const exported = await api('GET','/admin/audit?'+query+'&export=1','admin')
+          assert.ok(report.rows.some((event) => event.action==='ADMIN_SETTINGS_UPDATED'))
+          assert.equal(exported.rows.length,report.total)
+        }
+        await pool.query(`INSERT INTO front_office_activity(user_id,action,description)
+          SELECT $1,'ADMIN_EXPORT_TEST','Record ' || i FROM generate_series(1,55) i`, [accounts.admin])
+        const pageOne = await api('GET','/admin/audit?module=Administration&page=1','admin')
+        const pageTwo = await api('GET','/admin/audit?module=Administration&page=2','admin')
+        const bulk = await api('GET','/admin/audit?module=Administration&export=1','admin')
+        assert.equal(pageOne.rows.length,50)
+        assert.ok(pageTwo.rows.length >= 5)
+        assert.equal(bulk.rows.length,pageOne.total)
+        assert.ok(!pageTwo.rows.some((event) => pageOne.rows.some((first) => first.id === event.id)))
+        const sales = await api('GET','/admin/audit?module=Sales+%26+Marketing','admin')
+        assert.ok(sales.rows.some((event) => event.action==='SALES_RECORD_CREATED'))
+      })
+
+      await t.test('Front Office rejects past bookings and invoices on cancelled stays', async () => {
+        const { rows: [day] } = await pool.query("SELECT (CURRENT_DATE-1)::text AS yesterday")
+        const draft = { guestId: guest.id, roomType: 'Suite', checkIn: day.yesterday, checkOut: dates.today }
+        await api('POST','/front-office/reservations','fo',draft,400)
+        await api('GET',`/front-office/rooms/availability?checkIn=${day.yesterday}&checkOut=${dates.today}`,'fo',undefined,400)
+        const stay = await api('POST','/front-office/reservations','fo',{...draft,checkIn:dates.today,checkOut:dates.tomorrow},201)
+        await api('DELETE',`/front-office/reservations/${stay.id}`,'fo',undefined,204)
+        await api('POST','/front-office/invoices','fo',{guestId:guest.id,reservationId:stay.id,amount:'50.00'},409)
+      })
+
       await t.test('Front Office finds rooms for stay dates and prevents concurrent conflicts', async () => {
         const { rows: [available] } = await pool.query(
           "INSERT INTO rooms(room_number,room_type,floor) VALUES($1,'Suite','2') RETURNING id",
@@ -485,6 +557,9 @@ test(
         await api('POST',`/housekeeping/guest-requests/${linked.request_id}/complete`,'sup',{completionNotes:'Delivered'})
         const deskRequests = await api('GET','/front-office/guest-requests','fo')
         assert.equal(deskRequests.find((item)=>item.id===request.id).completionNotes,'Delivered')
+        const blocked = await api('POST',url+'/check-out','fo',undefined,409)
+        assert.equal(blocked.error.code,'LODGING_INVOICE_REQUIRED')
+        await settleLodging(stay.id, guest.id)
         await api('POST',url+'/check-out','fo')
         const items=await api('GET',url+'/lost-items','fo')
         assert.ok(items.some((item)=>item.reference===found.storage_label))
@@ -653,6 +728,7 @@ test(
             `/front-office/reservations/${reservation.id}/check-in`,
             'fo',
           )
+          await settleLodging(reservation.id, guest.id)
           await api(
             'POST',
             `/front-office/reservations/${reservation.id}/check-out`,
@@ -839,6 +915,14 @@ test(
           assert.equal(approved.finding.status, 'APPROVED')
           assert.equal(approved.finding.final_amount, '725.00')
           assert.ok(approved.finding.finance_invoice_id)
+          const folio = await api('GET',`/front-office/reservations/${reservation.id}/folio`,'fo')
+          assert.equal(Number(folio.balance),725)
+          assert.ok(folio.invoices.some((invoice) => invoice.source === 'Finance'))
+          const report = await api('GET',`/front-office/reports/activity?period=day&date=${dates.today}&search=forwarded+finance`,'fo')
+          assert.ok(report.rows.some((entry) => entry.action === 'HOUSEKEEPING_FINDING_FORWARDED_TO_FINANCE'))
+          const audit = await api('GET','/admin/audit?module=Housekeeping','admin')
+          assert.ok(audit.rows.some((entry) => entry.action === 'FORWARDED_TO_FINANCE'))
+
 
           const { rows: invoiceItems } = await pool.query(
             `SELECT i.invoice_code, l.amount, l.source

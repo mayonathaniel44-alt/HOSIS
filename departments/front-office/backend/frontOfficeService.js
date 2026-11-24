@@ -1,3 +1,4 @@
+const { today } = require('../../../backend/src/config/db.js')
 const model = require('./frontOfficeModel.js')
 const money = require('../../../backend/src/lib/money.js')
 const { appError } = require('../../../backend/src/lib/errors.js')
@@ -35,6 +36,17 @@ async function dashboard() {
   return model.dashboard()
 }
 
+async function activityReport(period = 'day', day, { search, page, exportAll } = {}) {
+  if (!['day', 'week', 'month', 'year'].includes(period)) {
+    throw badRequest('INVALID_PERIOD', 'Choose day, week, month, or year.')
+  }
+  return model.activityReport(period, day === undefined ? null : date(day, 'date'), {
+    search: optionalText(search, 'search', 250) || '',
+    page: page === undefined ? 1 : positiveInteger(page, 'page'),
+    exportAll: exportAll === '1',
+  })
+}
+
 async function stayActivity(day) {
   return model.stayActivity(day === undefined ? null : date(day, 'date'))
 }
@@ -50,6 +62,7 @@ async function getGuest(id) {
 async function createReservation(body, userId) {
   const checkIn = date(body.checkIn, 'checkIn')
   const checkOut = date(body.checkOut, 'checkOut')
+  if (checkIn < today()) throw badRequest('PAST_ARRIVAL_DATE', 'Choose today or a future check-in date.')
   if (checkOut <= checkIn) throw badRequest('INVALID_STAY', 'Check-out must be later than check-in.')
   let guestId = body.guestId === undefined || body.guestId === null || body.guestId === ''
     ? null
@@ -95,6 +108,7 @@ async function getReservation(id) {
 async function updateReservation(id, body, userId) {
   const fields = {}
   if (Object.hasOwn(body, 'checkIn')) fields.checkIn = date(body.checkIn, 'checkIn')
+  if (fields.checkIn && fields.checkIn < today()) throw badRequest('PAST_ARRIVAL_DATE', 'Choose today or a future check-in date.')
   if (Object.hasOwn(body, 'checkOut')) fields.checkOut = date(body.checkOut, 'checkOut')
   if (Object.hasOwn(body, 'roomId')) fields.roomId = body.roomId === null ? null : positiveInteger(body.roomId, 'roomId')
   if (Object.hasOwn(body, 'roomType')) fields.roomType = text(body.roomType, 'roomType', 100)
@@ -124,6 +138,7 @@ async function listRooms(search) {
 async function availableRooms(arrival, departure) {
   const checkIn = date(arrival, 'checkIn')
   const checkOut = date(departure, 'checkOut')
+  if (checkIn < today()) throw badRequest('PAST_ARRIVAL_DATE', 'Choose today or a future check-in date.')
   if (checkOut <= checkIn) throw badRequest('INVALID_STAY', 'Check-out must be later than check-in.')
   return model.availableRooms(checkIn, checkOut)
 }
@@ -179,6 +194,7 @@ async function createRequest(body, userId) {
 }
 
 async function updateRequest(id, body, userId) {
+  if (Object.hasOwn(body, 'roomId')) return model.sendRequestToHousekeeping(id, positiveInteger(body.roomId, 'roomId'), userId)
   const fields = {}
   if (Object.hasOwn(body, 'status')) {
     fields.status = text(body.status, 'status', 30).toUpperCase()
@@ -214,6 +230,10 @@ async function listInvoicePromotions(reservationId) {
 async function createInvoice(body, userId) {
   const amount = money(body.amount, 'amount')
   if (Number(amount) <= 0) throw badRequest('INVALID_AMOUNT', 'Invoice amount must be greater than zero.')
+  const chargeType = body.chargeType ?? 'LODGING'
+  if (!['LODGING', 'OTHER'].includes(chargeType)) {
+    throw badRequest('INVALID_CHARGE_TYPE', 'Choose lodging or another charge.')
+  }
   return model.createInvoice({
     guestId: positiveInteger(body.guestId, 'guestId'),
     reservationId: body.reservationId === undefined || body.reservationId === null || body.reservationId === ''
@@ -221,6 +241,7 @@ async function createInvoice(body, userId) {
       : positiveInteger(body.reservationId, 'reservationId'),
     amount,
     promotionId: optionalText(body.promotionId, 'promotionId', 100),
+    chargeType,
     notes: optionalText(body.notes, 'notes', 2000),
   }, userId)
 }
@@ -324,6 +345,7 @@ function badRequest(codeName, message) {
 module.exports = {
   dashboard,
   stayActivity,
+  activityReport,
   listGuests,
   getGuest,
   createGuest,

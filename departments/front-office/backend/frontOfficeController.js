@@ -14,6 +14,9 @@ const search = (req) => typeof req.query.search === 'string' ? req.query.search.
 
 module.exports = {
   dashboard: controller(() => service.dashboard()),
+  activityReport: controller((req) => service.activityReport(req.query.period, req.query.date, {
+    search: req.query.search, page: req.query.page, exportAll: req.query.export,
+  })),
   stayActivity: controller((req) => service.stayActivity(req.query.date)),
   listGuests: controller((req) => service.listGuests(search(req))),
   getGuest: controller((req) => service.getGuest(id(req))),

@@ -86,3 +86,8 @@ const TONES = {
 export function tone(value) {
   return TONES[value] || 'grey'
 }
+
+export function findingLabel({ category, description }) {
+  if (category === 'EXCESSIVE_CLEANING' && /^Excessive mess:/i.test(description || '')) return 'Excessive mess'
+  return category.replaceAll('_', ' ')
+}

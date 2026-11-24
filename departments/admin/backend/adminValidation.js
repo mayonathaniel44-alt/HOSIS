@@ -75,6 +75,23 @@ function activityLimit(value) {
   return limit
 }
 
+function auditFilters(query) {
+  const period = query.period ?? 'day'
+  if (!['day','week','month','year'].includes(period)) throw appError(400,'INVALID_PERIOD','Choose day, week, month, or year.')
+  const date = optionalText(query.date, 'Date', 10)
+  if (date) {
+    const parsed = new Date(date + 'T00:00:00Z')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.startsWith('0000-')
+      || !Number.isFinite(parsed.valueOf()) || parsed.toISOString().slice(0,10) !== date) {
+      throw appError(400,'INVALID_DATE','Choose a valid calendar date.')
+    }
+  }
+  const page = query.page === undefined ? 1 : Number(query.page)
+  if (!Number.isSafeInteger(page) || page < 1 || page > 1000000) throw appError(400,'INVALID_PAGE','Choose a valid page.')
+  return { period, date, page, module: optionalText(query.module,'Department',40),
+    actor: optionalText(query.actor,'Actor',100), exportAll: query.export === '1' }
+}
+
 function hotelSettings(body) {
   const settings = {
     hotelName: requiredText(body.hotelName, 'Hotel name', 120),
@@ -101,5 +118,7 @@ module.exports = {
   staffRole,
   staffUpdate,
   activityLimit,
+  auditFilters,
   hotelSettings,
+  staffRoles,
 }

@@ -1,3 +1,4 @@
+const env = require('../../../backend/src/config/env.js')
 const crypto = require('node:crypto')
 const pool = require('../../../backend/src/config/database.js')
 const { appError } = require('../../../backend/src/lib/errors.js')
@@ -385,7 +386,10 @@ async function checkOut(id, userId) {
     }
     const folio = await stayFolio(id, client)
     if (Number(folio.balance) > 0) {
-      throw appError(409, 'STAY_BALANCE_DUE', 'Settle the outstanding stay balance before checking out.')
+      throw appError(409, 'STAY_BALANCE_DUE', 'Settle all Front Office and Finance charges before checking out.')
+    }
+    if (!folio.hasLodging) {
+      throw appError(409, 'LODGING_INVOICE_REQUIRED', 'Create a lodging invoice for this stay before checking out.')
     }
     if (reservation.room_id) {
       await lockRooms(client, [reservation.room_id])
@@ -500,13 +504,20 @@ async function stayFolio(id, client = pool) {
   const { rows: [folio] } = await client.query(
     `SELECT r.id,
        COALESCE(SUM(charges.balance),0)::numeric AS balance,
-       COALESCE(jsonb_agg(to_jsonb(charges) ORDER BY charges.id) FILTER (WHERE charges.id IS NOT NULL), '[]'::jsonb) AS invoices
+       COALESCE(BOOL_OR(charges."chargeType" = 'LODGING'), FALSE) AS "hasLodging",
+       COALESCE(jsonb_agg(to_jsonb(charges) ORDER BY charges.source, charges.id) FILTER (WHERE charges.id IS NOT NULL), '[]'::jsonb) AS invoices
      FROM reservations r
      LEFT JOIN LATERAL (
        SELECT i.id, i.invoice_number AS "invoiceNumber", i.amount, i.status,
+         'Front Office' AS source, i.charge_type AS "chargeType",
          GREATEST(i.amount - COALESCE(SUM(p.amount),0),0)::numeric AS balance
        FROM invoices i LEFT JOIN payments p ON p.invoice_id=i.id
        WHERE i.reservation_id=r.id AND i.status <> 'VOID' GROUP BY i.id
+       UNION ALL
+       SELECT DISTINCT i.id, i.invoice_code, i.total_amount, i.status,
+         'Finance', 'OTHER', GREATEST(i.balance_due,0)
+       FROM hk_charge_findings f JOIN finance_invoices i ON i.id=f.finance_invoice_id
+       WHERE f.reservation_id=r.id AND f.status='APPROVED' AND i.status NOT IN ('DRAFT','VOID')
      ) charges ON true
      WHERE r.id=$1 GROUP BY r.id`, [id],
   )
@@ -656,8 +667,31 @@ async function createRequest(request, userId) {
                  created_at AS "createdAt"`,
       [request.guestId, request.guestName, request.roomId, request.request, request.priority, userId, request.reservationId, request.dueAt],
     )
+    if (request.roomId) {
+      const linked = await client.query('SELECT request_id FROM hk_guest_requests WHERE front_office_request_id=$1', [rows[0].id])
+      if (!linked.rowCount) throw appError(503, 'HOUSEKEEPING_SYNC_UNAVAILABLE', 'The request could not be sent to Housekeeping.')
+    }
     await recordActivity(client, userId, 'GUEST_REQUEST_CREATED', `Logged a guest request for ${request.guestName}.`)
     return rows[0]
+  })
+}
+
+async function sendRequestToHousekeeping(id, roomId, userId) {
+  return transaction(async (client) => {
+    await client.query('SELECT pg_advisory_xact_lock(742915)')
+    const { rows: [request] } = await client.query(
+      'SELECT room_id, status FROM guest_requests WHERE id=$1 FOR UPDATE', [id],
+    )
+    if (!request) throw notFound('Guest request')
+    if (request.room_id || request.status === 'COMPLETED') {
+      throw appError(409, 'REQUEST_CANNOT_BE_SENT', 'Only open Front Office requests without a room can be sent to Housekeeping.')
+    }
+    await lockRooms(client, [roomId])
+    await client.query('UPDATE guest_requests SET room_id=$2, updated_at=NOW() WHERE id=$1', [id, roomId])
+    const linked = await client.query('SELECT request_id FROM hk_guest_requests WHERE front_office_request_id=$1', [id])
+    if (!linked.rowCount) throw appError(503, 'HOUSEKEEPING_SYNC_UNAVAILABLE', 'The request could not be sent to Housekeeping.')
+    await recordActivity(client, userId, 'GUEST_REQUEST_SENT_TO_HOUSEKEEPING', `Sent guest request #${id} to Housekeeping.`)
+    return { id, roomId }
   })
 }
 
@@ -690,7 +724,7 @@ async function listInvoices(search = '') {
   const term = `%${search.trim()}%`
   const { rows } = await pool.query(
     `SELECT i.id, i.invoice_number AS "invoiceNumber", i.guest_id AS "guestId",
-            i.reservation_id AS "reservationId", i.amount, i.status,
+            i.reservation_id AS "reservationId", i.amount, i.status, i.charge_type AS "chargeType",
             i.issued_at::text AS date, i.notes, i.promotion,
             CONCAT_WS(' ', g.first_name, g.last_name) AS guest,
             rm.room_number AS room,
@@ -713,7 +747,7 @@ async function listInvoices(search = '') {
 async function getInvoice(id) {
   const { rows } = await pool.query(
     `SELECT i.id, i.invoice_number AS "invoiceNumber", i.guest_id AS "guestId",
-            i.reservation_id AS "reservationId", i.amount, i.status,
+            i.reservation_id AS "reservationId", i.amount, i.status, i.charge_type AS "chargeType",
             i.issued_at::text AS date, i.notes, i.promotion,
             CONCAT_WS(' ', g.first_name, g.last_name) AS guest,
             rm.room_number AS room,
@@ -766,6 +800,7 @@ async function createInvoice(invoice, userId) {
       )
       stay = reservationRows[0]
       if (!stay) throw notFound('Reservation')
+      if (stay.status === 'CANCELLED') throw appError(409, 'RESERVATION_CANCELLED', 'A cancelled reservation cannot receive a stay invoice.')
       if (Number(reservationRows[0].guest_id) !== Number(invoice.guestId)) {
         throw appError(400, 'GUEST_RESERVATION_MISMATCH', 'The invoice guest must match the linked reservation guest.')
       }
@@ -792,11 +827,11 @@ async function createInvoice(invoice, userId) {
       `WITH charge AS (
          SELECT round($4::numeric * (100 - COALESCE(($7::jsonb->>'percent')::numeric, 0)) / 100, 2) AS amount
        )
-       INSERT INTO invoices (invoice_number, guest_id, reservation_id, amount, notes, created_by, promotion, status)
-       SELECT $1, $2, $3, charge.amount, $5, $6, $7::jsonb,
+       INSERT INTO invoices (invoice_number, guest_id, reservation_id, amount, notes, created_by, promotion, charge_type, status)
+       SELECT $1, $2, $3, charge.amount, $5, $6, $7::jsonb, $8,
               CASE WHEN charge.amount = 0 THEN 'PAID' ELSE 'UNPAID' END
        FROM charge RETURNING id`,
-      [number, invoice.guestId, invoice.reservationId, invoice.amount, invoice.notes, userId, promotion],
+      [number, invoice.guestId, invoice.reservationId, invoice.amount, invoice.notes, userId, promotion, invoice.reservationId ? invoice.chargeType : 'OTHER'],
     )
     await recordActivity(client, userId, 'INVOICE_CREATED', `Created invoice ${number}.`)
     return rows[0].id
@@ -934,6 +969,55 @@ async function updatePayment(id, fields, userId) {
   return getPayment(id)
 }
 
+async function activityReport(period, day, { search, page, exportAll }) {
+  const pageSize = 25
+  const { rows } = await pool.query(
+    `WITH bounds AS (
+       SELECT date_trunc($1, COALESCE($2::date, CURRENT_DATE)::timestamp)::date AS start_date
+     ), report_range AS (
+       SELECT start_date,
+              (start_date + CASE $1 WHEN 'day' THEN INTERVAL '1 day'
+                 WHEN 'week' THEN INTERVAL '1 week' WHEN 'month' THEN INTERVAL '1 month'
+                 ELSE INTERVAL '1 year' END)::date AS end_date
+       FROM bounds
+     ), events AS (
+       SELECT 'desk-' || a.id AS id, a.action, a.description, a.created_at, a.user_id
+       FROM front_office_activity a CROSS JOIN report_range r
+       WHERE a.created_at >= r.start_date AND a.created_at < r.end_date
+         AND a.action ~ '^(GUEST_|RESERVATION_|ROOM_|INVOICE_|PAYMENT_|HOUSEKEEPING_)'
+       UNION ALL
+       SELECT 'finding-' || e.event_id, 'HOUSEKEEPING_FINDING_' || e.action,
+              CONCAT_WS(': ', f.public_reference, e.notes), e.created_at, e.actor_id
+       FROM hk_charge_finding_events e
+       JOIN hk_charge_findings f ON f.finding_id=e.finding_id
+       CROSS JOIN report_range r
+       WHERE e.created_at >= r.start_date AND e.created_at < r.end_date
+     ), matched AS (
+       SELECT e.id, e.action, e.description, e.created_at, u.username AS staff,
+              TO_CHAR(e.created_at,'YYYY-MM-DD') AS date, TO_CHAR(e.created_at,'HH24:MI:SS') AS time
+       FROM events e LEFT JOIN users u ON u.id=e.user_id
+       WHERE NOT EXISTS (
+         SELECT FROM unnest($3::text[]) term
+         WHERE strpos(LOWER(CONCAT_WS(' ', TO_CHAR(e.created_at,'YYYY-MM-DD HH24:MI:SS'),
+                 e.description, u.username, REPLACE(e.action,'_',' '))), term)=0
+       )
+     ), page_rows AS (
+       SELECT * FROM matched ORDER BY created_at DESC, id DESC LIMIT $4 OFFSET $5
+     )
+     SELECT r.start_date AS "startDate", (r.end_date - 1) AS "endDate",
+            (SELECT COUNT(*)::int FROM matched) AS total, w.*
+     FROM report_range r LEFT JOIN page_rows w ON TRUE
+     ORDER BY w.created_at DESC, w.id DESC`,
+    [period, day, search.toLowerCase().split(/\s+/).filter(Boolean), exportAll ? null : pageSize, exportAll ? 0 : (page - 1) * pageSize],
+  )
+  const [{ startDate, endDate, total }] = rows
+  return {
+    startDate, endDate, total, pageSize,
+    rows: rows.filter(({ id }) => id !== null).map(({ id, action, description, staff, date, time }) =>
+      ({ id, action, description, staff, date, time })),
+  }
+}
+
 async function stayActivity(day) {
   const { rows } = await pool.query(
     `SELECT COALESCE($1::date, CURRENT_DATE)::text AS date,
@@ -961,10 +1045,13 @@ async function dashboard() {
        WHERE r.check_in = CURRENT_DATE AND r.status IN ('CONFIRMED', 'CHECKED_IN')`,
     ),
     pool.query(
-      `SELECT COUNT(*)::integer AS total,
-              COUNT(*) FILTER (WHERE status = 'CHECKED_IN')::integer AS pending
+      `SELECT COUNT(*) FILTER (WHERE check_out=CURRENT_DATE AND status IN ('CONFIRMED','CHECKED_IN','CHECKED_OUT'))::integer AS total,
+              COUNT(*) FILTER (WHERE status='CHECKED_IN' AND check_out<=CURRENT_DATE)::integer AS pending,
+              COUNT(*) FILTER (WHERE status='CHECKED_IN' AND check_out<CURRENT_DATE)::integer AS overdue,
+              COUNT(*) FILTER (WHERE status='CHECKED_OUT'
+                AND actual_checkout_at>=CURRENT_DATE AND actual_checkout_at<CURRENT_DATE+1)::integer AS completed
        FROM reservations
-       WHERE check_out = CURRENT_DATE AND status IN ('CONFIRMED', 'CHECKED_IN')`,
+       WHERE check_out <= CURRENT_DATE OR actual_checkout_at >= CURRENT_DATE`,
     ),
     pool.query(
       `SELECT COUNT(*)::integer AS total,
@@ -983,6 +1070,7 @@ async function dashboard() {
     ),
   ])
   return {
+    timeZone: env.timeZone,
     arrivals: arrivals.rows[0],
     departures: departures.rows[0],
     rooms: roomCounts.rows[0],
@@ -994,6 +1082,7 @@ async function dashboard() {
 module.exports = {
   dashboard,
   stayActivity,
+  activityReport,
   listGuests,
   getGuest,
   createGuest,
@@ -1018,6 +1107,7 @@ module.exports = {
   listRequests,
   createRequest,
   updateRequest,
+  sendRequestToHousekeeping,
   listInvoices,
   listInvoicePromotions,
   listStayPromotions,

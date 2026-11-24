@@ -1,3 +1,4 @@
+import AdminAuditLog from './AdminAuditLog.jsx'
 import { useCallback, useEffect, useState } from 'react'
 import { adminApi, authApi } from '../../../frontend/src/services/api.js'
 import useVisibleRefresh from '../../../frontend/src/useVisibleRefresh.js'
@@ -15,12 +16,14 @@ const staffRoles = [
 ]
 
 const departments = [
-  { name: 'Front Office', status: 'Operational', detail: 'Reservations, guests, rooms, requests, and billing are connected.' },
-  { name: 'Housekeeping', status: 'Operational', detail: 'Shared rooms, cleaning, inspection, requests, notifications and staff sessions.' },
-  { name: 'Engineering', status: 'Operational', detail: 'Repair requests and repair completion are connected to Housekeeping.' },
-  { name: 'Accounting & Finance', status: 'Not integrated', detail: 'Finance staff roles are available; reporting workflows are not connected yet.' },
-  { name: 'Human Resources', status: 'Not integrated', detail: 'HR staff roles are available; employee workflows are not connected yet.' },
+  { id: 'FRONT_OFFICE', name: 'Front Office', detail: 'Reservations, room assignments and guest billing.' },
+  { id: 'HOUSEKEEPING', name: 'Housekeeping', detail: 'Rooms, cleaning, inspections and guest requests.' },
+  { id: 'ENGINEERING', name: 'Engineering', detail: 'Maintenance requests and work orders.' },
+  { id: 'FINANCE', name: 'Accounting & Finance', detail: 'Invoices, payments and approved guest charges.' },
+  { id: 'HR', name: 'Human Resources', detail: 'Employee assignments and leave requests.' },
+  { id: 'SALES_MARKETING', name: 'Sales & Marketing', detail: 'Campaigns, promotions and sales.' },
 ]
+const positions = ['HOUSEKEEPER', 'INSPECTOR', 'SUPERVISOR']
 
 function dateTime(value, timeZone = 'UTC') {
   if (!value) return '—'
@@ -34,11 +37,11 @@ function StatusTag({ tone, children }) {
   return <span className={`status status-${tone}`}><i />{children}</span>
 }
 
-export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHousekeeping, onSignOut }) {
+export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, timeZone }) {
   const [section, setSection] = useState('Overview')
   const [overview, setOverview] = useState(null)
   const [staff, setStaff] = useState([])
-  const [activity, setActivity] = useState([])
+  const [staffEdit, setStaffEdit] = useState(null)
   const [settings, setSettings] = useState(null)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -78,12 +81,6 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
       load = async () => {
         const accounts = await adminApi.staff()
         if (active) setStaff(accounts)
-      }
-    }
-    if (section === 'Audit log') {
-      load = async () => {
-        const events = await adminApi.activity()
-        if (active) setActivity(events)
       }
     }
     if (section === 'Hotel settings') {
@@ -130,6 +127,23 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
     }
   }
 
+  async function saveStaffProfile(event) {
+    event.preventDefault()
+    const { id, role, position, original } = staffEdit
+    const changes = {}
+    for (const field of ['firstName', 'lastName', 'email']) {
+      if ((staffEdit[field] || '') !== (original[field] || '')) changes[field] = staffEdit[field]
+    }
+    if (role !== original.role) changes.role = role
+    if (role === 'HOUSEKEEPING' && (role !== original.role || position !== original.position)) changes.position = position
+    if (!Object.keys(changes).length) {
+      setStaffEdit(null)
+      return
+    }
+    const saved = await runAction(() => adminApi.updateStaff(id, changes), 'Staff profile saved.')
+    if (saved) setStaffEdit(null)
+  }
+
   async function resetPassword(event, id) {
     event.preventDefault()
     const succeeded = await runAction(
@@ -157,7 +171,8 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
   const roomOccupied = Number(frontOffice?.rooms?.occupied || 0)
   const occupancy = roomTotal ? `${Math.round((roomOccupied / roomTotal) * 100)}%` : '—'
   const filteredStaff = staff.filter((member) =>
-    member.username.toLowerCase().includes(staffSearch.trim().toLowerCase())
+    [member.username, member.firstName, member.lastName, member.email].filter(Boolean)
+      .join(' ').toLowerCase().includes(staffSearch.trim().toLowerCase())
     && (staffRoleFilter === 'ALL' || member.role === staffRoleFilter)
     && (staffStatusFilter === 'ALL' || member.isActive === (staffStatusFilter === 'ACTIVE'))
   )
@@ -173,14 +188,13 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
           <div className="admin-brand-caption">ADMIN CONSOLE</div>
         </div>
         <div className="sidebar-label">ADMINISTRATION</div>
-        <nav className="side-nav admin-nav" aria-label="Administrator navigation"><button className="nav-item" onClick={onOpenHousekeeping}>Housekeeping</button>
+        <nav className="side-nav admin-nav" aria-label="Administrator navigation">
           {['Overview', 'Staff & access', 'Audit log', 'Hotel settings', 'Integrations'].map((item) => (
             <button key={item} className={`nav-item ${section === item ? 'nav-active' : ''}`} aria-current={section === item ? 'page' : undefined} onClick={() => { setSection(item); setError(''); setNotice('') }}>
               <i className="admin-nav-mark" aria-hidden="true">{item === 'Overview' ? '⌂' : item === 'Staff & access' ? '♙' : item === 'Audit log' ? '≡' : item === 'Hotel settings' ? '⚙' : '◇'}</i>
               <span>{item}</span>
             </button>
           ))}
-          <button className="nav-item admin-front-office-link" onClick={onOpenFrontOffice}><i className="admin-nav-mark" aria-hidden="true">↗</i><span>Front Office</span></button>
         </nav>
         <div className="sidebar-bottom admin-sidebar-bottom">
           <div className="help-card"><span className="help-icon" aria-hidden="true">✦</span><strong>Administration</strong><p>Manage staff access and connected hotel operations.</p></div>
@@ -197,7 +211,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
           <div className="breadcrumb"><span>Administration</span><strong>{activeSection}</strong></div>
           <div className="topbar-tools admin-topbar-actions">
             <span className="admin-secure"><i /> ADMIN ACCESS</span>
-            <button className="button button-secondary" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading || section === 'Integrations'}>Refresh</button>
+            <button className="button button-secondary" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading || busy || section === 'Integrations'}>Refresh</button>
             <button className="topbar-profile admin-signout" onClick={onSignOut} aria-label="Sign out"><span className="avatar avatar-small admin-avatar">{username.slice(0, 2).toUpperCase()}</span><span><strong>{username}</strong><small>Administrator</small></span></button>
           </div>
         </header>
@@ -225,8 +239,8 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
                   <div className="admin-department-list">
                     {departments.map((department) => (
                       <div className="admin-department-row" key={department.name}>
-                        <span className={`admin-status-dot ${department.status === 'Operational' ? 'admin-status-live' : 'admin-status-pending'}`} />
-                        <span><strong>{department.name}</strong><small><StatusTag tone={department.status === 'Operational' ? 'green' : 'slate'}>{department.status}</StatusTag></small></span>
+                        <span className={`admin-status-dot ${'admin-status-live'}`} />
+                        <span><strong>{department.name}</strong><small><StatusTag tone={'green'}>Connected</StatusTag></small></span>
                         <span className="admin-arrow">›</span>
                       </div>
                     ))}
@@ -236,13 +250,13 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
                   <div className="section-heading admin-panel-heading"><div><h2>Recent activity</h2><p>Latest recorded operational and admin changes.</p></div><button className="link-button" onClick={() => setSection('Audit log')}>Audit log</button></div>
                   <div className="admin-activity-list">
                     {(overview?.recentActivity || []).map((item) => (
-                      <div key={item.id}><span className="admin-activity-dot" /><span><strong>{item.description}</strong><small>{item.actor || 'System'} · {item.module} · {dateTime(item.createdAt, settings?.timeZone)}</small></span></div>
+                      <div key={item.id}><span className="admin-activity-dot" /><span><strong>{item.description}</strong><small>{item.actor || 'System'} · {item.module} · {dateTime(item.createdAt, settings?.timeZone || timeZone)}</small></span></div>
                     ))}
                     {!loading && !overview?.recentActivity?.length && <p className="admin-empty">No activity has been recorded yet.</p>}
                   </div>
                 </section>
               </div>
-              <div className="info-banner admin-info-strip"><span className="info-icon">✦</span><p><strong>Connected operations.</strong> Front Office and Housekeeping share rooms and requests. Engineering can record repairs. Accounting and HR workflows are planned.</p></div>
+              <div className="info-banner admin-info-strip"><span className="info-icon">✦</span><p><strong>Connected operations.</strong> Use Integrations to open any connected department workspace.</p></div>
             </>
           )}
 
@@ -264,14 +278,32 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
                     {newStaff.role==='HOUSEKEEPING' && <label>Position<select value={newStaff.position} onChange={e=>setNewStaff({...newStaff,position:e.target.value})}>{['HOUSEKEEPER','INSPECTOR','SUPERVISOR'].map(p=><option key={p}>{p}</option>)}</select></label>}
                     <label>Department role<select value={newStaff.role} onChange={(event) => setNewStaff({ ...newStaff, role: event.target.value })}>{staffRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                   </div>
-                  <div className="admin-form-footer"><span>Use at least 12 characters (max 72 UTF-8 bytes). Accounts are active; password resets revoke existing sessions.</span><button className="button button-primary" disabled={busy}>Create account</button></div>
+                  <div className="admin-form-footer"><span>Use at least 12 characters (max 72 UTF-8 bytes). Staff must change an initial or reset password before using their workspace.</span><button className="button button-primary" disabled={busy}>Create account</button></div>
                 </form>
               )}
+              {staffEdit && <form className="surface admin-panel admin-staff-form" onSubmit={saveStaffProfile}>
+                <h2>Edit {staffEdit.username}</h2>
+                <div className="admin-form-grid">
+                  <label>First name<input maxLength={100} value={staffEdit.firstName || ''} onChange={(event) => setStaffEdit({ ...staffEdit, firstName: event.target.value })} /></label>
+                  <label>Last name<input maxLength={100} value={staffEdit.lastName || ''} onChange={(event) => setStaffEdit({ ...staffEdit, lastName: event.target.value })} /></label>
+                  <label>Email<input type="email" maxLength={254} value={staffEdit.email || ''} onChange={(event) => setStaffEdit({ ...staffEdit, email: event.target.value })} /></label>
+                  <label>Department role<select required value={staffEdit.role} disabled={staffEdit.isSelf || busy} onChange={(event) => setStaffEdit({ ...staffEdit, role: event.target.value, position: '' })}>
+                    <option value="" disabled>Select a supported role</option>
+                    {staffRoles.map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+                  </select></label>
+                  {staffEdit.role === 'HOUSEKEEPING' && <label>Position<select required value={staffEdit.position} onChange={(event) => setStaffEdit({ ...staffEdit, position: event.target.value })}>
+                    <option value="" disabled>Select a position</option>
+                    {positions.map((position) => <option key={position}>{position}</option>)}
+                  </select></label>}
+                </div>
+                <button type="button" className="button button-secondary" disabled={busy} onClick={() => setStaffEdit(null)}>Cancel</button>
+                <button className="button button-primary" disabled={busy || !staffEdit.role}>Save profile</button>
+              </form>}
               <section className="surface admin-panel admin-table-panel">
                 <div className="list-heading admin-staff-heading">
                   <div><h2>Staff accounts</h2><p>{filteredStaff.length} of {staff.length} accounts · changes are recorded in the audit log</p></div>
                   <div className="admin-staff-filters">
-                    <input type="search" aria-label="Search staff usernames" placeholder="Search username" value={staffSearch} onChange={(event) => setStaffSearch(event.target.value)} />
+                    <input type="search" aria-label="Search staff" placeholder="Name, username or email" value={staffSearch} onChange={(event) => setStaffSearch(event.target.value)} />
                     <select aria-label="Filter by department role" value={staffRoleFilter} onChange={(event) => setStaffRoleFilter(event.target.value)}><option value="ALL">All roles</option>{staffRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                     <select aria-label="Filter by account status" value={staffStatusFilter} onChange={(event) => setStaffStatusFilter(event.target.value)}><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select>
                   </div>
@@ -281,12 +313,13 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
                     const isSelf = String(member.username).toLowerCase() === username.toLowerCase()
                     return (
                       <tr key={member.id}>
-                        <td><strong>{member.username}</strong>{member.role==='HOUSEKEEPING' && <select aria-label={`Position for ${member.username}`} value={member.position} disabled={busy} onChange={e=>runAction(()=>adminApi.updateStaff(member.id,{position:e.target.value}),'Position updated.')}>{['HOUSEKEEPER','INSPECTOR','SUPERVISOR'].map(p=><option key={p}>{p}</option>)}</select>}{isSelf && <small className="admin-self-label">You</small>}</td>
-                        <td><select aria-label={`Role for ${member.username}`} value={member.role} disabled={busy || isSelf} onChange={(event) => runAction(() => adminApi.updateStaff(member.id, { role: event.target.value }), 'Staff role updated.')}>{staffRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
+                        <td><strong>{member.username}</strong><small className="record-subtext">{[member.firstName, member.lastName].filter(Boolean).join(' ')}</small><small className="record-subtext">{member.email}</small>{isSelf && <small className="admin-self-label">You</small>}</td>
+                        <td>{staffRoles.find(([role]) => role === member.role)?.[1] || 'Retired role'}{member.role === 'HOUSEKEEPING' && <small className="record-subtext">{member.position}</small>}</td>
                         <td><span className={member.isActive ? 'admin-account-active' : 'admin-account-inactive'}>{member.isActive ? 'Active' : 'Inactive'}</span></td>
-                        <td>{dateTime(member.createdAt, settings?.timeZone)}</td>
+                        <td>{dateTime(member.createdAt, settings?.timeZone || timeZone)}</td>
                         <td className="admin-actions-cell">
-                          <button className="small-action" disabled={busy || isSelf} onClick={() => runAction(() => adminApi.updateStaff(member.id, { isActive: !member.isActive }), member.isActive ? 'Staff account deactivated.' : 'Staff account activated.')}>{member.isActive ? 'Deactivate' : 'Activate'}</button>
+                          <button className="small-action" disabled={busy} onClick={() => setStaffEdit({ ...member, original: member, isSelf, role: staffRoles.some(([role]) => role === member.role) ? member.role : '' })}>Edit profile</button>
+                          <button className="small-action" disabled={busy || isSelf || (!member.isActive && !staffRoles.some(([role]) => role === member.role))} onClick={() => runAction(() => adminApi.updateStaff(member.id, { isActive: !member.isActive }), member.isActive ? 'Staff account deactivated.' : 'Staff account activated.')}>{member.isActive ? 'Deactivate' : 'Activate'}</button>
                           <button className="small-action small-action-quiet" disabled={busy} onClick={() => { setPasswordResetId(passwordResetId === member.id ? null : member.id); setNewPassword('') }}>Reset password</button>
                           {passwordResetId === member.id && <form className="admin-reset-form" onSubmit={(event) => resetPassword(event, member.id)}><input aria-label={`New password for ${member.username}`} type="password" minLength={12} maxLength={72} required autoComplete="new-password" placeholder="New password (12+ chars)" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /><button disabled={busy}>Save</button></form>}
                         </td>
@@ -300,18 +333,7 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
             </>
           )}
 
-          {section === 'Audit log' && (
-            <>
-              <div className="page-heading admin-page-heading"><div><span className="eyebrow">ACCOUNTABILITY</span><h1>Audit log</h1><p>Review the latest Front Office operations and administrator changes.</p></div><span className="admin-property-name">Most recent 50 events</span></div>
-              <section className="surface admin-panel admin-table-panel">
-                <div className="admin-table-scroll"><table className="full-table"><thead><tr><th>WHEN</th><th>AREA</th><th>ACTOR</th><th>ACTION</th><th>DETAILS</th></tr></thead><tbody>
-                  {activity.map((item) => <tr key={item.id}><td>{dateTime(item.createdAt, settings?.timeZone)}</td><td>{item.module}</td><td>{item.actor || 'Former user'}</td><td><code>{item.action}</code></td><td>{item.description}</td></tr>)}
-                </tbody></table>
-                {!loading && activity.length === 0 && <p className="admin-empty">No activity has been recorded yet.</p>}
-                </div>
-              </section>
-            </>
-          )}
+          {section === 'Audit log' && <AdminAuditLog timeZone={timeZone} refreshKey={refreshKey} />}
 
           {section === 'Hotel settings' && (
             <>
@@ -333,15 +355,12 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenHous
               <div className="admin-integration-grid">
                 {departments.map((department) => (
                   <article className="surface admin-panel admin-integration-card" key={department.name}>
-                    <div className="admin-integration-top"><span className={`admin-status-dot ${department.status === 'Operational' ? 'admin-status-live' : 'admin-status-pending'}`} /><StatusTag tone={department.status === 'Operational' ? 'green' : 'slate'}>{department.status}</StatusTag></div>
+                    <div className="admin-integration-top"><span className={`admin-status-dot ${'admin-status-live'}`} /><StatusTag tone={'green'}>Connected</StatusTag></div>
                     <h2>{department.name}</h2><p>{department.detail}</p>
-                    {department.status === 'Operational'
-                      ? <button className="button button-secondary" onClick={onOpenFrontOffice}>Open workspace</button>
-                      : <button className="button button-secondary" onClick={() => setSection('Staff & access')}>Manage staff access</button>}
+                    <button className="button button-secondary" onClick={() => onOpenWorkspace(department.id)}>Open {department.name}</button>
                   </article>
                 ))}
               </div>
-              <div className="info-banner admin-info-strip"><span className="info-icon">✦</span><p><strong>Integration status.</strong> Department operational screens are not enabled until their backend APIs and database workflows are implemented. Assigning a role does not create those workflows.</p></div>
             </>
           )}
         </section>

@@ -5,7 +5,7 @@ const authorize = require('../../../backend/src/middleware/authorize.js')
 const { appError } = require('../../../backend/src/lib/errors.js')
 
 const router = express.Router()
-router.use(authenticate, authorize('HR'))
+router.use(authenticate, authorize('HR', 'ADMIN'))
 
 router.get('/bootstrap', async (req, res) => {
   const [employees, leaves, assignments, maintenanceRequirements] = await Promise.all([

@@ -3,7 +3,7 @@ const db = require('../../../backend/src/config/db.js');
 const HttpError = require('../../../backend/src/utils/httpError.js');
 const v = require('./validate.js');
 const { requirePosition } = require('../../../backend/src/middleware/auth.js');
-const { changeRoomStatus, assertNotOutOfOrder, FRONT_OFFICE_HELD } = require('./roomStatus.js');
+const { lockCleaningTaskRoom, changeRoomStatus, assertNotOutOfOrder, FRONT_OFFICE_HELD } = require('./roomStatus.js');
 const { assertHousekeepingStaff } = require('./staff.js');
 
 const router = express.Router();
@@ -183,6 +183,7 @@ function canWorkOn(user, task) {
 router.post('/:id/start', async (req, res) => {
   const taskId = v.id(req.params.id, 'task id');
   const task = await db.withTransaction(async (client) => {
+    await lockCleaningTaskRoom(client, taskId);
     const current = await getTask(client, taskId, true);
     if (!canWorkOn(req.user, current)) {
       throw new HttpError(403, 'Only the assigned housekeeper can start this task.');
@@ -205,6 +206,7 @@ router.post('/:id/start', async (req, res) => {
 router.post('/:id/complete', async (req, res) => {
   const taskId = v.id(req.params.id, 'task id');
   const task = await db.withTransaction(async (client) => {
+    await lockCleaningTaskRoom(client, taskId);
     const current = await getTask(client, taskId, true);
     if (!canWorkOn(req.user, current)) {
       throw new HttpError(403, 'Only the assigned housekeeper can complete this task.');

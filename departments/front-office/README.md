@@ -28,7 +28,7 @@ The database-backed suite exercises role restrictions, data validation, concurre
 
 ## Desk workflow and mock data
 
-**Review checkout** shows the linked invoices and their unpaid balances. Settle the balance in Front Office Billing or Finance → Shared hotel records. Finance payments recorded there appear against the same invoices. The separate Finance invoice register remains available for standalone Finance invoices. Checkout sends a single cleaning task through the database bridge.
+**Review checkout** requires a linked lodging invoice and a zero balance. Create the lodging invoice in Front Office Billing and select Lodging as the charge type. Settle shared invoices in Front Office Billing or Finance Shared hotel records. Settle approved Housekeeping charges in the Finance invoice register. Checkout sends a single cleaning task through the database bridge.
 
 Use **Extend stay** to move a checked-in guest's checkout date after checking for intervening bookings. An overdue occupied room stays unavailable until checkout or an extension establishes a new departure date. A guest request created from a checked-in stay carries the reservation, guest and room into Housekeeping. Rooms shows the latest cleaning and open repair status. Housekeeping handles room holds and post-repair release through its existing workflow.
 
@@ -44,4 +44,6 @@ The local seed includes today's arrival in `MOCK-201`, an inspected room and unr
 - **In-house stays.** Move room transfers the checked-in guest and open linked requests to a ready room. Housekeeping receives a cleaning task for the vacated room. Housekeeping Rooms reflects the scheduled checkout after a stay extension.
 - **Lost items.** Open Reservations and use Find lost items on a checked-out stay. Results are limited to the rooms and dates of that stay, including items found up to two days after the room was vacated. Older checkouts use the scheduled departure date when actual checkout time is unavailable. Housekeeping verifies claims and releases items.
 
-Apply migration 25 before serving the updated desk and Housekeeping APIs.
+Apply all database migrations before serving the updated APIs.
+
+**Reports** uses hotel-local periods and pages results on the server. Exports retrieve all matching activity, including Housekeeping finding reviews and Finance decisions, for the chosen period and search.
