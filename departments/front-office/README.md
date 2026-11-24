@@ -26,7 +26,7 @@ Use the deployment's backup account to take a PostgreSQL custom-format backup wi
 
 The database-backed suite exercises role restrictions, data validation, concurrent room assignment, and department handoffs. Run the [isolated database suite](../../README.md) after schema changes. Response time under hotel traffic, browser acceptance and availability targets require measurement in the deployment environment.
 
-## Desk workflow and mock data
+## Desk workflow and sample data
 
 **Review checkout** requires a linked lodging invoice and a zero balance. Create the lodging invoice in Front Office Billing and select Lodging as the charge type. Settle shared invoices in Front Office Billing or Finance Shared hotel records. Settle approved Housekeeping charges in the Finance invoice register. Checkout sends a single cleaning task through the database bridge.
 
@@ -34,7 +34,7 @@ Use **Extend stay** to move a checked-in guest's checkout date after checking fo
 
 Front Office can select a promotion when creating a reservation. Billing can use that quote for the original stay dates, even if the Sales & Marketing record later changes. Changing the stay dates clears the original quote.
 
-The local seed includes today's arrival in `MOCK-201`, an inspected room and unread notice in `MOCK-202`, an overdue stay and repair in `MOCK-203`, and a checked-in stay with an unpaid shared invoice in room `103`. The [setup guide](../../README.md) lists demo-account access. Dates are set when the records are first created.
+The local seed includes today's arrival in `201`, an inspected room and unread notice in `202`, an overdue stay and repair in `203`, and a checked-in stay with an unpaid shared invoice in room `103`. The [setup guide](../../README.md) lists demo-account access. Dates are set when the records are first created.
 
 ## Housekeeping handoffs
 
