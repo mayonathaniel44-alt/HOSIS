@@ -5,7 +5,6 @@ const { requireBody } = require('../middleware/validate')
 
 const router = express.Router()
 router.post('/login', requireBody, controller.login)
-router.post('/register', requireBody, controller.register)
 router.get('/me', authenticate, controller.me)
 router.post('/logout', authenticate, controller.logout)
 

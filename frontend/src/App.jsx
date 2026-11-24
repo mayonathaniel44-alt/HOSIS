@@ -180,12 +180,6 @@ function App() {
   const [modal, setModal] = useState(null)
   const [selectedRecord, setSelectedRecord] = useState(null)
   const [toast, setToast] = useState('')
-  const [authMode, setAuthMode] = useState('login') // 'login' | 'signup'
-  const [signupUsername, setSignupUsername] = useState('')
-  const [signupPassword, setSignupPassword] = useState('')
-  const [signupConfirmPassword, setSignupConfirmPassword] = useState('')
-  const [signupRole, setSignupRole] = useState('FINANCE_OFFICER')
-  const [signupLoading, setSignupLoading] = useState(false)
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
   const [loadingWorkspace, setLoadingWorkspace] = useState(false)
@@ -322,54 +316,6 @@ function App() {
       notify(error.message)
     } finally {
       setLoginLoading(false)
-    }
-  }
-
-  async function signUp(event) {
-    event.preventDefault()
-    setLoginError('')
-    if (!signupUsername.trim() || !signupPassword) {
-      setLoginError('Enter both username and password.')
-      return
-    }
-    if (signupPassword.length < 8) {
-      setLoginError('Password must be at least 8 characters long.')
-      return
-    }
-    if (signupPassword !== signupConfirmPassword) {
-      setLoginError('Passwords do not match. Please verify your password.')
-      return
-    }
-    setSignupLoading(true)
-    try {
-      const session = await authApi.register({
-        username: signupUsername.trim(),
-        password: signupPassword,
-        role: signupRole,
-      })
-      authApi.saveSession(session, true)
-      setUser(session.user)
-      setSignedIn(true)
-      const role = session.user?.role?.toUpperCase() || ''
-      if (['FINANCE', 'FINANCE_ADMIN', 'FINANCE_STAFF', 'FINANCE_OFFICER', 'OFFICER', 'DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'ADMIN', 'SUPER_ADMIN'].includes(role)) {
-        setShowFinanceConsole(true)
-        setShowAdminConsole(false)
-      } else if (isAdminRole(role)) {
-        setShowAdminConsole(true)
-        setShowFinanceConsole(false)
-      } else {
-        setShowFinanceConsole(false)
-        setShowAdminConsole(false)
-      }
-      setSignupPassword('')
-      setSignupConfirmPassword('')
-      setActivePage('Dashboard')
-      notify(`Account created successfully! Welcome to Grand Horizon, ${session.user.username}.`)
-    } catch (error) {
-      setLoginError(error.message || 'Registration failed. Please check your details.')
-      notify(error.message)
-    } finally {
-      setSignupLoading(false)
     }
   }
 
@@ -593,28 +539,13 @@ function App() {
               <span className="panel-corner panel-corner-one" /><span className="panel-corner panel-corner-two" />
             </section>
             <section className="login-card">
-              {/* Authentication Mode Switcher: Sign In vs Sign Up */}
-              <div className="auth-tab-switch">
-                <button
-                  type="button"
-                  className={`auth-tab-btn ${authMode === 'login' ? 'active' : ''}`}
-                  onClick={() => {
-                    setAuthMode('login')
-                    setLoginError('')
-                  }}
-                >
-                  Sign In
-                </button>
-                <button
-                  type="button"
-                  className={`auth-tab-btn ${authMode === 'signup' ? 'active' : ''}`}
-                  onClick={() => {
-                    setAuthMode('signup')
-                    setLoginError('')
-                  }}
-                >
-                  Sign Up / Register
-                </button>
+              <div className="login-card-heading">
+                <span className="login-icon"><Icon name="lock" size={18} /></span>
+                <span className="eyebrow">TEAM PORTAL</span>
+                <h2>Welcome back</h2>
+                <p>
+                  Sign in with your staff credentials. Your workspace and permissions will be applied automatically based on your database account role.
+                </p>
               </div>
 
               {loginError && (
@@ -624,260 +555,126 @@ function App() {
                 </div>
               )}
 
-              {/* TAB 1: SIGN IN FORM */}
-              {authMode === 'login' ? (
-                <>
-                  <div className="login-card-heading">
-                    <span className="login-icon"><Icon name="lock" size={18} /></span>
-                    <span className="eyebrow">TEAM PORTAL</span>
-                    <h2>Welcome back</h2>
-                    <p>
-                      Sign in with your staff credentials. Your workspace and permissions will be applied automatically based on your database account role.
-                    </p>
-                  </div>
+              <form className="login-form" onSubmit={signIn}>
+                <label htmlFor="username">Username</label>
+                <div className="input-wrap">
+                  <Icon name="users" size={17} />
+                  <input
+                    id="username"
+                    value={username}
+                    onChange={(event) => {
+                      setUsername(event.target.value)
+                      if (loginError) setLoginError('')
+                    }}
+                    placeholder="e.g. admin, finance.officer, head"
+                    autoComplete="username"
+                    required
+                  />
+                </div>
+                <label htmlFor="password">Password</label>
+                <div className="input-wrap">
+                  <Icon name="lock" size={17} />
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value)
+                      if (loginError) setLoginError('')
+                    }}
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    className="input-action"
+                    type="button"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    onClick={() => setShowPassword((value) => !value)}
+                  >
+                    <Icon name="eye" size={17} />
+                  </button>
+                </div>
+                <div className="form-options">
+                  <label className="remember-label">
+                    <input
+                      type="checkbox"
+                      checked={remember}
+                      onChange={(event) => setRemember(event.target.checked)}
+                    />
+                    Remember me
+                  </label>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setUser({ username: 'finance.admin', role: 'FINANCE_ADMIN' })
+                      setSignedIn(true)
+                      setShowFinanceConsole(true)
+                    }}
+                  >
+                    Preview Finance UI →
+                  </button>
+                </div>
+                <button className="login-submit" type="submit" disabled={loginLoading}>
+                  {loginLoading ? 'Signing in…' : 'Sign in'} <Icon name="arrow" size={16} />
+                </button>
+              </form>
 
-                  <form className="login-form" onSubmit={signIn}>
-                    <label htmlFor="username">Username</label>
-                    <div className="input-wrap">
-                      <Icon name="users" size={17} />
-                      <input
-                        id="username"
-                        value={username}
-                        onChange={(event) => {
-                          setUsername(event.target.value)
-                          if (loginError) setLoginError('')
-                        }}
-                        placeholder="e.g. admin, finance.officer, head"
-                        autoComplete="username"
-                        required
-                      />
-                    </div>
-                    <label htmlFor="password">Password</label>
-                    <div className="input-wrap">
-                      <Icon name="lock" size={17} />
-                      <input
-                        id="password"
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(event) => {
-                          setPassword(event.target.value)
-                          if (loginError) setLoginError('')
-                        }}
-                        placeholder="Enter your password"
-                        autoComplete="current-password"
-                        required
-                      />
-                      <button
-                        className="input-action"
-                        type="button"
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        onClick={() => setShowPassword((value) => !value)}
-                      >
-                        <Icon name="eye" size={17} />
-                      </button>
-                    </div>
-                    <div className="form-options">
-                      <label className="remember-label">
-                        <input
-                          type="checkbox"
-                          checked={remember}
-                          onChange={(event) => setRemember(event.target.checked)}
-                        />
-                        Remember me
-                      </label>
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={() => {
-                          setUser({ username: 'finance.admin', role: 'FINANCE_ADMIN' })
-                          setSignedIn(true)
-                          setShowFinanceConsole(true)
-                        }}
-                      >
-                        Preview Finance UI →
-                      </button>
-                    </div>
-                    <button className="login-submit" type="submit" disabled={loginLoading}>
-                      {loginLoading ? 'Signing in…' : 'Sign in'} <Icon name="arrow" size={16} />
-                    </button>
-                  </form>
-
-                  <div className="auth-switch-prompt">
-                    <span>New team member?</span>{' '}
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => {
-                        setAuthMode('signup')
-                        setLoginError('')
-                      }}
-                    >
-                      Create an account / Sign up →
-                    </button>
-                  </div>
-
-                  {/* Quick Fill Database Role Demo Accounts */}
-                  <div className="login-quick-roles">
-                    <span className="login-quick-roles-title">Demo Accounts (Direct Database Role)</span>
-                    <div className="login-quick-roles-list">
-                      <button
-                        type="button"
-                        className="login-role-chip"
-                        onClick={() => {
-                          setUsername('admin')
-                          setPassword('Admin123456!')
-                          if (loginError) setLoginError('')
-                        }}
-                        title="Fill Super Admin credentials"
-                      >
-                        ⚡ Super Admin
-                      </button>
-                      <button
-                        type="button"
-                        className="login-role-chip"
-                        onClick={() => {
-                          setUsername('finance.officer')
-                          setPassword('Finance123456!')
-                          if (loginError) setLoginError('')
-                        }}
-                        title="Fill Finance Officer credentials"
-                      >
-                        ⚡ Finance Officer
-                      </button>
-                      <button
-                        type="button"
-                        className="login-role-chip"
-                        onClick={() => {
-                          setUsername('finance.head')
-                          setPassword('Head123456!')
-                          if (loginError) setLoginError('')
-                        }}
-                        title="Fill Department Head credentials"
-                      >
-                        ⚡ Department Head
-                      </button>
-                      <button
-                        type="button"
-                        className="login-role-chip"
-                        onClick={() => {
-                          setUsername('frontoffice')
-                          setPassword('FrontOffice123456!')
-                          if (loginError) setLoginError('')
-                        }}
-                        title="Fill Front Office credentials"
-                      >
-                        ⚡ Front Office
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                /* TAB 2: SIGN UP / REGISTRATION FORM */
-                <>
-                  <div className="login-card-heading">
-                    <span className="login-icon"><Icon name="users" size={18} /></span>
-                    <span className="eyebrow">STAFF ONBOARDING</span>
-                    <h2>Create Account</h2>
-                    <p>
-                      Register your hotel staff credentials. System workspace and database permissions will be applied automatically based on your selected role.
-                    </p>
-                  </div>
-
-                  <form className="login-form" onSubmit={signUp}>
-                    <label htmlFor="signup-username">Username *</label>
-                    <div className="input-wrap">
-                      <Icon name="users" size={17} />
-                      <input
-                        id="signup-username"
-                        value={signupUsername}
-                        onChange={(event) => {
-                          setSignupUsername(event.target.value)
-                          if (loginError) setLoginError('')
-                        }}
-                        placeholder="e.g. elena.ramos, finance.maria"
-                        autoComplete="username"
-                        required
-                      />
-                    </div>
-
-                    <label htmlFor="signup-role">Department Role *</label>
-                    <div className="select-wrap">
-                      <Icon name="receipt" size={17} />
-                      <select
-                        id="signup-role"
-                        value={signupRole}
-                        onChange={(event) => setSignupRole(event.target.value)}
-                      >
-                        <option value="FINANCE_OFFICER">Finance Officer (Invoices, Payments, HK Damages & Reports)</option>
-                        <option value="FINANCE_ADMIN">Finance Admin (Full Accounting & Audit Ledger)</option>
-                        <option value="DEPARTMENT_HEAD">Department Head (Expense Approvals & Budgets)</option>
-                        <option value="FRONT_OFFICE">Front Office (Front Desk & Guest Reservations)</option>
-                        <option value="ADMIN">Super Admin (System Governance)</option>
-                      </select>
-                    </div>
-
-                    <label htmlFor="signup-password">Password (minimum 8 characters) *</label>
-                    <div className="input-wrap">
-                      <Icon name="lock" size={17} />
-                      <input
-                        id="signup-password"
-                        type={showPassword ? 'text' : 'password'}
-                        value={signupPassword}
-                        onChange={(event) => {
-                          setSignupPassword(event.target.value)
-                          if (loginError) setLoginError('')
-                        }}
-                        placeholder="Enter a secure password (min. 8 chars)"
-                        autoComplete="new-password"
-                        required
-                      />
-                      <button
-                        className="input-action"
-                        type="button"
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                        onClick={() => setShowPassword((value) => !value)}
-                      >
-                        <Icon name="eye" size={17} />
-                      </button>
-                    </div>
-
-                    <label htmlFor="signup-confirm-password">Confirm Password *</label>
-                    <div className="input-wrap">
-                      <Icon name="lock" size={17} />
-                      <input
-                        id="signup-confirm-password"
-                        type={showPassword ? 'text' : 'password'}
-                        value={signupConfirmPassword}
-                        onChange={(event) => {
-                          setSignupConfirmPassword(event.target.value)
-                          if (loginError) setLoginError('')
-                        }}
-                        placeholder="Re-enter your password"
-                        autoComplete="new-password"
-                        required
-                      />
-                    </div>
-
-                    <button className="login-submit" type="submit" disabled={signupLoading} style={{ marginTop: '10px' }}>
-                      {signupLoading ? 'Creating Account…' : 'Sign Up & Enter Portal'} <Icon name="arrow" size={16} />
-                    </button>
-                  </form>
-
-                  <div className="auth-switch-prompt">
-                    <span>Already have an authorized account?</span>{' '}
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => {
-                        setAuthMode('login')
-                        setLoginError('')
-                      }}
-                    >
-                      Sign In here →
-                    </button>
-                  </div>
-                </>
-              )}
+              {/* Quick Fill Database Role Demo Accounts */}
+              <div className="login-quick-roles">
+                <span className="login-quick-roles-title">Demo Accounts (Direct Database Role)</span>
+                <div className="login-quick-roles-list">
+                  <button
+                    type="button"
+                    className="login-role-chip"
+                    onClick={() => {
+                      setUsername('admin')
+                      setPassword('Admin123456!')
+                      if (loginError) setLoginError('')
+                    }}
+                    title="Fill Super Admin credentials"
+                  >
+                    ⚡ Super Admin
+                  </button>
+                  <button
+                    type="button"
+                    className="login-role-chip"
+                    onClick={() => {
+                      setUsername('finance.officer')
+                      setPassword('Finance123456!')
+                      if (loginError) setLoginError('')
+                    }}
+                    title="Fill Finance Officer credentials"
+                  >
+                    ⚡ Finance Officer
+                  </button>
+                  <button
+                    type="button"
+                    className="login-role-chip"
+                    onClick={() => {
+                      setUsername('finance.head')
+                      setPassword('Head123456!')
+                      if (loginError) setLoginError('')
+                    }}
+                    title="Fill Department Head credentials"
+                  >
+                    ⚡ Department Head
+                  </button>
+                  <button
+                    type="button"
+                    className="login-role-chip"
+                    onClick={() => {
+                      setUsername('frontoffice')
+                      setPassword('FrontOffice123456!')
+                      if (loginError) setLoginError('')
+                    }}
+                    title="Fill Front Office credentials"
+                  >
+                    ⚡ Front Office
+                  </button>
+                </div>
+              </div>
 
               <div className="login-footer">
                 <span>ROLE-BASED DIRECT ACCESS</span>

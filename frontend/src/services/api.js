@@ -74,7 +74,6 @@ function json(method, value) {
 
 export const authApi = {
   login: (username, password) => request('/auth/login', json('POST', { username, password })),
-  register: (payload) => request('/auth/register', json('POST', payload)),
   me: () => request('/auth/me'),
   logout: () => request('/auth/logout', { method: 'POST' }),
   saveSession,

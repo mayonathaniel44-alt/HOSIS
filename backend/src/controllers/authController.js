@@ -18,9 +18,4 @@ function logout(req, res) {
   res.status(204).end()
 }
 
-async function register(req, res) {
-  const session = await authService.register(req.body)
-  res.status(201).json({ data: session })
-}
-
-module.exports = { login, register, me, logout }
+module.exports = { login, me, logout }
