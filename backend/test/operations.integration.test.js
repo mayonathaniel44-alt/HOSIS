@@ -771,6 +771,95 @@ test(
         },
       )
       await t.test(
+        'Housekeeping findings require Front Office validation and one Finance invoice',
+        async () => {
+          const created = await api(
+            'POST',
+            '/housekeeping/charge-findings',
+            'cleaner',
+            {
+              roomId: room.id,
+              category: 'DAMAGE',
+              description: 'Bedside lamp shade cracked during the completed stay',
+              estimatedAmount: '850.00',
+            },
+            201,
+          )
+          const findingId = created.finding.finding_id
+          assert.equal(created.finding.reservation_reference, reservation.confirmationCode)
+
+          await api(
+            'GET',
+            '/housekeeping/integrations/finance/charge-findings',
+            'cleaner',
+            undefined,
+            403,
+          )
+          await api(
+            'PATCH',
+            `/housekeeping/charge-findings/${findingId}/withdraw`,
+            'other',
+            { notes: 'Not the reporting employee' },
+            403,
+          )
+
+          const frontOfficeQueue = await api(
+            'GET',
+            '/housekeeping/integrations/front-office/charge-findings',
+            'fo',
+          )
+          assert.ok(frontOfficeQueue.findings.some((item) => item.finding_id === findingId))
+          const forwarded = await api(
+            'PATCH',
+            `/housekeeping/integrations/front-office/charge-findings/${findingId}`,
+            'fo',
+            { decision: 'FORWARD', notes: 'Verified against the checked-out reservation.' },
+          )
+          assert.equal(forwarded.finding.status, 'FOR_FINANCE')
+          await api(
+            'PATCH',
+            `/housekeeping/integrations/front-office/charge-findings/${findingId}`,
+            'fo',
+            { decision: 'FORWARD', notes: 'Duplicate review attempt.' },
+            409,
+          )
+
+          const financeQueue = await api(
+            'GET',
+            '/housekeeping/integrations/finance/charge-findings',
+            'finance',
+          )
+          assert.ok(financeQueue.findings.some((item) => item.finding_id === findingId))
+          const approved = await api(
+            'PATCH',
+            `/housekeeping/integrations/finance/charge-findings/${findingId}`,
+            'finance',
+            { decision: 'APPROVE', amount: '725.00', notes: 'Replacement cost confirmed.' },
+          )
+          assert.equal(approved.finding.status, 'APPROVED')
+          assert.equal(approved.finding.final_amount, '725.00')
+          assert.ok(approved.finding.finance_invoice_id)
+
+          const { rows: invoiceItems } = await pool.query(
+            `SELECT i.invoice_code, l.amount, l.source
+               FROM finance_invoices i
+               JOIN finance_invoice_items l ON l.invoice_id=i.id
+              WHERE i.id=$1`,
+            [approved.finding.finance_invoice_id],
+          )
+          assert.equal(invoiceItems.length, 1)
+          assert.equal(invoiceItems[0].source, 'HOUSEKEEPING_FINDING')
+          assert.equal(invoiceItems[0].amount, '725.00')
+          await api(
+            'PATCH',
+            `/housekeeping/integrations/finance/charge-findings/${findingId}`,
+            'finance',
+            { decision: 'APPROVE', amount: '725.00', notes: 'Duplicate approval attempt.' },
+            409,
+          )
+        },
+      )
+      await t.test(
         'request assignments serialize; stock approval cannot be bypassed; status returns to Front Office',
         async () => {
           const request = await api(
