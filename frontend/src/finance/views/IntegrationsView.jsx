@@ -317,14 +317,14 @@ export default function IntegrationsView({ showToast }) {
                 className="fin-btn fin-btn-secondary"
                 onClick={handleExportHkCsv}
               >
-                📥 Bulk Export CSV
+                Export CSV
               </button>
               <button
                 type="button"
                 className="fin-btn fin-btn-secondary"
                 onClick={() => exportToJson('hosis-hk-damages', hkDamages)}
               >
-                📋 Bulk Export JSON
+                Export JSON
               </button>
             </div>
           </div>
@@ -453,7 +453,7 @@ export default function IntegrationsView({ showToast }) {
                 className="fin-btn fin-btn-secondary"
                 onClick={() => exportToJson('hosis-maintenance-finance', maintenanceData)}
               >
-                📋 Bulk Export JSON
+                Export JSON
               </button>
               <button
                 type="button"

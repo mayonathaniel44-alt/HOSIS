@@ -106,7 +106,7 @@ export default function HistoryView({ onNavigate, showToast }) {
             onClick={handleBulkExportCsv}
             title="Bulk export financial records to CSV"
           >
-            📥 Bulk Export CSV
+            Export CSV
           </button>
           <button
             type="button"
@@ -114,7 +114,7 @@ export default function HistoryView({ onNavigate, showToast }) {
             onClick={handleBulkExportJson}
             title="Bulk export financial records to JSON"
           >
-            📋 Bulk Export JSON
+            Export JSON
           </button>
         </div>
       </header>

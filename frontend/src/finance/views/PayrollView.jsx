@@ -254,7 +254,7 @@ export default function PayrollView({ user, showToast }) {
             onClick={handleBulkExportCsv}
             title="Bulk export payroll register to CSV"
           >
-            📥 Bulk Export CSV
+            Export CSV
           </button>
           <button
             type="button"
@@ -262,7 +262,7 @@ export default function PayrollView({ user, showToast }) {
             onClick={handleBulkExportJson}
             title="Bulk export payroll register to JSON"
           >
-            📋 Bulk Export JSON
+            Export JSON
           </button>
           <button
             type="button"

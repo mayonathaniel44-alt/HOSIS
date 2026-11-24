@@ -11,57 +11,50 @@ import IntegrationsView from './views/IntegrationsView'
 import HistoryView from './views/HistoryView'
 import './FinanceDashboard.css'
 
-function HotelCrest() {
+function Icon({ name, size = 18, className = '' }) {
+  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' }
+  const shapes = {
+    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
+    users: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
+    bed: <><path d="M3 18v-8M3 15h18v6M21 18v-8M3 12h18" /><path d="M7 12V8a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4" /></>,
+    receipt: <><path d="M4 3h16v18l-3-2-3 2-3-2-3 2-4-2z" /><path d="M8 8h8M8 12h8M8 16h4" /></>,
+    search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
+    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
+    plus: <><path d="M12 5v14M5 12h14" /></>,
+    arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
+    chevron: <path d="m7 10 5 5 5-5" />,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2m10-10h-2M4 12H2m17.07 7.07-1.42-1.42M6.35 6.35 4.93 4.93m14.14 0-1.42 1.42M6.35 17.65l-1.42 1.42" /></>,
+    dots: <><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>,
+    check: <path d="m5 12 4 4L19 6" />,
+    logout: <><path d="M10 17l5-5-5-5M15 12H3" /><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" /></>,
+    eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>,
+    lock: <><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
+    sparkle: <><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z" /><path d="m19 14 1.1 2.9L23 18l-2.9 1.1L19 22l-1.1-2.9L15 18l2.9-1.1L19 14z" /></>,
+    credit: <><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></>,
+    file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></>,
+    link: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
+  }
+  return <svg className={className} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" {...common}>{shapes[name] || shapes.grid}</svg>
+}
+
+function Brand({ compact = false }) {
   return (
-    <svg
-      className="finance-brand-crest"
-      viewBox="0 0 100 85"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient id="crestGold" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#fae4a8" />
-          <stop offset="50%" stopColor="#e5be6b" />
-          <stop offset="100%" stopColor="#c59a35" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M 50 8 C 41 8 36 17 36 30 L 36 70 L 41 70 L 41 33 C 41 22 45 15 50 15 C 55 15 59 22 59 33 L 59 70 L 64 70 L 64 30 C 64 17 59 8 50 8 Z"
-        fill="url(#crestGold)"
-      />
-      <path
-        d="M 47 38 L 53 38 L 53 70 L 47 70 Z"
-        fill="url(#crestGold)"
-        opacity="0.9"
-      />
-      <path
-        d="M 33 24 C 25 24 20 33 20 46 L 20 70 L 25 70 L 25 48 C 25 38 28 30 33 30 C 38 30 40 34 41 38 L 44 35 C 42 28 38 24 33 24 Z"
-        fill="url(#crestGold)"
-      />
-      <path
-        d="M 67 24 C 75 24 80 33 80 46 L 80 70 L 75 70 L 75 48 C 75 38 72 30 67 30 C 62 30 60 34 59 38 L 56 35 C 58 28 62 24 67 24 Z"
-        fill="url(#crestGold)"
-      />
-      <path
-        d="M 18 42 C 10 46 6 56 6 70 L 11 70 C 11 58 15 51 21 47 Z"
-        fill="url(#crestGold)"
-      />
-      <path
-        d="M 82 42 C 90 46 94 56 94 70 L 89 70 C 89 58 85 51 79 47 Z"
-        fill="url(#crestGold)"
-      />
-      <rect x="4" y="74" width="92" height="3.5" rx="1.75" fill="url(#crestGold)" />
-    </svg>
+    <div className={`brand ${compact ? 'brand-compact' : ''}`}>
+      <div className="brand-mark" aria-hidden="true"><span /><span /><span /><span /><span /></div>
+      <div><strong>GRAND HORIZON</strong><small>HOTEL &amp; RESORT</small></div>
+    </div>
   )
+}
+
+function Avatar({ initials, small = false }) {
+  return <span className={`avatar ${small ? 'avatar-small' : ''}`}>{initials}</span>
 }
 
 export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice, onSignOut }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [toastMessage, setToastMessage] = useState('')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [globalSearch, setGlobalSearch] = useState('')
 
   const today = new Date()
@@ -102,7 +95,6 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
       ? user.username.replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
       : (defaultNames[user?.role] || 'Elena Ramos')
   )
-  const userHandle = user?.username || defaultHandles[user?.role] || 'finance.officer'
   const userInitials = userDisplayName.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase() || 'FO'
 
   function showToast(msg) {
@@ -117,16 +109,16 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
   )
 
   const allFinancialTasks = [
-    { id: 'overview', label: 'Dashboard', icon: '📊' },
-    { id: 'invoices', label: 'Invoices', icon: '📑' },
-    { id: 'payments', label: 'Payments', icon: '💳' },
-    { id: 'expenses', label: 'Expenses', icon: '💸' },
-    { id: 'payroll', label: 'Payroll', icon: '👥' },
-    { id: 'leave', label: 'Leave Requests', icon: '📅' },
-    { id: 'reports', label: 'Financial Reports', icon: '📈' },
-    { id: 'revenue', label: 'Revenue', icon: '🏨' },
-    { id: 'integrations', label: 'Integrations', icon: '🔗', checkerOnly: true },
-    { id: 'history', label: 'Audit Trail', icon: '📜', checkerOnly: true },
+    { id: 'overview', label: 'Dashboard', iconName: 'grid' },
+    { id: 'invoices', label: 'Invoices', iconName: 'receipt' },
+    { id: 'payments', label: 'Payments', iconName: 'credit' },
+    { id: 'expenses', label: 'Expenses', iconName: 'arrow' },
+    { id: 'payroll', label: 'Payroll', iconName: 'users' },
+    { id: 'leave', label: 'Leave Requests', iconName: 'calendar' },
+    { id: 'reports', label: 'Financial Reports', iconName: 'file' },
+    { id: 'revenue', label: 'Revenue', iconName: 'bed' },
+    { id: 'integrations', label: 'Integrations', iconName: 'link', checkerOnly: true },
+    { id: 'history', label: 'Audit Trail', iconName: 'eye', checkerOnly: true },
   ]
 
   const financialTasks = allFinancialTasks.filter((t) => !t.checkerOnly || isChecker)
@@ -136,168 +128,69 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
     setActiveTab('overview')
   }
 
+  const currentTask = financialTasks.find((t) => t.id === activeTab)
+
   return (
-    <div className={`finance-root-fullscreen ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>
-      {/* Mobile Backdrop for Side Drawer */}
-      {mobileMenuOpen && (
-        <div
-          className="finance-sidebar-backdrop no-print"
-          onClick={() => setMobileMenuOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Sidebar Navigation - Financial Operations (Collapsible & Responsive) */}
-      <aside
-        className={`finance-sidebar no-print ${sidebarCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}
-        role="navigation"
-        aria-label="Financial Subsystem Navigation"
-      >
-        {/* Brand Section */}
-        <div className="finance-sidebar-brand">
-          <div className="finance-brand-main-wrap">
-            <HotelCrest />
-            {!sidebarCollapsed && (
-              <div className="finance-brand-text">
-                <h1 className="finance-brand-name">Grand Horizon Hotel</h1>
-                <span className="finance-subsystem-badge">Finance &amp; Accounting System</span>
-              </div>
-            )}
-          </div>
+    <div className="app-shell finance-shell">
+      {/* Sidebar Navigation - Fixed 252px Grand Horizon Design System */}
+      <aside className="sidebar finance-sidebar" role="navigation" aria-label="Financial Subsystem Navigation">
+        <div className="sidebar-brand">
+          <Brand />
         </div>
 
-        {/* Navigation Items */}
-        <div className="finance-sidebar-nav-container">
-          {!sidebarCollapsed && <div className="finance-sidebar-section-label">FINANCE OPERATIONS</div>}
-          <nav className="finance-sidebar-nav" aria-label="Financial Task Navigation">
-            {financialTasks.map((task) => (
-              <button
-                key={task.id}
-                type="button"
-                className={`finance-sidebar-nav-item ${activeTab === task.id ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab(task.id)
-                  setMobileMenuOpen(false)
-                }}
-                title={task.label}
-              >
-                <span className="finance-nav-icon">{task.icon}</span>
-                {!sidebarCollapsed && <span className="finance-nav-label">{task.label}</span>}
-              </button>
-            ))}
-          </nav>
-        </div>
+        <div className="sidebar-label">FINANCE OPERATIONS</div>
 
-        {/* Help Card & Sidebar Bottom */}
-        {!sidebarCollapsed && (
-          <div style={{ padding: '0 12px 14px' }}>
-            <div className="help-card">
-              <span className="help-icon" aria-hidden="true">✦</span>
-              <strong>Here to help</strong>
-              <p>Need a hand? Your hotel admin is one message away.</p>
-              <button
-                type="button"
-                onClick={() => showToast('Hotel administration desk alerted.')}
-              >
-                Get support →
-              </button>
-            </div>
-          </div>
-        )}
+        <nav className="side-nav" aria-label="Financial Task Navigation">
+          {financialTasks.map((task) => (
+            <button
+              key={task.id}
+              type="button"
+              className={`nav-item ${activeTab === task.id ? 'nav-active' : ''}`}
+              onClick={() => setActiveTab(task.id)}
+              title={task.label}
+            >
+              <Icon name={task.iconName} size={18} />
+              <span>{task.label}</span>
+            </button>
+          ))}
+        </nav>
 
-        {/* Sidebar Footer: User Info, Role Badge & Switcher Actions */}
-        <div className="finance-sidebar-footer">
-          {!sidebarCollapsed ? (
-            <>
-              <div className="finance-sidebar-role-badge">
-                <span className="finance-role-pill">ROLE: {roleDisplay}</span>
-              </div>
-
-              <div className="finance-sidebar-user-chip" title={`Signed in as ${userDisplayName} (${roleDisplay})`}>
-                <span className="finance-user-avatar">{userInitials}</span>
-                <div className="finance-user-info">
-                  <strong>{userDisplayName}</strong>
-                  <small>{userHandle}</small>
-                </div>
-              </div>
-
-              <div className="finance-sidebar-actions">
-                {onSignOut && (
-                  <button
-                    type="button"
-                    className="finance-sidebar-signout-btn"
-                    onClick={onSignOut}
-                    title="Sign out of Finance system"
-                  >
-                    Sign out
-                  </button>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="finance-sidebar-collapsed-footer">
-              <span className="finance-user-avatar" title={`Signed in as ${userDisplayName} (${roleDisplay})`}>
-                {userInitials}
-              </span>
-              {onSignOut && (
-                <button
-                  type="button"
-                  className="finance-sidebar-icon-signout"
-                  onClick={onSignOut}
-                  title="Sign out"
-                  aria-label="Sign out"
-                >
-                  ⏻
-                </button>
-              )}
-            </div>
-          )}
+        <div className="sidebar-bottom">
+          <button
+            type="button"
+            className="profile-button"
+            onClick={onSignOut}
+            aria-label={`Sign out ${userDisplayName}`}
+            title="Click to sign out of Finance"
+          >
+            <Avatar initials={userInitials} small />
+            <span>
+              <strong>{userDisplayName}</strong>
+              <small>{roleDisplay}</small>
+            </span>
+            <Icon name="dots" size={18} />
+          </button>
         </div>
       </aside>
 
-      {/* Main Work Surface */}
-      <main className="finance-fullscreen-main">
-        {/* Top Header Strip with Breadcrumb, Search, Date, Bell, and Profile */}
-        <header className="finance-top-strip no-print">
-          <div className="finance-strip-left">
-            <button
-              type="button"
-              className="finance-strip-toggle-btn"
-              onClick={() => {
-                if (window.innerWidth <= 768) {
-                  setMobileMenuOpen(!mobileMenuOpen)
-                } else {
-                  setSidebarCollapsed(!sidebarCollapsed)
-                }
-              }}
-              title={sidebarCollapsed ? 'Expand sidebar navigation' : 'Hide sidebar navigation'}
-              aria-label="Toggle navigation"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
-              </svg>
-              <span className="finance-strip-btn-text">
-                {sidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
-              </span>
-            </button>
+      {/* Main Work Surface - With margin-left: 252px (Zero Overlay) */}
+      <main className="main-panel finance-main">
+        <header className="topbar">
+          <button className="mobile-brand" onClick={() => setActiveTab('overview')}>
+            <Brand compact />
+          </button>
 
-            <div className="breadcrumb finance-breadcrumb-bar">
-              <span>Workspace</span>
-              <span style={{ opacity: 0.35, margin: '0 2px' }}>›</span>
-              <span>Finance</span>
-              <span style={{ opacity: 0.35, margin: '0 2px' }}>›</span>
-              <strong>{financialTasks.find((t) => t.id === activeTab)?.label || 'Overview'}</strong>
-            </div>
+          <div className="breadcrumb">
+            <span>Workspace</span>
+            <Icon name="chevron" size={14} />
+            <span>Finance</span>
+            <Icon name="chevron" size={14} />
+            <strong>{currentTask?.label || 'Dashboard'}</strong>
           </div>
 
-          <div className="topbar-tools finance-topbar-tools">
-            <div className="global-search">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-4-4" />
-              </svg>
+          <div className="topbar-tools">
+            <label className="global-search">
+              <Icon name="search" size={17} />
               <input
                 type="search"
                 aria-label="Search finance records"
@@ -305,31 +198,25 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
               />
-            </div>
+            </label>
 
-            <div className="topbar-date">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c89b3b" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2m0 16v2m10-10h-2M4 12H2m17.07 7.07-1.42-1.42M6.35 6.35 4.93 4.93m14.14 0-1.42 1.42M6.35 17.65l-1.42 1.42" />
-              </svg>
-              <span>{dateLabel}</span>
-            </div>
+            <span className="topbar-date">
+              <Icon name="sun" size={17} />
+              {dateLabel}
+            </span>
 
             <button
               type="button"
               className="notification-button"
               aria-label="Notifications"
-              title="Pending approvals and alerts"
+              title="Alerts and pending approvals"
               onClick={() => showToast('🔔 3 leave requests & 2 expense vouchers awaiting review.')}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-                <path d="M10 21h4" />
-              </svg>
+              <Icon name="bell" size={19} />
               <i />
             </button>
 
-            <div className="topbar-divider" />
+            <span className="topbar-divider" />
 
             <button
               type="button"
@@ -338,20 +225,17 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
               title={`Sign out ${userDisplayName}`}
               aria-label="Sign out"
             >
-              <span className="avatar avatar-small">{userInitials}</span>
+              <Avatar initials={userInitials} small />
               <span>
                 <strong>{userDisplayName}</strong>
                 <small>{roleDisplay}</small>
               </span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 17l5-5-5-5M15 12H3" />
-                <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
-              </svg>
+              <Icon name="logout" size={16} />
             </button>
           </div>
         </header>
 
-        <div className="finance-fullscreen-container">
+        <section className="content-area">
           {activeTab === 'overview' && (
             <OverviewView
               user={user}
@@ -407,16 +291,19 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
               showToast={showToast}
             />
           )}
-        </div>
+        </section>
+
+        <footer className="app-footer">
+          <span>© {today.getFullYear()} Grand Horizon Hotel</span>
+          <span><i /> Connected to HOSIS Finance API</span>
+        </footer>
       </main>
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="finance-toast" role="status">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-          <span>{toastMessage}</span>
+        <div className="toast" role="status">
+          <Icon name="check" size={17} />
+          {toastMessage}
         </div>
       )}
     </div>

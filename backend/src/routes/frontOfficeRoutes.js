@@ -54,4 +54,6 @@ router.route('/payments/:id')
   .get(controller.getPayment)
   .patch(requireBody, controller.updatePayment)
 
+router.get('/promotions', controller.listPromotions)
+
 module.exports = router

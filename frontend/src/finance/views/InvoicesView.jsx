@@ -36,6 +36,40 @@ export default function InvoicesView({ user, showToast }) {
     { desc: 'Breakfast Buffet & Dining Room Service', qty: 2, unitPrice: 850, category: 'DINING', source: 'FOOD_BEVERAGE' },
   ])
   const [submitting, setSubmitting] = useState(false)
+  const [activeRegisterTab, setActiveRegisterTab] = useState('invoices')
+  const [salesDeals, setSalesDeals] = useState([])
+
+  async function loadSalesDeals() {
+    try {
+      const res = await financeApi.salesRecords()
+      const list = res?.data || res?.records || res || []
+      setSalesDeals(Array.isArray(list) ? list : [])
+    } catch (err) {
+      console.error('Failed to load sales deals in invoices view:', err)
+    }
+  }
+
+  async function handleConvertSalesDeal(deal) {
+    try {
+      setSubmitting(true)
+      const res = await financeApi.syncSalesInvoice({
+        dealId: deal.id,
+        dealCode: deal.dealCode,
+        clientName: deal.clientName,
+        packageName: deal.packageName,
+        contractAmount: deal.contractAmount,
+        milestoneStage: 'DEPOSIT_20',
+        paymentTermDays: deal.paymentTermDays || 30,
+      })
+      showToast(`Sales deal ${deal.dealCode} successfully converted to Finance Folio!`)
+      await Promise.all([loadInvoices(), loadSalesDeals()])
+      setActiveRegisterTab('invoices')
+    } catch (err) {
+      showToast(err.message || 'Failed to convert sales deal to invoice.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   async function loadInvoices() {
     setLoading(true)
@@ -90,6 +124,7 @@ export default function InvoicesView({ user, showToast }) {
 
   useEffect(() => {
     loadInvoices()
+    loadSalesDeals()
   }, [])
 
   async function openInvoiceDetails(inv) {
@@ -283,7 +318,7 @@ export default function InvoicesView({ user, showToast }) {
             onClick={handleBulkExportCsv}
             title="Bulk export all invoices to CSV spreadsheet"
           >
-            📥 Export CSV
+            Export CSV
           </button>
           <button
             type="button"
@@ -291,7 +326,7 @@ export default function InvoicesView({ user, showToast }) {
             onClick={handleBulkExportJson}
             title="Bulk export invoices to JSON"
           >
-            📋 Export JSON
+            Export JSON
           </button>
           <button
             type="button"
@@ -344,139 +379,266 @@ export default function InvoicesView({ user, showToast }) {
         </article>
       </section>
 
-      {/* Filters Toolbar */}
-      <div className="fin-surface" style={{ padding: '12px 18px', marginBottom: '16px' }}>
-        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="fin-input-wrap" style={{ flex: 1, minWidth: '220px' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search invoice #, guest name, room, or reservation code..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
-          <div className="fin-select-wrap">
-            <label>Invoice Type</label>
-            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-              <option value="All">All Types</option>
-              <option value="GUEST">Guest Folios</option>
-              <option value="CORPORATE">Corporate &amp; Sales</option>
-              <option value="STAFF">Staff Charges</option>
-            </select>
-          </div>
-
-          <div className="fin-select-wrap">
-            <label>Billing Status</label>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="All">All Statuses</option>
-              <option value="Issued">Issued (Unsettled)</option>
-              <option value="Part-paid">Partially Paid</option>
-              <option value="Paid">Fully Paid</option>
-              <option value="Draft">Draft</option>
-            </select>
-          </div>
-        </div>
+      {/* Register Tab Selector */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+        <button
+          type="button"
+          onClick={() => setActiveRegisterTab('invoices')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: activeRegisterTab === 'invoices' ? '1px solid #c99a3d' : '1px solid #e2e8f0',
+            background: activeRegisterTab === 'invoices' ? 'linear-gradient(105deg, #c99a3d, #b8882e)' : '#ffffff',
+            color: activeRegisterTab === 'invoices' ? '#ffffff' : '#475569',
+          }}
+        >
+          📑 Guest &amp; Standard Folios ({invoices.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveRegisterTab('sales')
+            loadSalesDeals()
+          }}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: activeRegisterTab === 'sales' ? '1px solid #c99a3d' : '1px solid #e2e8f0',
+            background: activeRegisterTab === 'sales' ? 'linear-gradient(105deg, #c99a3d, #b8882e)' : '#ffffff',
+            color: activeRegisterTab === 'sales' ? '#ffffff' : '#475569',
+          }}
+        >
+          🤝 Sales &amp; Marketing Contracts ({salesDeals.length})
+        </button>
       </div>
 
-      {/* Invoices Table */}
-      <div className="fin-surface">
-        <div className="fin-surface-header">
-          <div>
-            <h3 className="fin-surface-title">Invoice &amp; Folio Register</h3>
-            <p className="fin-surface-subtitle">Click any invoice to view full itemization, payments received, and printable statement.</p>
-          </div>
-          <span className="fin-badge fin-badge-blue">
-            {loading ? 'Loading...' : `${filteredInvoices.length} Invoices`}
-          </span>
-        </div>
+      {activeRegisterTab === 'invoices' ? (
+        <>
+          {/* Filters Toolbar */}
+          <div className="fin-surface" style={{ padding: '12px 18px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="fin-input-wrap" style={{ flex: 1, minWidth: '220px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search invoice #, guest name, room, or reservation code..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
 
-        <div className="fin-table-scroll">
-          <table className="fin-table">
-            <thead>
-              <tr>
-                <th>INVOICE #</th>
-                <th>CUSTOMER / GUEST</th>
-                <th>TYPE &amp; LOCATION</th>
-                <th>DATE ISSUED</th>
-                <th style={{ textAlign: 'right' }}>TOTAL AMOUNT</th>
-                <th style={{ textAlign: 'right' }}>PAID</th>
-                <th style={{ textAlign: 'right' }}>BALANCE DUE</th>
-                <th>STATUS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                    Loading invoices from database...
-                  </td>
-                </tr>
-              )}
-              {!loading && filteredInvoices.length === 0 && (
-                <tr>
-                  <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                    No invoices found matching current filters.
-                  </td>
-                </tr>
-              )}
-              {!loading && filteredInvoices.map((inv) => (
-                <tr
-                  key={inv.dbId}
-                  className="clickable-row"
-                  onClick={() => openInvoiceDetails(inv)}
-                >
-                  <td>
-                    <strong style={{ color: '#d4af37' }}>{inv.id}</strong>
-                    <small style={{ display: 'block', color: '#64748b' }}>Due: {inv.dueDate}</small>
-                  </td>
-                  <td>
-                    <strong>{inv.guest}</strong>
-                    {inv.email && <small style={{ display: 'block', color: '#64748b' }}>{inv.email}</small>}
-                  </td>
-                  <td>
-                    <span className="fin-badge fin-badge-gold" style={{ fontSize: '11px', padding: '2px 8px' }}>
-                      {inv.invoiceType}
-                    </span>
-                    <small style={{ display: 'block', color: '#64748b', marginTop: '2px' }}>
-                      {inv.invoiceType === 'GUEST' ? `Room ${inv.roomNumber}` : inv.department}
-                    </small>
-                  </td>
-                  <td style={{ fontSize: '13px', color: '#94a3b8' }}>{inv.date}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                    ₱{inv.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ textAlign: 'right', color: '#22c55e' }}>
-                    ₱{inv.paid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: inv.balance > 0 ? '#f59e0b' : '#22c55e' }}>
-                    ₱{inv.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td>
-                    <span
-                      className={`fin-badge ${
-                        inv.status === 'Paid'
-                          ? 'fin-badge-green'
-                          : inv.status === 'Part-paid'
-                          ? 'fin-badge-gold'
-                          : inv.status === 'Issued'
-                          ? 'fin-badge-blue'
-                          : 'fin-badge-gray'
-                      }`}
+              <div className="fin-select-wrap">
+                <label>Invoice Type</label>
+                <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                  <option value="All">All Types</option>
+                  <option value="GUEST">Guest Folios</option>
+                  <option value="CORPORATE">Corporate &amp; Sales</option>
+                  <option value="STAFF">Staff Charges</option>
+                </select>
+              </div>
+
+              <div className="fin-select-wrap">
+                <label>Billing Status</label>
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                  <option value="All">All Statuses</option>
+                  <option value="Issued">Issued (Unsettled)</option>
+                  <option value="Part-paid">Partially Paid</option>
+                  <option value="Paid">Fully Paid</option>
+                  <option value="Draft">Draft</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Invoices Table */}
+          <div className="fin-surface">
+            <div className="fin-surface-header">
+              <div>
+                <h3 className="fin-surface-title">Invoice &amp; Folio Register</h3>
+                <p className="fin-surface-subtitle">Click any invoice to view full itemization, payments received, and printable statement.</p>
+              </div>
+              <span className="fin-badge fin-badge-blue">
+                {loading ? 'Loading...' : `${filteredInvoices.length} Invoices`}
+              </span>
+            </div>
+
+            <div className="fin-table-scroll">
+              <table className="fin-table">
+                <thead>
+                  <tr>
+                    <th>INVOICE #</th>
+                    <th>CUSTOMER / GUEST</th>
+                    <th>TYPE &amp; LOCATION</th>
+                    <th>DATE ISSUED</th>
+                    <th style={{ textAlign: 'right' }}>TOTAL AMOUNT</th>
+                    <th style={{ textAlign: 'right' }}>PAID</th>
+                    <th style={{ textAlign: 'right' }}>BALANCE DUE</th>
+                    <th>STATUS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading && (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                        Loading invoices from database...
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && filteredInvoices.length === 0 && (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                        No invoices found matching current filters.
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && filteredInvoices.map((inv) => (
+                    <tr
+                      key={inv.dbId}
+                      className="clickable-row"
+                      onClick={() => openInvoiceDetails(inv)}
                     >
-                      {inv.status}
-                    </span>
-                  </td>
+                      <td>
+                        <strong style={{ color: '#d4af37' }}>{inv.id}</strong>
+                        <small style={{ display: 'block', color: '#64748b' }}>Due: {inv.dueDate}</small>
+                      </td>
+                      <td>
+                        <strong>{inv.guest}</strong>
+                        {inv.email && <small style={{ display: 'block', color: '#64748b' }}>{inv.email}</small>}
+                      </td>
+                      <td>
+                        <span className="fin-badge fin-badge-gold" style={{ fontSize: '11px', padding: '2px 8px' }}>
+                          {inv.invoiceType}
+                        </span>
+                        <small style={{ display: 'block', color: '#64748b', marginTop: '2px' }}>
+                          {inv.invoiceType === 'GUEST' ? `Room ${inv.roomNumber}` : inv.department}
+                        </small>
+                      </td>
+                      <td style={{ fontSize: '13px', color: '#94a3b8' }}>{inv.date}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        ₱{inv.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#22c55e' }}>
+                        ₱{inv.paid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: inv.balance > 0 ? '#f59e0b' : '#22c55e' }}>
+                        ₱{inv.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td>
+                        <span
+                          className={`fin-badge ${
+                            inv.status === 'Paid'
+                              ? 'fin-badge-green'
+                              : inv.status === 'Part-paid'
+                              ? 'fin-badge-gold'
+                              : inv.status === 'Issued'
+                              ? 'fin-badge-blue'
+                              : 'fin-badge-gray'
+                          }`}
+                        >
+                          {inv.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Sales Deals Register */
+        <div className="fin-surface">
+          <div className="fin-surface-header">
+            <div>
+              <h3 className="fin-surface-title">Sales &amp; Marketing B2B Contracts</h3>
+              <p className="fin-surface-subtitle">Confirmed corporate bookings, wedding banquets, and event packages from Sales &amp; Marketing ready to bill.</p>
+            </div>
+            <span className="fin-badge fin-badge-gold">
+              {salesDeals.length} Sales Deals
+            </span>
+          </div>
+
+          <div className="fin-table-scroll">
+            <table className="fin-table">
+              <thead>
+                <tr>
+                  <th>DEAL CODE</th>
+                  <th>CLIENT / ORGANIZATION</th>
+                  <th>EVENT &amp; ATTENDEES</th>
+                  <th>PACKAGE DETAILS</th>
+                  <th style={{ textAlign: 'right' }}>CONTRACT VALUE</th>
+                  <th>STAGE / STATUS</th>
+                  <th style={{ textAlign: 'center' }}>ACTION</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {salesDeals.length === 0 && (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                      No sales records found.
+                    </td>
+                  </tr>
+                )}
+                {salesDeals.map((deal) => (
+                  <tr key={deal.id}>
+                    <td>
+                      <strong style={{ color: '#d4af37' }}>{deal.dealCode}</strong>
+                      <small style={{ display: 'block', color: '#64748b' }}>{deal.eventType || 'Event'}</small>
+                    </td>
+                    <td>
+                      <strong>{deal.clientName}</strong>
+                      <small style={{ display: 'block', color: '#64748b' }}>
+                        {deal.contactPerson} ({deal.contactEmail})
+                      </small>
+                    </td>
+                    <td>
+                      <div>{deal.eventDate ? new Date(deal.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Flexible date'}</div>
+                      <small style={{ color: '#64748b' }}>{deal.attendees || 0} pax</small>
+                    </td>
+                    <td>
+                      <span>{deal.packageName}</span>
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#1e293b' }}>
+                      ₱{Number(deal.contractAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td>
+                      <span className={`fin-badge ${deal.status === 'INVOICED' ? 'fin-badge-green' : 'fin-badge-blue'}`}>
+                        {deal.status === 'INVOICED' ? '✓ INVOICED' : deal.status}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      {deal.status === 'INVOICED' ? (
+                        <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>
+                          Folio Linked
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="button button-primary"
+                          disabled={submitting}
+                          style={{ minHeight: '30px', padding: '0 10px', fontSize: '11px' }}
+                          onClick={() => handleConvertSalesDeal(deal)}
+                        >
+                          + Bill to Finance Folio
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Invoice Details Modal */}
       {selectedInvoice && (

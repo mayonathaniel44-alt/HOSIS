@@ -63,9 +63,9 @@ router.get('/integrations/maintenance/records', checkerGuard, controller.listMai
 router.post('/integrations/maintenance/expenses', checkerGuard, requireBody, controller.createMaintenanceExpense)
 
 // 3. Marketing & Sales: Sales records connected to finance
-router.get('/integrations/sales/records', checkerGuard, controller.listSalesRecords)
-router.post('/integrations/sales/sync-invoice', checkerGuard, requireBody, controller.syncSalesInvoice)
-router.get('/integrations/city-ledger/aging', checkerGuard, controller.getCityLedgerAging)
+router.get('/integrations/sales/records', controller.listSalesRecords)
+router.post('/integrations/sales/sync-invoice', requireBody, controller.syncSalesInvoice)
+router.get('/integrations/city-ledger/aging', controller.getCityLedgerAging)
 
 // 4. Human Resources: Timesheet & Biometric Attendance Ingestion
 router.get('/integrations/hr/timesheets', controller.syncHRTimesheets)

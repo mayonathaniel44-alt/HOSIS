@@ -264,7 +264,7 @@ export default function PaymentsView({ user, showToast }) {
               onClick={() => showToast(`All ${payments.length} posted customer settlements reconciled against bank records.`)}
               title="Checker Action: Reconcile all posted payments with bank clearing"
             >
-              ⚖️ Reconcile Batch
+              Reconcile Batch
             </button>
           )}
           <button
@@ -273,7 +273,7 @@ export default function PaymentsView({ user, showToast }) {
             onClick={handleBulkExportCsv}
             title="Bulk export payment records to CSV spreadsheet"
           >
-            📥 Bulk Export CSV
+            Export CSV
           </button>
           <button
             type="button"
@@ -281,7 +281,7 @@ export default function PaymentsView({ user, showToast }) {
             onClick={handleBulkExportJson}
             title="Bulk export payment records to JSON"
           >
-            📋 Bulk Export JSON
+            Export JSON
           </button>
         </div>
       </header>

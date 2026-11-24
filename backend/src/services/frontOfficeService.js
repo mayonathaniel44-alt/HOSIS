@@ -268,6 +268,10 @@ function badRequest(codeName, message) {
   return error
 }
 
+async function listPromotions() {
+  return model.listPromotions()
+}
+
 module.exports = {
   dashboard,
   listGuests,
@@ -296,4 +300,5 @@ module.exports = {
   createPayment,
   getPayment,
   updatePayment,
+  listPromotions,
 }

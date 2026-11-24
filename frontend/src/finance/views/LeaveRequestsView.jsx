@@ -531,7 +531,7 @@ export default function LeaveRequestsView({ user, showToast }) {
               style={{ width: 'auto', background: '#0d1238', color: '#d4af37', fontWeight: 600, border: '1px solid #d4af37' }}
               title="Export report filtered by timeframe"
             >
-              <option value="all">📥 Export CSV Report...</option>
+              <option value="all">Export CSV Report...</option>
               <option value="daily">Daily Export</option>
               <option value="weekly">Weekly Export</option>
               <option value="monthly">Monthly Export</option>

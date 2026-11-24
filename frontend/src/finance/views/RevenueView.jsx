@@ -127,7 +127,7 @@ export default function RevenueView({ user, onOpenReport, onNavigate, showToast 
             onClick={handleBulkExportCsv}
             title="Bulk export revenue data to CSV"
           >
-            📥 Bulk Export CSV
+            Export CSV
           </button>
           <button
             type="button"
@@ -135,7 +135,7 @@ export default function RevenueView({ user, onOpenReport, onNavigate, showToast 
             onClick={handleBulkExportJson}
             title="Bulk export revenue data to JSON"
           >
-            📋 Bulk Export JSON
+            Export JSON
           </button>
           <button
             type="button"

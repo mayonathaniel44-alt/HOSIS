@@ -16,9 +16,10 @@ const staffRoles = [
 
 const departments = [
   { name: 'Front Office', status: 'Operational', detail: 'Reservations, guests, rooms, requests, and billing are connected.' },
+  { name: 'Accounting & Finance', status: 'Operational', detail: 'Invoices, payments, expenses, revenue monitoring, and financial reporting are available.' },
+  { name: 'Sales & Marketing', status: 'Operational', detail: 'Corporate deals, event contracts, and promotional campaigns are integrated with Front Office & Finance.' },
   { name: 'Housekeeping', status: 'Not integrated', detail: 'Staff access can be assigned now; operational workflows are not connected yet.' },
   { name: 'Engineering', status: 'Not integrated', detail: 'Staff access can be assigned now; operational workflows are not connected yet.' },
-  { name: 'Accounting & Finance', status: 'Operational', detail: 'Invoices, payments, expenses, revenue monitoring, and financial reporting are available.' },
   { name: 'Human Resources', status: 'Not integrated', detail: 'HR staff roles are available; employee workflows are not connected yet.' },
 ]
 
@@ -179,9 +180,8 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenFina
             <div className="brand-mark" aria-hidden="true"><span /><span /><span /><span /><span /></div>
             <div><strong>GRAND HORIZON</strong><small>HOTEL &amp; RESORT</small></div>
           </div>
-          <div className="admin-brand-caption">ADMIN CONSOLE</div>
         </div>
-        <div className="sidebar-label">ADMINISTRATION</div>
+        <div className="sidebar-label">HOTEL ADMINISTRATION</div>
         <nav className="side-nav admin-nav" aria-label="Administrator navigation">
           {['Overview', 'Staff & access', 'Audit log', 'Hotel settings', 'Integrations'].map((item) => (
             <button key={item} className={`nav-item ${section === item ? 'nav-active' : ''}`} aria-current={section === item ? 'page' : undefined} onClick={() => { setSection(item); setError(''); setNotice('') }}>
@@ -189,14 +189,12 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenFina
               <span>{item}</span>
             </button>
           ))}
-          <button className="nav-item admin-front-office-link" onClick={onOpenFrontOffice}><i className="admin-nav-mark" aria-hidden="true">↗</i><span>Front Office</span></button>
         </nav>
         <div className="sidebar-bottom admin-sidebar-bottom">
-          <div className="help-card"><span className="help-icon" aria-hidden="true">✦</span><strong>Administration</strong><p>Manage staff access and connected hotel operations.</p></div>
           <button className="profile-button" onClick={onSignOut} aria-label={`Sign out ${username}`}>
             <span className="avatar avatar-small admin-avatar">{username.slice(0, 2).toUpperCase()}</span>
             <span><strong>{username}</strong><small>Administrator</small></span>
-            <span aria-hidden="true">↗</span>
+            <span aria-hidden="true" style={{ fontSize: '16px', opacity: 0.6 }}>•••</span>
           </button>
         </div>
       </aside>

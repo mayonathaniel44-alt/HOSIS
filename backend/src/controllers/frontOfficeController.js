@@ -40,4 +40,5 @@ module.exports = {
   createPayment: controller((req) => service.createPayment(id(req), req.body, userId(req)), 201),
   getPayment: controller((req) => service.getPayment(id(req))),
   updatePayment: controller((req) => service.updatePayment(id(req), req.body, userId(req))),
+  listPromotions: controller(() => service.listPromotions()),
 }

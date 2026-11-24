@@ -190,6 +190,7 @@ function App() {
   const [requests, setRequests] = useState([])
   const [roomList, setRoomList] = useState([])
   const [invoices, setInvoices] = useState([])
+  const [promotions, setPromotions] = useState([])
   const [arrivalFilter, setArrivalFilter] = useState('All arrivals')
   const [roomFilter, setRoomFilter] = useState('All')
   const [requestFilter, setRequestFilter] = useState('All')
@@ -201,13 +202,14 @@ function App() {
   }, [])
 
   const refreshData = useCallback(async () => {
-    const [dashboardData, guestData, reservationData, roomData, requestData, invoiceData] = await Promise.all([
+    const [dashboardData, guestData, reservationData, roomData, requestData, invoiceData, promoData] = await Promise.all([
       frontOfficeApi.dashboard(),
       frontOfficeApi.guests(),
       frontOfficeApi.reservations(),
       frontOfficeApi.rooms(),
       frontOfficeApi.requests(),
       frontOfficeApi.invoices(),
+      frontOfficeApi.promotions().catch(() => []),
     ])
     setDashboard(dashboardData)
     setGuests(guestData.map(mapGuest))
@@ -215,6 +217,7 @@ function App() {
     setRoomList(roomData.map(mapRoom))
     setRequests(requestData.map(mapRequest))
     setInvoices(invoiceData.map(mapInvoice))
+    setPromotions(Array.isArray(promoData) ? promoData : [])
     setDataError('')
   }, [])
 
@@ -414,11 +417,13 @@ function App() {
           checkOut = next.toISOString().slice(0, 10)
         }
 
+        const promoCode = formData.get('promoCode')?.toString() || ''
         const reservation = {
           roomId,
           roomType,
           checkIn,
           checkOut,
+          specialRequests: promoCode ? `Promotion: [${promoCode}]` : undefined,
         }
         if (guestId) {
           reservation.guestId = Number(guestId)
@@ -827,6 +832,23 @@ function App() {
     return (
       <>
         <PageIntro eyebrow="GUEST STAYS" title="Reservations" description="Manage bookings, arrivals, and departures." action={<button className="button button-primary" onClick={() => { setSelectedRecord(null); setModal('reservation') }}><Icon name="plus" size={17} /> New reservation</button>} />
+        {promotions.length > 0 && (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '14px', padding: '10px 14px', background: '#fdfbf7', border: '1px solid #fae8c8', borderRadius: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#c99a3d' }}>
+              🎁 ACTIVE SALES &amp; MARKETING PROMOTIONS:
+            </span>
+            {promotions.map((p) => (
+              <span
+                key={p.promoCode}
+                className="status status-amber"
+                style={{ fontSize: '10.5px', padding: '4px 8px', cursor: 'default' }}
+                title={`${p.title}: ${p.description}`}
+              >
+                <strong>{p.promoCode}</strong>: {p.discountType === 'PERCENT' ? `${p.discountValue}% OFF` : `₱${Number(p.discountValue).toLocaleString()} OFF`}
+              </span>
+            ))}
+          </div>
+        )}
         <section className="surface data-surface">
           <div className="data-toolbar">
             <div className="filter-tabs">
@@ -1274,7 +1296,7 @@ function App() {
           {(user?.role === 'ADMIN' || user?.role === 'FINANCE_ADMIN') && <button className="nav-item" onClick={() => setShowAdminConsole(true)}><Icon name="lock" size={18} /><span>Admin console</span></button>}
           {navigation.map((item) => <button key={item.id} className={`nav-item ${activePage === item.id ? 'nav-active' : ''}`} onClick={() => { setActivePage(item.id); setSearch(''); setArrivalFilter('All arrivals') }}><Icon name={item.icon} size={18} /><span>{item.id}</span>{item.id === 'Guest requests' && requests.filter((request) => request.status === 'NEW').length > 0 && <span className="nav-count">{requests.filter((request) => request.status === 'NEW').length}</span>}</button>)}
         </nav>
-        <div className="sidebar-bottom"><div className="help-card"><span className="help-icon"><Icon name="sparkle" size={18} /></span><strong>Here to help</strong><p>Need a hand? Your hotel admin is one message away.</p><button onClick={() => notify('Please contact your hotel administrator for support.')}>Get support <Icon name="arrow" size={14} /></button></div><button className="profile-button" onClick={() => notify(`Signed in as ${displayName} · ${accessLabel}`)}><Avatar initials={displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="dots" size={18} /></button></div>
+        <div className="sidebar-bottom"><button className="profile-button" onClick={() => notify(`Signed in as ${displayName} · ${accessLabel}`)}><Avatar initials={displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="dots" size={18} /></button></div>
       </aside>
       <main className="main-panel">
         <header className="topbar"><button className="mobile-brand" onClick={() => setActivePage('Dashboard')}><Brand compact /></button><div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activePage}</strong></div><div className="topbar-tools"><label className="global-search"><Icon name="search" size={17} /><input aria-label="Search current page" placeholder="Search anything..." value={search} onChange={(event) => setSearch(event.target.value)} /></label><span className="topbar-date"><Icon name="sun" size={17} />{dateLabel}</span><button className="notification-button" aria-label="Refresh front office data" onClick={() => performAction(refreshData, 'Front Office data refreshed.')}><Icon name="bell" size={19} /><i /></button><span className="topbar-divider" /><button className="topbar-profile" onClick={signOut} aria-label="Sign out"><Avatar initials={initials(displayName)} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="logout" size={16} /></button></div></header>
@@ -1287,6 +1309,7 @@ function App() {
         guests={guests}
         rooms={roomList}
         reservations={reservations}
+        promotions={promotions}
         onClose={() => setModal(null)}
         onSubmit={submitModal}
       />}
@@ -1315,10 +1338,11 @@ function StatCard({ label, value, suffix, note, icon, color, onClick }) {
   )
 }
 
-function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, onSubmit }) {
+function Modal({ modal, selectedRecord, guests, rooms, reservations, promotions = [], onClose, onSubmit }) {
   const roomTypes = [...new Set(rooms.map((room) => room.type))]
   const [selectedRoomType, setSelectedRoomType] = useState(selectedRecord?.roomType || roomTypes[0] || 'Deluxe Room')
   const [selectedGuestId, setSelectedGuestId] = useState(selectedRecord?.guestId ? String(selectedRecord.guestId) : '')
+  const [selectedPromoCode, setSelectedPromoCode] = useState('')
   const localToday = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
   const nextDay = new Date(`${localToday}T00:00:00`)
   nextDay.setDate(nextDay.getDate() + 1)
@@ -1457,6 +1481,34 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
                 <input id="modal-checkout" name="checkout" type="date" value={checkOutDate} onChange={(event) => setCheckOutDate(event.target.value)} required />
               </div>
             </div>
+
+            <label htmlFor="modal-promotion">Sales &amp; Marketing Promotion</label>
+            <select
+              id="modal-promotion"
+              name="promoCode"
+              value={selectedPromoCode}
+              onChange={(e) => setSelectedPromoCode(e.target.value)}
+            >
+              <option value="">No promotion applied (Standard Rate)</option>
+              {promotions.map((p) => (
+                <option key={p.promoCode} value={p.promoCode}>
+                  {p.promoCode} — {p.title} ({p.discountType === 'PERCENT' ? `${p.discountValue}% OFF` : `₱${Number(p.discountValue).toLocaleString()} OFF`})
+                </option>
+              ))}
+            </select>
+            {selectedPromoCode && (() => {
+              const promo = promotions.find((p) => p.promoCode === selectedPromoCode)
+              if (!promo) return null
+              return (
+                <div style={{ background: 'rgba(201, 154, 61, 0.12)', border: '1px solid #c99a3d', borderRadius: '7px', padding: '9px 12px', margin: '4px 0 10px', fontSize: '11px' }}>
+                  <strong style={{ color: '#b8882e', display: 'block' }}>🎁 {promo.title} ({promo.promoCode})</strong>
+                  <span style={{ color: '#64748b', display: 'block', margin: '2px 0 4px' }}>{promo.description}</span>
+                  <span style={{ color: '#16a34a', fontWeight: 600 }}>
+                    Discount: {promo.discountType === 'PERCENT' ? `${promo.discountValue}% discount on room rate` : `₱${Number(promo.discountValue).toLocaleString()} fixed discount`}
+                  </span>
+                </div>
+              )
+            })()}
           </>}
 
           {modal === 'edit-reservation' && <>
@@ -1532,6 +1584,41 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
             </select>
             <label htmlFor="invoice-amount">Invoice amount</label>
             <input id="invoice-amount" name="amount" type="number" min="0.01" step="0.01" defaultValue={selectedRecord?.amount || ''} required />
+            {promotions.length > 0 && (
+              <>
+                <label htmlFor="invoice-promo">Apply Sales &amp; Marketing Promotion (optional)</label>
+                <select
+                  id="invoice-promo"
+                  name="invoicePromo"
+                  onChange={(e) => {
+                    const code = e.target.value
+                    const promo = promotions.find((p) => p.promoCode === code)
+                    if (promo) {
+                      const input = document.getElementById('invoice-amount')
+                      if (input && input.value) {
+                        const current = parseFloat(input.value)
+                        if (!isNaN(current)) {
+                          let discounted = current
+                          if (promo.discountType === 'PERCENT') {
+                            discounted = current * (1 - promo.discountValue / 100)
+                          } else {
+                            discounted = Math.max(0, current - promo.discountValue)
+                          }
+                          input.value = discounted.toFixed(2)
+                        }
+                      }
+                    }
+                  }}
+                >
+                  <option value="">No promotion</option>
+                  {promotions.map((p) => (
+                    <option key={p.promoCode} value={p.promoCode}>
+                      {p.promoCode} — {p.title} ({p.discountType === 'PERCENT' ? `${p.discountValue}% OFF` : `₱${Number(p.discountValue).toLocaleString()} OFF`})
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
             <label htmlFor="invoice-notes">Notes (optional)</label>
             <textarea id="invoice-notes" name="notes" rows="2" placeholder="What is this invoice for?" defaultValue={selectedRecord?.notes || ''} />
           </>}

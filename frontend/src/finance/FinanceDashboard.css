@@ -17,49 +17,100 @@
   --fin-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
-/* Fullscreen Isolated System Layout - Horizontal Flex Shell with Sidebar */
-.finance-root-fullscreen {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  flex-direction: row; /* Sidebar on the left, Main work surface on the right */
-  background-color: var(--fin-bg);
-  color: var(--fin-text);
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden;
-  z-index: 999;
+/* Standard Grand Horizon Shell Layout for Finance */
+.finance-shell {
+  min-height: 100vh;
+  background: var(--canvas, #fbfbfd);
 }
 
-/* Sidebar for Financial Operations */
+/* Sidebar for Financial Operations - Matches Grand Horizon Global Design, permanently fixed at 252px */
 .finance-sidebar {
-  width: 260px;
-  min-width: 260px;
-  max-width: 260px;
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 4;
+  width: 252px;
+  min-width: 252px;
+  max-width: 252px;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #090e2b 0%, #0d1238 45%, #151b4d 100%);
-  border-right: 1px solid rgba(212, 175, 55, 0.28);
-  box-shadow: 4px 0 24px rgba(7, 10, 36, 0.25);
-  flex-shrink: 0;
-  z-index: 100;
+  padding: 27px 19px 16px;
+  background: var(--navy, #0d1238);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
   user-select: none;
-  overflow: hidden;
-  transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), max-width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-/* Sidebar Brand Header */
-.finance-sidebar-brand {
+.finance-sidebar .sidebar-brand {
+  padding: 0 9px 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+  background: transparent;
+}
+
+.finance-sidebar .sidebar-label {
+  margin: 28px 10px 12px;
+  color: #aaa5ca;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.finance-sidebar .side-nav {
+  display: grid;
+  gap: 5px;
+}
+
+.finance-sidebar .nav-item {
   display: flex;
+  min-height: 44px;
   align-items: center;
   gap: 12px;
-  padding: 20px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.16);
-  flex-shrink: 0;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #d3d0e7;
+  background: transparent;
+  text-align: left;
+  transition: background 160ms ease, color 160ms ease;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.finance-sidebar .nav-item:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.finance-sidebar .nav-active,
+.finance-sidebar .nav-active:hover {
+  border-color: rgba(243, 203, 111, 0.15);
+  color: #fff !important;
+  background: linear-gradient(105deg, #c99a3d, #b8882e) !important;
+  box-shadow: 0 4px 12px rgba(173, 125, 29, 0.22) !important;
+  font-weight: 600 !important;
+}
+
+.finance-sidebar .sidebar-bottom {
+  margin-top: auto;
+  padding: 0;
+}
+
+.finance-sidebar .profile-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 12px 4px 2px;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.13);
+  color: #fff;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
 .finance-brand-main-wrap {
@@ -101,75 +152,6 @@
   text-transform: uppercase;
   margin-top: 3px;
   white-space: nowrap;
-}
-
-/* Collapsed Sidebar Rail */
-.finance-sidebar.collapsed {
-  width: 68px;
-  min-width: 68px;
-  max-width: 68px;
-}
-
-.finance-sidebar.collapsed .finance-sidebar-brand {
-  padding: 18px 8px;
-  justify-content: center;
-}
-
-.finance-sidebar.collapsed .finance-brand-main-wrap {
-  justify-content: center;
-}
-
-.finance-sidebar.collapsed .finance-brand-crest {
-  width: 32px;
-  height: 28px;
-}
-
-.finance-sidebar.collapsed .finance-sidebar-nav-container {
-  padding: 12px 6px;
-}
-
-.finance-sidebar.collapsed .finance-sidebar-nav-item {
-  justify-content: center;
-  padding: 12px 0;
-  gap: 0;
-}
-
-.finance-sidebar.collapsed .finance-nav-icon {
-  font-size: 19px;
-  margin: 0;
-}
-
-.finance-sidebar.collapsed .finance-sidebar-footer {
-  padding: 12px 6px;
-  align-items: center;
-}
-
-.finance-sidebar-collapsed-footer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-}
-
-.finance-sidebar-icon-signout {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  color: #fca5a5;
-  font-size: 15px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.finance-sidebar-icon-signout:hover {
-  background: #ef4444;
-  color: #ffffff;
 }
 
 /* Navigation List Container */
@@ -426,32 +408,6 @@
 .finance-breadcrumb-bar strong {
   color: #39374f;
   font-weight: 600;
-}
-
-.finance-strip-toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  color: #0d1238;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.18s ease;
-  font-family: inherit;
-}
-
-.finance-strip-toggle-btn:hover {
-  background: #0d1238;
-  color: #ffffff;
-  border-color: #0d1238;
-}
-
-.finance-strip-toggle-btn svg {
-  flex-shrink: 0;
 }
 
 .finance-strip-breadcrumb {
@@ -760,41 +716,51 @@
   box-shadow: 0 2px 5px rgba(13, 18, 56, 0.2);
 }
 
-/* Reusable Buttons */
-.fin-btn {
+/* Reusable Buttons - Minimal & Modern Grand Horizon Style */
+.fin-btn,
+.button {
   display: inline-flex;
+  min-height: 36px;
   align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border-radius: 9999px;
-  font-size: 12.5px;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.16s ease;
-  border: 1px solid transparent;
+  transition: all 150ms ease;
+  font-family: inherit;
+  white-space: nowrap;
 }
 
-.fin-btn-secondary {
+.fin-btn-secondary,
+.button-secondary {
+  border-color: #e2e8f0;
+  color: #475569;
   background: #ffffff;
-  color: #1e293b;
-  border-color: #d1d5db;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
-.fin-btn-secondary:hover {
+.fin-btn-secondary:hover,
+.button-secondary:hover {
   background: #f8fafc;
-  border-color: #94a3b8;
+  border-color: #cbd5e1;
+  color: #1e293b;
 }
 
-.fin-btn-primary {
-  background: var(--fin-navy);
+.fin-btn-primary,
+.button-primary {
+  border-color: #3d309e;
   color: #ffffff;
-  box-shadow: 0 2px 4px rgba(13, 19, 59, 0.2);
+  background: #4334ad;
+  box-shadow: 0 2px 6px rgba(67, 52, 173, 0.18);
 }
 
-.fin-btn-primary:hover {
-  background: var(--fin-navy-light);
-  transform: translateY(-1px);
+.fin-btn-primary:hover,
+.button-primary:hover {
+  background: #362990;
 }
 
 .fin-btn-small {

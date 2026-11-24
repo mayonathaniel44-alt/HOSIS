@@ -131,7 +131,7 @@ export default function ReportsView({ user, showToast }) {
             onClick={handleBulkExportCsv}
             title="Export full statement as CSV spreadsheet"
           >
-            📥 Bulk Export CSV
+            Export CSV
           </button>
           <button
             type="button"
@@ -139,7 +139,7 @@ export default function ReportsView({ user, showToast }) {
             onClick={handleBulkExportJson}
             title="Export full statement as structured JSON"
           >
-            📋 Bulk Export JSON
+            Export JSON
           </button>
           <button
             type="button"

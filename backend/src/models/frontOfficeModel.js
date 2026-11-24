@@ -696,6 +696,20 @@ async function dashboard() {
   }
 }
 
+async function listPromotions() {
+  const { rows } = await pool.query(
+    `SELECT id, promo_code AS "promoCode", title, description,
+            discount_type AS "discountType", discount_value AS "discountValue",
+            min_spend AS "minSpend", target_room_type AS "targetRoomType",
+            start_date AS "startDate", end_date AS "endDate", is_active AS "isActive",
+            created_by AS "createdBy"
+     FROM promotions
+     WHERE is_active = TRUE
+     ORDER BY discount_value DESC`,
+  )
+  return rows
+}
+
 module.exports = {
   dashboard,
   listGuests,
@@ -724,4 +738,5 @@ module.exports = {
   createPayment,
   getPayment,
   updatePayment,
+  listPromotions,
 }
