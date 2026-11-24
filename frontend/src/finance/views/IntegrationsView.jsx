@@ -11,6 +11,7 @@ export default function IntegrationsView({ showToast }) {
   const [selectedDamage, setSelectedDamage] = useState(null)
   const [damageCharge, setDamageCharge] = useState('0')
   const [damageNotes, setDamageNotes] = useState('')
+  const [attachToFolio, setAttachToFolio] = useState(true)
   const [billingDamage, setBillingDamage] = useState(false)
 
   // 2. Maintenance state
@@ -19,12 +20,19 @@ export default function IntegrationsView({ showToast }) {
   const [maintCategory, setMaintCategory] = useState('HVAC Chiller Compressor Maintenance')
   const [maintAmount, setMaintAmount] = useState('15000')
   const [maintNotes, setMaintNotes] = useState('')
+  const [workOrderId, setWorkOrderId] = useState('WO-2026-ENG-089')
+  const [expenseClassification, setExpenseClassification] = useState('OPEX')
   const [submittingMaint, setSubmittingMaint] = useState(false)
 
   // 3. Sales & Marketing state
   const [salesRecords, setSalesRecords] = useState([])
-  const [selectedDeal, setSelectedDeal] = useState(null)
+  const [selectedDealForMilestone, setSelectedDealForMilestone] = useState(null)
+  const [milestoneStage, setMilestoneStage] = useState('DEPOSIT_20')
   const [syncingDeal, setSyncingDeal] = useState(false)
+
+  // 4. City Ledger Aging state
+  const [cityLedger, setCityLedger] = useState(null)
+  const [loadingAging, setLoadingAging] = useState(false)
 
   async function loadData() {
     setLoading(true)
@@ -46,8 +54,21 @@ export default function IntegrationsView({ showToast }) {
     }
   }
 
+  async function loadCityLedgerAging() {
+    setLoadingAging(true)
+    try {
+      const res = await financeApi.cityLedgerAging()
+      setCityLedger(res.data || res || null)
+    } catch (err) {
+      console.error('Failed to load City Ledger Aging:', err)
+    } finally {
+      setLoadingAging(false)
+    }
+  }
+
   useEffect(() => {
     loadData()
+    loadCityLedgerAging()
   }, [])
 
   // Housekeeping Billing Action
@@ -55,6 +76,7 @@ export default function IntegrationsView({ showToast }) {
     setSelectedDamage(dmg)
     setDamageCharge(String(dmg.estimatedCost || 1500))
     setDamageNotes(`Room condition report: ${dmg.damagedItem}`)
+    setAttachToFolio(true)
   }
 
   async function handleBillDamageSubmit(e) {
@@ -71,6 +93,7 @@ export default function IntegrationsView({ showToast }) {
         damagedItem: selectedDamage.damagedItem,
         chargeAmount: Number(damageCharge),
         notes: damageNotes,
+        guestFolioAttached: attachToFolio,
       })
 
       showToast(res.data?.message || res.message || 'Damage charge successfully billed to guest folio.')
@@ -92,6 +115,8 @@ export default function IntegrationsView({ showToast }) {
       await financeApi.createMaintenanceExpense({
         category: maintCategory,
         amount: Number(maintAmount),
+        workOrderId: workOrderId || null,
+        expenseClassification,
         notes: maintNotes || 'Engineering & Maintenance work order reimbursement',
       })
       showToast('Maintenance expense voucher submitted to Finance for approval.')
@@ -105,19 +130,30 @@ export default function IntegrationsView({ showToast }) {
     }
   }
 
-  // Sales Sync to Finance Invoice
-  async function handleSyncSalesInvoice(deal) {
+  // Sales Sync to Finance Invoice with Milestone Invoicing
+  function openMilestoneModal(deal) {
+    setSelectedDealForMilestone(deal)
+    setMilestoneStage('DEPOSIT_20')
+  }
+
+  async function handleSyncSalesMilestoneSubmit(e) {
+    e.preventDefault()
+    if (!selectedDealForMilestone) return
     setSyncingDeal(true)
     try {
+      const deal = selectedDealForMilestone
       const res = await financeApi.syncSalesInvoice({
         dealId: deal.id,
         dealCode: deal.dealCode,
         clientName: deal.clientName,
         packageName: deal.packageName,
         contractAmount: Number(deal.contractAmount),
+        milestoneStage,
       })
-      showToast(res.data?.message || res.message || `Sales deal ${deal.dealCode} successfully connected to Finance invoice.`)
+      showToast(res.data?.message || res.message || `Sales deal ${deal.dealCode} successfully connected to Finance milestone invoice.`)
+      setSelectedDealForMilestone(null)
       loadData()
+      loadCityLedgerAging()
     } catch (err) {
       console.error('Failed to sync sales deal:', err)
       showToast(err.message || 'Failed to sync sales deal.')
@@ -137,6 +173,8 @@ export default function IntegrationsView({ showToast }) {
       { key: 'damageCategory', label: 'Category' },
       { key: 'estimatedCost', label: 'Estimated Cost (PHP)' },
       { key: 'billingStatus', label: 'Billing Status' },
+      { key: 'guestFolioAttached', label: 'Folio Attached' },
+      { key: 'inventoryWrittenOff', label: 'Inventory Written Off' },
       { key: 'reportedBy', label: 'Reported By' },
       { key: 'reportedAt', label: 'Reported Timestamp' },
     ]
@@ -148,6 +186,9 @@ export default function IntegrationsView({ showToast }) {
     const records = maintenanceData?.records || []
     const headers = [
       { key: 'voucherCode', label: 'Voucher Code' },
+      { key: 'workOrderId', label: 'Work Order ID' },
+      { key: 'expenseClassification', label: 'Classification' },
+      { key: 'approvalTier', label: 'Approval Tier' },
       { key: 'department', label: 'Department' },
       { key: 'category', label: 'Maintenance Category' },
       { key: 'amount', label: 'Expense Amount (PHP)' },
@@ -165,6 +206,7 @@ export default function IntegrationsView({ showToast }) {
       { key: 'dealCode', label: 'Deal Code' },
       { key: 'clientName', label: 'Corporate Client' },
       { key: 'packageName', label: 'Package Title' },
+      { key: 'milestoneStage', label: 'Milestone Stage' },
       { key: 'contractAmount', label: 'Contract Amount (PHP)' },
       { key: 'eventDate', label: 'Event Date' },
       { key: 'salesRep', label: 'Sales Rep' },
@@ -173,6 +215,49 @@ export default function IntegrationsView({ showToast }) {
     ]
     exportToCsv('hosis-sales-marketing-records', salesRecords, headers)
     showToast('Exported Sales & Marketing records to CSV.')
+  }
+
+  function handleExportCityLedgerCsv() {
+    const debtors = cityLedger?.debtors || []
+    const headers = [
+      { key: 'invoiceCode', label: 'Invoice Code' },
+      { key: 'clientName', label: 'Corporate Client / Debtor' },
+      { key: 'totalAmount', label: 'Total Invoiced (PHP)' },
+      { key: 'paidAmount', label: 'Paid Collections (PHP)' },
+      { key: 'balanceDue', label: 'Outstanding Balance (PHP)' },
+      { key: 'issueDate', label: 'Issue Date' },
+      { key: 'daysPastDue', label: 'Days Past Due' },
+      { key: 'agingBucket', label: 'Aging Category' },
+    ]
+    exportToCsv('hosis-city-ledger-ar-aging', debtors, headers)
+    showToast('Exported City Ledger A/R Aging report to CSV.')
+  }
+
+  // Calculated tier preview for maintenance modal
+  const computedTier = Number(maintAmount) <= 10000
+    ? { tier: 'AUTO', label: 'Auto Approval (Tier 1: ≤ ₱10,000)', color: '#22c55e' }
+    : Number(maintAmount) <= 50000
+    ? { tier: 'STANDARD', label: 'Standard Approval (Tier 2: ₱10,001 - ₱50,000)', color: '#38bdf8' }
+    : { tier: 'EXECUTIVE_APPROVAL', label: 'Executive Board Approval (Tier 3: > ₱50,000)', color: '#f59e0b' }
+
+  // Milestone multiplier calculation
+  const getMilestoneCalc = (stage, total) => {
+    let pct = 0.20
+    let label = '20% Initial Reservation Deposit'
+    if (stage === 'MIDTERM_50') {
+      pct = 0.50
+      label = '50% Mid-Term Event Prep Milestone'
+    } else if (stage === 'BALANCE_30') {
+      pct = 0.30
+      label = '30% Final Event Day Settlement Balance'
+    } else if (stage === 'FULL_PAYMENT') {
+      pct = 1.00
+      label = '100% Upfront Full Contract'
+    }
+    const subtotal = Math.round(Number(total) * pct * 100) / 100
+    const vat = Math.round(subtotal * 0.12 * 100) / 100
+    const totalDue = subtotal + vat
+    return { pct, label, subtotal, vat, totalDue }
   }
 
   return (
@@ -217,13 +302,13 @@ export default function IntegrationsView({ showToast }) {
       {/* TAB 1: Housekeeping Damage Billing from Guest */}
       {activeSubTab === 'housekeeping' && (
         <section>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             <div>
               <h2 style={{ fontSize: '18px', margin: 0, color: '#f8fafc' }}>
                 Housekeeping Inventory Damage Billed to Guest
               </h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
-                Inspect damaged inventory reported by Housekeeping and generate official billing charges to guest folios.
+                Inspect damaged inventory reported by Housekeeping and generate official billing charges linked to active Front Office guest stay folios.
               </p>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -255,7 +340,8 @@ export default function IntegrationsView({ showToast }) {
                     <th>DAMAGED ITEM / INVENTORY</th>
                     <th>CATEGORY</th>
                     <th style={{ textAlign: 'right' }}>ESTIMATED COST</th>
-                    <th>REPORTED BY</th>
+                    <th>FOLIO LINK</th>
+                    <th>INVENTORY STATUS</th>
                     <th>BILLING STATUS</th>
                     <th style={{ textAlign: 'center' }}>ACTION</th>
                   </tr>
@@ -263,14 +349,14 @@ export default function IntegrationsView({ showToast }) {
                 <tbody>
                   {loading && (
                     <tr>
-                      <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                      <td colSpan="10" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                         Loading Housekeeping damage reports...
                       </td>
                     </tr>
                   )}
                   {!loading && hkDamages.length === 0 && (
                     <tr>
-                      <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                      <td colSpan="10" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                         No Housekeeping damage incidents reported.
                       </td>
                     </tr>
@@ -295,7 +381,16 @@ export default function IntegrationsView({ showToast }) {
                       <td style={{ textAlign: 'right', fontWeight: 700, color: '#f59e0b' }}>
                         ₱{Number(dmg.estimatedCost).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
-                      <td style={{ fontSize: '13px' }}>{dmg.reportedBy}</td>
+                      <td>
+                        <span className={`fin-badge ${dmg.guestFolioAttached ? 'fin-badge-green' : 'fin-badge-gray'}`}>
+                          {dmg.guestFolioAttached ? 'Folio Linked' : 'Unlinked'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`fin-badge ${dmg.inventoryWrittenOff ? 'fin-badge-green' : 'fin-badge-gold'}`}>
+                          {dmg.inventoryWrittenOff ? '✓ Restocked' : 'Restock Pending'}
+                        </span>
+                      </td>
                       <td>
                         <span
                           className={`fin-badge ${
@@ -335,13 +430,13 @@ export default function IntegrationsView({ showToast }) {
       {/* TAB 2: Maintenance Need Our Finance Records */}
       {activeSubTab === 'maintenance' && (
         <section>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             <div>
               <h2 style={{ fontSize: '18px', margin: 0, color: '#f8fafc' }}>
                 Engineering &amp; Maintenance Financial Records
               </h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
-                Maintenance subsystem records: approved work order expenses, parts restocking vouchers, and budget allocations.
+                Maintenance records: OpEx vs CapEx asset tracking, tiered approvals, and facility budget allocations.
               </p>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -370,14 +465,14 @@ export default function IntegrationsView({ showToast }) {
             </div>
           </div>
 
-          {/* Budget Overview Cards */}
+          {/* Budget & CapEx/OpEx Breakdown Cards */}
           <section className="fin-kpi-grid fin-kpi-grid-4" style={{ marginBottom: '16px' }}>
             <div className="fin-kpi-card">
               <span className="fin-kpi-label">Allocated Maintenance Budget</span>
               <div className="fin-kpi-val" style={{ color: '#38bdf8' }}>
                 ₱{Number(maintenanceData?.allocatedBudget || 250000).toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </div>
-              <span className="fin-kpi-note neutral">Fiscal Year 2026 Facility Allocation</span>
+              <span className="fin-kpi-note neutral">FY 2026 Facility Allocation</span>
             </div>
             <div className="fin-kpi-card">
               <span className="fin-kpi-label">Total Approved Expenditures</span>
@@ -408,27 +503,28 @@ export default function IntegrationsView({ showToast }) {
               <table className="fin-table">
                 <thead>
                   <tr>
-                    <th>VOUCHER CODE</th>
+                    <th>VOUCHER / WORK ORDER</th>
                     <th>MAINTENANCE CATEGORY / JOB</th>
-                    <th>DEPARTMENT</th>
+                    <th>CLASSIFICATION</th>
+                    <th>APPROVAL TIER</th>
                     <th style={{ textAlign: 'right' }}>AMOUNT</th>
                     <th>DATE</th>
                     <th>STATUS</th>
                     <th>APPROVED BY</th>
-                    <th>NOTES / WORK ORDER REF</th>
+                    <th>NOTES / SCOPE</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading && (
                     <tr>
-                      <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                      <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                         Loading Maintenance finance records...
                       </td>
                     </tr>
                   )}
                   {!loading && (maintenanceData?.records || []).length === 0 && (
                     <tr>
-                      <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                      <td colSpan="9" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                         No Maintenance finance records found.
                       </td>
                     </tr>
@@ -437,12 +533,24 @@ export default function IntegrationsView({ showToast }) {
                     <tr key={rec.id}>
                       <td>
                         <strong style={{ color: '#d4af37' }}>{rec.voucherCode}</strong>
+                        {rec.workOrderId && (
+                          <small style={{ display: 'block', color: '#38bdf8', fontWeight: 600 }}>
+                            WO: {rec.workOrderId}
+                          </small>
+                        )}
                       </td>
                       <td>
                         <strong>{rec.category}</strong>
                       </td>
                       <td>
-                        <span className="fin-badge fin-badge-blue">{rec.department}</span>
+                        <span className={`fin-badge ${rec.expenseClassification === 'CAPEX' ? 'fin-badge-gold' : 'fin-badge-blue'}`}>
+                          {rec.expenseClassification || 'OPEX'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`fin-badge ${rec.approvalTier === 'EXECUTIVE_APPROVAL' ? 'fin-badge-gold' : rec.approvalTier === 'AUTO' ? 'fin-badge-green' : 'fin-badge-blue'}`}>
+                          {rec.approvalTier === 'EXECUTIVE_APPROVAL' ? 'Executive Board' : rec.approvalTier === 'AUTO' ? 'Auto Tier 1' : 'Standard'}
+                        </span>
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: '#f59e0b' }}>
                         ₱{Number(rec.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
@@ -475,13 +583,13 @@ export default function IntegrationsView({ showToast }) {
       {/* TAB 3: Marketing and Sales Records Connect to Finance */}
       {activeSubTab === 'sales' && (
         <section>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             <div>
               <h2 style={{ fontSize: '18px', margin: 0, color: '#f8fafc' }}>
-                Marketing &amp; Sales Revenue Connection
+                Marketing &amp; Sales Revenue &amp; Corporate City Ledger
               </h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
-                Synchronize confirmed sales bookings, corporate event contracts, and wedding banquets into Finance revenue invoices.
+                Milestone contract invoicing (20% deposit, 50% prep, 30% balance, or full) and Corporate Accounts Receivable Aging.
               </p>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -490,19 +598,24 @@ export default function IntegrationsView({ showToast }) {
                 className="fin-btn fin-btn-secondary"
                 onClick={handleExportSalesCsv}
               >
-                📥 Bulk Export CSV
+                📥 Export Deals CSV
               </button>
               <button
                 type="button"
                 className="fin-btn fin-btn-secondary"
-                onClick={() => exportToJson('hosis-sales-records', salesRecords)}
+                onClick={handleExportCityLedgerCsv}
               >
-                📋 Bulk Export JSON
+                📊 Export City Ledger CSV
               </button>
             </div>
           </div>
 
-          <div className="fin-surface">
+          {/* Sales Deals Table */}
+          <div className="fin-surface" style={{ marginBottom: '24px' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(212, 175, 55, 0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', color: '#f8fafc' }}>Confirmed Sales Deals &amp; Banquet Contracts</h3>
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}>Select deal to invoice by milestone</span>
+            </div>
             <div className="fin-table-scroll">
               <table className="fin-table">
                 <thead>
@@ -510,11 +623,11 @@ export default function IntegrationsView({ showToast }) {
                     <th>DEAL CODE</th>
                     <th>CORPORATE CLIENT / EVENT</th>
                     <th>PACKAGE TITLE</th>
-                    <th>CATEGORY</th>
+                    <th>STAGE</th>
                     <th style={{ textAlign: 'right' }}>CONTRACT VALUE</th>
                     <th>EVENT DATE</th>
                     <th>SALES REP</th>
-                    <th>FINANCE SYNC STATUS</th>
+                    <th>FINANCE STATUS</th>
                     <th style={{ textAlign: 'center' }}>ACTION</th>
                   </tr>
                 </thead>
@@ -547,7 +660,7 @@ export default function IntegrationsView({ showToast }) {
                         {deal.notes && <small style={{ display: 'block', color: '#94a3b8' }}>{deal.notes}</small>}
                       </td>
                       <td>
-                        <span className="fin-badge fin-badge-blue">{deal.packageCategory}</span>
+                        <span className="fin-badge fin-badge-blue">{deal.milestoneStage || 'DEPOSIT_20'}</span>
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>
                         ₱{Number(deal.contractAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
@@ -574,9 +687,9 @@ export default function IntegrationsView({ showToast }) {
                             className="fin-btn fin-btn-primary"
                             style={{ padding: '4px 10px', fontSize: '12px' }}
                             disabled={syncingDeal}
-                            onClick={() => handleSyncSalesInvoice(deal)}
+                            onClick={() => openMilestoneModal(deal)}
                           >
-                            🔗 Connect to Finance
+                            🔗 Milestone Invoice
                           </button>
                         )}
                       </td>
@@ -584,6 +697,142 @@ export default function IntegrationsView({ showToast }) {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* City Ledger Corporate Accounts Receivable Aging Breakdown */}
+          <div style={{ marginTop: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div>
+                <h3 style={{ fontSize: '16px', margin: 0, color: '#f8fafc' }}>
+                  City Ledger Accounts Receivable (A/R) Aging Analysis
+                </h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                  Aging buckets for corporate clients, travel agents, and banquets to minimize default risk.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="fin-btn fin-btn-secondary"
+                style={{ fontSize: '12px', padding: '5px 12px' }}
+                onClick={loadCityLedgerAging}
+              >
+                🔄 Refresh Aging
+              </button>
+            </div>
+
+            {/* Aging Summary Buckets Grid */}
+            <section className="fin-kpi-grid fin-kpi-grid-4" style={{ marginBottom: '16px' }}>
+              <div className="fin-kpi-card" style={{ borderLeft: '4px solid #22c55e' }}>
+                <span className="fin-kpi-label">Current (0–30 Days)</span>
+                <div className="fin-kpi-val" style={{ color: '#22c55e' }}>
+                  ₱{Number(cityLedger?.agingSummary?.current_0_30 || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </div>
+                <span className="fin-kpi-note positive">Standard credit terms</span>
+              </div>
+              <div className="fin-kpi-card" style={{ borderLeft: '4px solid #38bdf8' }}>
+                <span className="fin-kpi-label">Past Due (31–60 Days)</span>
+                <div className="fin-kpi-val" style={{ color: '#38bdf8' }}>
+                  ₱{Number(cityLedger?.agingSummary?.past_31_60 || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </div>
+                <span className="fin-kpi-note warning">Payment reminder dispatched</span>
+              </div>
+              <div className="fin-kpi-card" style={{ borderLeft: '4px solid #f59e0b' }}>
+                <span className="fin-kpi-label">Aging (61–90 Days)</span>
+                <div className="fin-kpi-val" style={{ color: '#f59e0b' }}>
+                  ₱{Number(cityLedger?.agingSummary?.past_61_90 || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </div>
+                <span className="fin-kpi-note warning">Escalated to collections</span>
+              </div>
+              <div className="fin-kpi-card" style={{ borderLeft: '4px solid #ef4444' }}>
+                <span className="fin-kpi-label">Overdue (90+ Days)</span>
+                <div className="fin-kpi-val" style={{ color: '#ef4444' }}>
+                  ₱{Number(cityLedger?.agingSummary?.overdue_90_plus || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </div>
+                <span className="fin-kpi-note" style={{ color: '#ef4444' }}>Critical legal/recovery hold</span>
+              </div>
+            </section>
+
+            {/* City Ledger Debtors Table */}
+            <div className="fin-surface">
+              <div className="fin-table-scroll">
+                <table className="fin-table">
+                  <thead>
+                    <tr>
+                      <th>INVOICE #</th>
+                      <th>CORPORATE DEBTOR / CLIENT</th>
+                      <th>INVOICE TYPE</th>
+                      <th style={{ textAlign: 'right' }}>TOTAL BILLED</th>
+                      <th style={{ textAlign: 'right' }}>PAID</th>
+                      <th style={{ textAlign: 'right' }}>BALANCE DUE</th>
+                      <th>DAYS OVERDUE</th>
+                      <th>AGING BUCKET</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loadingAging && (
+                      <tr>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
+                          Calculating City Ledger aging matrix...
+                        </td>
+                      </tr>
+                    )}
+                    {!loadingAging && (!cityLedger?.debtors || cityLedger.debtors.length === 0) && (
+                      <tr>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
+                          No outstanding City Ledger receivables. All corporate folios settled.
+                        </td>
+                      </tr>
+                    )}
+                    {!loadingAging && (cityLedger?.debtors || []).map((d) => (
+                      <tr key={d.id}>
+                        <td>
+                          <strong style={{ color: '#d4af37' }}>{d.invoiceCode}</strong>
+                        </td>
+                        <td>
+                          <strong>{d.clientName}</strong>
+                        </td>
+                        <td>
+                          <span className="fin-badge fin-badge-blue">{d.invoiceType || 'STANDARD'}</span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          ₱{Number(d.totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ textAlign: 'right', color: '#86efac' }}>
+                          ₱{Number(d.paidAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: Number(d.daysPastDue) > 60 ? '#ef4444' : '#f59e0b' }}>
+                          ₱{Number(d.balanceDue).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td>
+                          <strong>{d.daysPastDue} days</strong>
+                        </td>
+                        <td>
+                          <span
+                            className={`fin-badge ${
+                              d.agingBucket === 'CURRENT_0_30'
+                                ? 'fin-badge-green'
+                                : d.agingBucket === 'PAST_31_60'
+                                ? 'fin-badge-blue'
+                                : d.agingBucket === 'PAST_61_90'
+                                ? 'fin-badge-gold'
+                                : 'fin-badge-gray'
+                            }`}
+                          >
+                            {d.agingBucket === 'CURRENT_0_30'
+                              ? '0–30 Days'
+                              : d.agingBucket === 'PAST_31_60'
+                              ? '31–60 Days'
+                              : d.agingBucket === 'PAST_61_90'
+                              ? '61–90 Days'
+                              : '90+ Days Overdue'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </section>
@@ -644,6 +893,17 @@ export default function IntegrationsView({ showToast }) {
                 </div>
 
                 <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#f8fafc' }}>
+                    <input
+                      type="checkbox"
+                      checked={attachToFolio}
+                      onChange={(e) => setAttachToFolio(e.target.checked)}
+                    />
+                    Attach directly to active guest stay folio in Front Office
+                  </label>
+                </div>
+
+                <div style={{ marginBottom: '14px' }}>
                   <label className="fin-label">Folio Notes / Damage Justification</label>
                   <textarea
                     className="fin-input"
@@ -675,7 +935,7 @@ export default function IntegrationsView({ showToast }) {
         </div>
       )}
 
-      {/* Modal: Create Maintenance Expense Voucher */}
+      {/* Modal: Create Maintenance Expense Voucher with Work Order & CapEx/OpEx */}
       {showMaintModal && (
         <div className="fin-modal-overlay" onClick={() => setShowMaintModal(false)}>
           <div className="fin-modal-window" onClick={(e) => e.stopPropagation()}>
@@ -692,6 +952,31 @@ export default function IntegrationsView({ showToast }) {
               </div>
 
               <div className="fin-modal-body">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                  <div>
+                    <label className="fin-label">Work Order Reference *</label>
+                    <input
+                      type="text"
+                      className="fin-input"
+                      placeholder="e.g. WO-2026-ENG-089"
+                      required
+                      value={workOrderId}
+                      onChange={(e) => setWorkOrderId(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="fin-label">Expense Classification *</label>
+                    <select
+                      className="fin-input"
+                      value={expenseClassification}
+                      onChange={(e) => setExpenseClassification(e.target.value)}
+                    >
+                      <option value="OPEX">OPEX (Operating Expenditure)</option>
+                      <option value="CAPEX">CAPEX (Capital Expenditure / Asset)</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div style={{ marginBottom: '14px' }}>
                   <label className="fin-label">Maintenance Job / Category *</label>
                   <input
@@ -713,10 +998,14 @@ export default function IntegrationsView({ showToast }) {
                     value={maintAmount}
                     onChange={(e) => setMaintAmount(e.target.value)}
                   />
+                  <div style={{ marginTop: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: '#94a3b8' }}>Governance Tier:</span>
+                    <strong style={{ color: computedTier.color }}>{computedTier.label}</strong>
+                  </div>
                 </div>
 
                 <div style={{ marginBottom: '14px' }}>
-                  <label className="fin-label">Work Order Reference / Technician Scope</label>
+                  <label className="fin-label">Technician Scope / Contractor Details</label>
                   <textarea
                     className="fin-input"
                     rows="3"
@@ -741,6 +1030,105 @@ export default function IntegrationsView({ showToast }) {
                   disabled={submittingMaint}
                 >
                   {submittingMaint ? 'Submitting…' : '✓ Submit to Finance'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Sales Milestone Invoicing */}
+      {selectedDealForMilestone && (
+        <div className="fin-modal-overlay" onClick={() => setSelectedDealForMilestone(null)}>
+          <div className="fin-modal-window" onClick={(e) => e.stopPropagation()}>
+            <form onSubmit={handleSyncSalesMilestoneSubmit}>
+              <div className="fin-modal-header">
+                <h3 className="fin-modal-title">Connect Sales Deal to Milestone Invoice</h3>
+                <button
+                  type="button"
+                  className="fin-modal-close-btn"
+                  onClick={() => setSelectedDealForMilestone(null)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="fin-modal-body">
+                <div style={{ background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '8px', padding: '12px', marginBottom: '14px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>DEAL CODE</span>
+                      <div style={{ fontWeight: 700, color: '#38bdf8' }}>{selectedDealForMilestone.dealCode}</div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>TOTAL CONTRACT VALUE</span>
+                      <div style={{ fontWeight: 700, color: '#f8fafc' }}>
+                        ₱{Number(selectedDealForMilestone.contractAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>CLIENT NAME</span>
+                      <div style={{ fontWeight: 600 }}>{selectedDealForMilestone.clientName}</div>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>EVENT / PACKAGE</span>
+                      <div style={{ fontWeight: 600 }}>{selectedDealForMilestone.packageName}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '14px' }}>
+                  <label className="fin-label">Select Invoicing Milestone Stage *</label>
+                  <select
+                    className="fin-input"
+                    value={milestoneStage}
+                    onChange={(e) => setMilestoneStage(e.target.value)}
+                  >
+                    <option value="DEPOSIT_20">20% Initial Reservation Deposit</option>
+                    <option value="MIDTERM_50">50% Mid-Term Event Prep Milestone</option>
+                    <option value="BALANCE_30">30% Final Event Day Settlement Balance</option>
+                    <option value="FULL_PAYMENT">100% Upfront Full Contract Invoice</option>
+                  </select>
+                </div>
+
+                {/* Calculation Breakdown Preview */}
+                {(() => {
+                  const calc = getMilestoneCalc(milestoneStage, selectedDealForMilestone.contractAmount)
+                  return (
+                    <div style={{ background: '#111827', borderRadius: '8px', padding: '12px', border: '1px solid rgba(255,255,255,0.08)', marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
+                        <span style={{ color: '#94a3b8' }}>Milestone Share ({(calc.pct * 100).toFixed(0)}%):</span>
+                        <strong>₱{calc.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
+                        <span style={{ color: '#94a3b8' }}>12% Government VAT:</span>
+                        <strong style={{ color: '#f59e0b' }}>₱{calc.vat.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '14px' }}>
+                        <strong style={{ color: '#d4af37' }}>Total Milestone Due:</strong>
+                        <strong style={{ color: '#22c55e', fontSize: '16px' }}>
+                          ₱{calc.totalDue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </strong>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div className="fin-modal-footer">
+                <button
+                  type="button"
+                  className="fin-btn fin-btn-secondary"
+                  onClick={() => setSelectedDealForMilestone(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="fin-btn fin-btn-primary"
+                  disabled={syncingDeal}
+                >
+                  {syncingDeal ? 'Invoicing…' : '🔗 Generate Milestone Invoice'}
                 </button>
               </div>
             </form>

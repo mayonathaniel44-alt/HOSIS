@@ -26,6 +26,45 @@ export default function PayrollView({ showToast }) {
   const [philhealthDeduction, setPhilhealthDeduction] = useState('250')
   const [pagibigDeduction, setPagibigDeduction] = useState('100')
   const [submitting, setSubmitting] = useState(false)
+  const [hrStaffList, setHrStaffList] = useState([])
+  const [loadingHr, setLoadingHr] = useState(false)
+
+  async function loadHrTimesheets() {
+    setLoadingHr(true)
+    try {
+      const res = await financeApi.hrTimesheets()
+      const list = res.data?.staff || res?.staff || []
+      setHrStaffList(list)
+      showToast(`Synced ${list.length} employee timesheets from HR Attendance subsystem.`)
+    } catch (err) {
+      console.error('Failed to load HR timesheets:', err)
+      showToast('Error syncing HR timesheets.')
+    } finally {
+      setLoadingHr(false)
+    }
+  }
+
+  function handleSelectHrEmployee(e) {
+    const selectedId = e.target.value
+    if (!selectedId) return
+    const found = hrStaffList.find((s) => s.employeeId === selectedId)
+    if (!found) return
+
+    setEmpId(found.employeeId)
+    setEmpName(found.name)
+    setDepartment(found.department)
+    setRoleTitle(found.role)
+    setRegularHours(String(found.regularHours || 80))
+    setOvertimeHours(String(found.overtimeHours || 0))
+    setBasicPay(String(found.basicPay || 15000))
+
+    // Calculate OT pay: hourly rate * 1.25 * otHours
+    const hourlyRate = (Number(found.basicPay) || 15000) / (Number(found.regularHours) || 80)
+    const otAmount = Math.round(hourlyRate * 1.25 * (Number(found.overtimeHours) || 0))
+    setOvertimePay(String(otAmount))
+
+    showToast(`Loaded HR timesheet profile for ${found.name}.`)
+  }
 
   async function loadPayroll() {
     setLoading(true)
@@ -197,6 +236,15 @@ export default function PayrollView({ showToast }) {
           <p>Personnel earnings calculations, statutory reductions, and verified wage disbursements.</p>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            onClick={loadHrTimesheets}
+            disabled={loadingHr}
+            title="Ingest biometric hours and staff rosters from HR Attendance"
+          >
+            {loadingHr ? 'Syncing HR...' : '⏱️ Sync HR Timesheets'}
+          </button>
           <button
             type="button"
             className="fin-btn fin-btn-secondary"
@@ -530,9 +578,38 @@ export default function PayrollView({ showToast }) {
               <div className="fin-modal-body">
                 {/* Section 1: Staff Details */}
                 <div className="fin-form-section">
-                  <div className="fin-form-section-header">
-                    <span className="fin-form-section-num">1</span>
-                    <h4 className="fin-form-section-title">Employee Details</h4>
+                  <div className="fin-form-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="fin-form-section-num">1</span>
+                      <h4 className="fin-form-section-title">Employee Details</h4>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      {hrStaffList.length === 0 ? (
+                        <button
+                          type="button"
+                          className="fin-btn fin-btn-secondary"
+                          style={{ fontSize: '11px', padding: '4px 10px' }}
+                          disabled={loadingHr}
+                          onClick={loadHrTimesheets}
+                        >
+                          {loadingHr ? 'Syncing HR...' : '📥 Ingest HR Attendance'}
+                        </button>
+                      ) : (
+                        <select
+                          className="fin-select"
+                          style={{ fontSize: '12px', padding: '4px 8px', maxWidth: '240px' }}
+                          onChange={handleSelectHrEmployee}
+                          defaultValue=""
+                        >
+                          <option value="" disabled>⚡ Auto-fill from HR Staff...</option>
+                          {hrStaffList.map((s) => (
+                            <option key={s.employeeId} value={s.employeeId}>
+                              {s.name} ({s.department} - {s.role})
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                   </div>
                   <div className="fin-form-grid fin-form-grid-2">
                     <div className="fin-field">

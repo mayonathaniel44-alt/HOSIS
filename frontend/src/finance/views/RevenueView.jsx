@@ -7,6 +7,36 @@ export default function RevenueView({ onOpenReport, onNavigate, showToast }) {
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState('daily') // 'daily' | 'weekly' | 'monthly' | 'annually' | 'all'
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10))
+  const [nightAudits, setNightAudits] = useState([])
+  const [loadingAudit, setLoadingAudit] = useState(false)
+  const [runningAudit, setRunningAudit] = useState(false)
+
+  async function loadNightAuditHistory() {
+    setLoadingAudit(true)
+    try {
+      const res = await financeApi.nightAuditHistory(10)
+      setNightAudits(res.data || res || [])
+    } catch (err) {
+      console.error('Failed to load night audit history:', err)
+    } finally {
+      setLoadingAudit(false)
+    }
+  }
+
+  async function handleRunNightAudit() {
+    setRunningAudit(true)
+    try {
+      const res = await financeApi.runNightAudit(selectedDate)
+      showToast(res.message || 'Night audit completed successfully. Day-end books balanced and sealed.')
+      loadNightAuditHistory()
+      loadRevenue(period, selectedDate)
+    } catch (err) {
+      console.error('Failed to run night audit:', err)
+      showToast(err.message || 'Failed to execute night audit.')
+    } finally {
+      setRunningAudit(false)
+    }
+  }
 
   async function loadRevenue(chosenPeriod = period, chosenDate = selectedDate) {
     setLoading(true)
@@ -24,6 +54,7 @@ export default function RevenueView({ onOpenReport, onNavigate, showToast }) {
 
   useEffect(() => {
     loadRevenue(period, selectedDate)
+    loadNightAuditHistory()
   }, [period, selectedDate])
 
   function handlePeriodChange(p) {
@@ -340,6 +371,116 @@ export default function RevenueView({ onOpenReport, onNavigate, showToast }) {
                     >
                       {inv.status}
                     </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Hospitality Night Audit & Day-End Balancing Ledger */}
+      <div className="fin-surface" style={{ marginTop: '24px' }}>
+        <div className="fin-surface-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 className="fin-surface-title">Hospitality Night Audit &amp; Day-End Balancing Ledger</h3>
+            <p className="fin-surface-subtitle">
+              Automated day-end reconciliation: verifies occupied guest folios, posts room &amp; dining charges, balances collections against cash drops, and seals daily revenue.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="fin-btn fin-btn-secondary"
+              onClick={loadNightAuditHistory}
+              disabled={loadingAudit}
+            >
+              🔄 Refresh Closes
+            </button>
+            <button
+              type="button"
+              className="fin-btn fin-btn-primary"
+              onClick={handleRunNightAudit}
+              disabled={runningAudit}
+              title="Execute official night audit for selected date"
+            >
+              {runningAudit ? 'Auditing Books…' : '🌙 Run Day-End Night Audit'}
+            </button>
+          </div>
+        </div>
+
+        <div className="fin-table-scroll">
+          <table className="fin-table">
+            <thead>
+              <tr>
+                <th>AUDIT DATE</th>
+                <th style={{ textAlign: 'right' }}>ROOM REV</th>
+                <th style={{ textAlign: 'right' }}>DINING REV</th>
+                <th style={{ textAlign: 'right' }}>SERVICES REV</th>
+                <th style={{ textAlign: 'right' }}>PAYMENTS COLLECTED</th>
+                <th style={{ textAlign: 'center' }}>ROOMS</th>
+                <th style={{ textAlign: 'center' }}>UNBALANCED</th>
+                <th>CLOSE STATUS</th>
+                <th>AUDITED BY</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingAudit && (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
+                    Loading hospitality day-end audit history...
+                  </td>
+                </tr>
+              )}
+              {!loadingAudit && nightAudits.length === 0 && (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
+                    No day-end audits recorded yet. Click "Run Day-End Night Audit" to close today's register.
+                  </td>
+                </tr>
+              )}
+              {!loadingAudit && nightAudits.map((a) => (
+                <tr key={a.id}>
+                  <td>
+                    <strong style={{ color: '#d4af37' }}>
+                      {a.auditDate ? new Date(a.auditDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                    </strong>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    ₱{Number(a.totalRoomRevenue || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    ₱{Number(a.totalDiningRevenue || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    ₱{Number(a.totalServicesRevenue || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#22c55e' }}>
+                    ₱{Number(a.totalPaymentsCollected || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <strong>{a.occupiedRoomsCount || 0}</strong>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={{ color: Number(a.unbalancedFoliosCount) > 0 ? '#ef4444' : '#22c55e', fontWeight: 700 }}>
+                      {a.unbalancedFoliosCount || 0}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      className={`fin-badge ${
+                        a.status === 'COMPLETED'
+                          ? 'fin-badge-green'
+                          : a.status === 'DISCREPANCY'
+                          ? 'fin-badge-red'
+                          : 'fin-badge-gold'
+                      }`}
+                    >
+                      {a.status === 'COMPLETED' ? '✓ Balanced & Sealed' : a.status}
+                    </span>
+                  </td>
+                  <td style={{ fontSize: '13px', color: '#94a3b8' }}>
+                    {a.auditedBy || 'Night Auditor'}
                   </td>
                 </tr>
               ))}

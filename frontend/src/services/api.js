@@ -162,4 +162,14 @@ export const financeApi = {
     request(`/finance/integrations/sales/records?status=${encodeURIComponent(status)}`),
   syncSalesInvoice: (payload) =>
     request('/finance/integrations/sales/sync-invoice', json('POST', payload)),
+  cityLedgerAging: () =>
+    request('/finance/integrations/city-ledger/aging'),
+  hrTimesheets: () =>
+    request('/finance/integrations/hr/timesheets'),
+  statutoryRates: () =>
+    request('/finance/statutory-rates'),
+  nightAuditHistory: (limit = 15) =>
+    request(`/finance/night-audit?limit=${limit}`),
+  runNightAudit: (auditDate = '') =>
+    request('/finance/night-audit/run', json('POST', { auditDate })),
 }
