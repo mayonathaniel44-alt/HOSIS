@@ -55,7 +55,6 @@ function Avatar({ initials, small = false }) {
 export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice, onSignOut }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [toastMessage, setToastMessage] = useState('')
-  const [globalSearch, setGlobalSearch] = useState('')
 
   const today = new Date()
   const dateLabel = new Intl.DateTimeFormat('en-US', {
@@ -141,6 +140,28 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
         <div className="sidebar-label">FINANCE OPERATIONS</div>
 
         <nav className="side-nav" aria-label="Financial Task Navigation">
+          {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || user?.role === 'FINANCE_ADMIN') && onOpenAdmin && (
+            <button
+              type="button"
+              className="nav-item"
+              onClick={onOpenAdmin}
+              title="Open Super Admin Console"
+            >
+              <Icon name="lock" size={18} />
+              <span>Admin console</span>
+            </button>
+          )}
+          {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || user?.role === 'FINANCE_ADMIN') && onOpenFrontOffice && (
+            <button
+              type="button"
+              className="nav-item"
+              onClick={onOpenFrontOffice}
+              title="Open Front Office PMS"
+            >
+              <Icon name="bed" size={18} />
+              <span>Front Office PMS</span>
+            </button>
+          )}
           {financialTasks.map((task) => (
             <button
               key={task.id}
@@ -189,17 +210,6 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
           </div>
 
           <div className="topbar-tools">
-            <label className="global-search">
-              <Icon name="search" size={17} />
-              <input
-                type="search"
-                aria-label="Search finance records"
-                placeholder="Search anything..."
-                value={globalSearch}
-                onChange={(e) => setGlobalSearch(e.target.value)}
-              />
-            </label>
-
             <span className="topbar-date">
               <Icon name="sun" size={17} />
               {dateLabel}

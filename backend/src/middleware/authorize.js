@@ -25,7 +25,15 @@ function authorize(...roles) {
   }
 
   return (req, res, next) => {
-    if (!req.user || !allowedSet.has(req.user.role)) {
+    if (!req.user) {
+      return next(appError(403, 'FORBIDDEN', 'You do not have permission to perform this action.'))
+    }
+    const userRole = String(req.user.role || '').toUpperCase()
+    // SUPER_ADMIN and ADMIN have universal root access across all departments and subsystems
+    if (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
+      return next()
+    }
+    if (!allowedSet.has(req.user.role)) {
       return next(appError(403, 'FORBIDDEN', 'You do not have permission to perform this action.'))
     }
     return next()

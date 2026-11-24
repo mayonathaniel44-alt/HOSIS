@@ -3,15 +3,18 @@ import { adminApi } from './services/api'
 import './AdminDashboard.css'
 
 const staffRoles = [
-  ['FINANCE_ADMIN', 'Finance Admin'],
-  ['FINANCE_STAFF', 'Finance Staff'],
-  ['DEPARTMENT_HEAD', 'Department Head'],
+  ['SUPER_ADMIN', 'Super Administrator (All Subsystems)'],
+  ['ADMIN', 'Hotel Administrator'],
   ['FRONT_OFFICE', 'Front Office'],
-  ['HOUSEKEEPING', 'Housekeeping'],
-  ['ENGINEERING', 'Engineering'],
-  ['FINANCE', 'Accounting & Finance'],
-  ['HR', 'Human Resources'],
+  ['FINANCE_ADMIN', 'Finance Admin'],
+  ['FINANCE_STAFF', 'Finance Officer'],
+  ['DEPARTMENT_HEAD', 'Department Head (Checker)'],
   ['SALES_MARKETING', 'Sales & Marketing'],
+  ['FOOD_BEVERAGE', 'Food & Beverage'],
+  ['HOUSEKEEPING', 'Housekeeping'],
+  ['ENGINEERING', 'Engineering / Maintenance'],
+  ['HR', 'Human Resources'],
+  ['GENERAL_STAFF', 'General Staff'],
 ]
 
 const departments = [

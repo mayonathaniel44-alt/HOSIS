@@ -615,17 +615,35 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-/* Main Workspace */
+/* Main Workspace - Flush against sidebar and sticky to top */
 .finance-main {
-  flex: 1;
-  height: 100vh;
-  max-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  padding: 24px 32px 36px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  margin-left: 252px !important;
+  min-height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--canvas, #fbfbfd) !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  height: auto !important;
+  max-height: none !important;
   box-sizing: border-box;
+}
+
+.finance-shell .topbar {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+  width: 100% !important;
+  min-height: 70px !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  backdrop-filter: blur(14px) !important;
+  border-bottom: 1px solid #eeedf2 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 43px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
 }
 
 .finance-main::-webkit-scrollbar {

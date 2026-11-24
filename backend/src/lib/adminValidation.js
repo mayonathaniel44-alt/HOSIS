@@ -1,6 +1,7 @@
 const { appError } = require('./errors')
 
 const staffRoles = new Set([
+  'SUPER_ADMIN',
   'ADMIN',
   'FRONT_OFFICE',
   'HOUSEKEEPING',
@@ -11,6 +12,8 @@ const staffRoles = new Set([
   'DEPARTMENT_HEAD',
   'SALES_MARKETING',
   'ENGINEERING',
+  'FOOD_BEVERAGE',
+  'GENERAL_STAFF',
 ])
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
