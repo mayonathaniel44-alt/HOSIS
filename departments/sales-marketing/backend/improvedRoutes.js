@@ -250,8 +250,22 @@ router.get('/workspace', async (_req, res) => {
     loadRecords(db),
     db.query(`SELECT h.sale_id, h.status, h.check_in::text AS "checkIn", h.check_out::text AS "checkOut",
       h.room_type AS "roomType", room.room_number AS room, room.status AS "roomStatus",
-      h.completed_at AS "preparationCompletedAt"
-      FROM sales_stay_handoffs h LEFT JOIN rooms room ON room.id=h.room_id`),
+      h.completed_at AS "preparationCompletedAt",
+      CASE WHEN billing.total > 0 THEN jsonb_build_object(
+        'billed', billing.total, 'paid', billing.paid, 'balance', GREATEST(0, billing.total-billing.paid)
+      ) END AS billing
+      FROM sales_stay_handoffs h LEFT JOIN rooms room ON room.id=h.room_id
+      LEFT JOIN LATERAL (
+        SELECT SUM(ledger.amount) AS total, SUM(ledger.paid) AS paid FROM (
+          SELECT i.amount, COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id=i.id),0) AS paid
+          FROM invoices i WHERE i.reservation_id=h.reservation_id AND i.charge_type='LODGING' AND i.status<>'VOID'
+          UNION ALL
+          SELECT i.total_amount, i.paid_amount
+          FROM finance_sales_records d JOIN finance_sales_milestones m ON m.deal_id=d.id
+          JOIN finance_invoices i ON i.id=m.invoice_id
+          WHERE d.source_sale_id=h.sale_id AND i.status NOT IN ('DRAFT','VOID')
+        ) ledger
+      ) billing ON true`),
   ])
   const stays = new Map(rows.map(({ sale_id, ...stay }) => [sale_id, stay]))
   res.json({
@@ -417,10 +431,14 @@ router.get('/backup', requireSalesHead, async (_req, res) => {
     records: rows,
   })
   res.set('Cache-Control', 'no-store')
-  res.json({ payload, signature: backupSignature(payload).toString('hex') })
+  const backup = { payload, signature: backupSignature(payload).toString('hex') }
+  if (Buffer.byteLength(JSON.stringify(backup)) > 32 * 1024 * 1024) {
+    fail('This Sales archive exceeds the restore limit. Use a database backup to preserve all Sales records.', 413)
+  }
+  res.json(backup)
 })
 
-router.post('/restore', requireSalesHead, async (req, res) => {
+router.post('/restore', requireSalesHead, express.json({ limit: '32mb' }), async (req, res) => {
   const { payload, signature } = req.body ?? {}
   if (
     typeof payload !== 'string' ||

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api } from '../api.js'
 import { Badge, Card, DataTable, Field, LoadState, Notice, Pagination } from '../components/ui.jsx'
 import DatePicker, { DateNav } from '../components/DatePicker.jsx'
+import DepartmentStaffing from '../../../components/DepartmentStaffing.jsx'
 import MySchedulePage from './MySchedulePage.jsx'
 import { formatTime, label, longDate, todayISO } from '../format.js'
 import { useLoad } from '../useLoad.js'
@@ -39,6 +40,7 @@ export default function SchedulesPage({ user, search }) {
         </button>
       </div>
       {mode === 'mine' ? <MySchedulePage user={user} /> : <StaffSchedules user={user} search={search} />}
+      {mode === 'staff' && <DepartmentStaffing department="housekeeping" canRequest={user.position === 'SUPERVISOR' || user.role === 'ADMIN'} />}
     </div>
   )
 }

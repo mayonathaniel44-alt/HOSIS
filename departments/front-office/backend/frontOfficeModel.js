@@ -520,6 +520,20 @@ async function stayFolio(id, client = pool) {
          'Finance', 'OTHER', GREATEST(i.balance_due,0)
        FROM hk_charge_findings f JOIN finance_invoices i ON i.id=f.finance_invoice_id
        WHERE f.reservation_id=r.id AND f.status='APPROVED' AND i.status NOT IN ('DRAFT','VOID')
+       UNION ALL
+       SELECT i.id, i.invoice_code, i.total_amount, i.status, 'Finance',
+         CASE WHEN EXISTS (
+           SELECT 1 FROM finance_sales_milestones complete
+           JOIN finance_invoices invoice ON invoice.id=complete.invoice_id
+           WHERE complete.deal_id=d.id AND invoice.status NOT IN ('DRAFT','VOID')
+           GROUP BY complete.deal_id
+           HAVING BOOL_OR(complete.stage='FULL_PAYMENT') OR COUNT(*)=3
+         ) THEN 'LODGING' ELSE 'OTHER' END, GREATEST(i.balance_due,0)
+       FROM sales_marketing_records s
+       JOIN finance_sales_records d ON d.source_sale_id=s.id
+       JOIN finance_sales_milestones m ON m.deal_id=d.id
+       JOIN finance_invoices i ON i.id=m.invoice_id
+       WHERE s.kind='sale' AND s.reservation_id=r.id AND i.status NOT IN ('DRAFT','VOID')
      ) charges ON true
      WHERE r.id=$1 GROUP BY r.id`, [id],
   )
@@ -810,6 +824,16 @@ async function createInvoice(invoice, userId) {
         throw appError(400, 'GUEST_RESERVATION_MISMATCH', 'The invoice guest must match the linked reservation guest.')
       }
     }
+    if (stay && invoice.chargeType === 'LODGING') {
+      const { rowCount } = await client.query(`
+        SELECT 1 FROM sales_marketing_records s
+        JOIN finance_sales_records d ON d.source_sale_id=s.id
+        JOIN finance_sales_milestones m ON m.deal_id=d.id
+        JOIN finance_invoices i ON i.id=m.invoice_id
+        WHERE s.kind='sale' AND s.reservation_id=$1 AND i.status<>'VOID' LIMIT 1
+      `, [invoice.reservationId])
+      if (rowCount) throw appError(409, 'LODGING_ALREADY_BILLED', 'Finance already issued milestone invoices for this stay.')
+    }
     let promotion = null
     if (invoice.promotionId) {
       let eligible
@@ -974,7 +998,7 @@ async function updatePayment(id, fields, userId) {
   return getPayment(id)
 }
 
-async function activityReport(period, day, { search, page, exportAll }) {
+async function activityReport(period, day, { search, page, exportAll, userId }) {
   const pageSize = 25
   const { rows } = await pool.query(
     `WITH bounds AS (
@@ -989,7 +1013,9 @@ async function activityReport(period, day, { search, page, exportAll }) {
        SELECT 'desk-' || a.id AS id, a.action, a.description, a.created_at, a.user_id
        FROM front_office_activity a CROSS JOIN report_range r
        WHERE a.created_at >= r.start_date AND a.created_at < r.end_date
-         AND a.action ~ '^(GUEST_|RESERVATION_|ROOM_|INVOICE_|PAYMENT_|HOUSEKEEPING_)'
+         AND (a.action ~ '^(GUEST_|RESERVATION_|ROOM_|INVOICE_|PAYMENT_|HOUSEKEEPING_)'
+              OR ($6::bigint IS NOT NULL AND a.action='LEAVE_REQUEST_FILED'))
+         AND ($6::bigint IS NULL OR a.user_id=$6)
        UNION ALL
        SELECT 'finding-' || e.event_id, 'HOUSEKEEPING_FINDING_' || e.action,
               CONCAT_WS(': ', f.public_reference, e.notes), e.created_at, e.actor_id
@@ -997,6 +1023,7 @@ async function activityReport(period, day, { search, page, exportAll }) {
        JOIN hk_charge_findings f ON f.finding_id=e.finding_id
        CROSS JOIN report_range r
        WHERE e.created_at >= r.start_date AND e.created_at < r.end_date
+         AND ($6::bigint IS NULL OR e.actor_id=$6)
      ), matched AS (
        SELECT e.id, e.action, e.description, e.created_at, u.username AS staff,
               TO_CHAR(e.created_at,'YYYY-MM-DD') AS date, TO_CHAR(e.created_at,'HH24:MI:SS') AS time
@@ -1013,7 +1040,7 @@ async function activityReport(period, day, { search, page, exportAll }) {
             (SELECT COUNT(*)::int FROM matched) AS total, w.*
      FROM report_range r LEFT JOIN page_rows w ON TRUE
      ORDER BY w.created_at DESC, w.id DESC`,
-    [period, day, search.toLowerCase().split(/\s+/).filter(Boolean), exportAll ? null : pageSize, exportAll ? 0 : (page - 1) * pageSize],
+    [period, day, search.toLowerCase().split(/\s+/).filter(Boolean), exportAll ? null : pageSize, exportAll ? 0 : (page - 1) * pageSize, userId ?? null],
   )
   const [{ startDate, endDate, total }] = rows
   return {

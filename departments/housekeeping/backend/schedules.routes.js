@@ -20,6 +20,7 @@ function checkSchedule(body) {
     }
   }
   v.maxLengths(body, { assignedArea: [100, 'Assigned area'], notes: [255, 'Notes'] });
+  if (body.startTime && body.startTime === body.endTime) throw new HttpError(400, 'Shift start and end must differ.');
   // Only the night shift may cross midnight.
   if (body.startTime && body.endTime && body.shift !== 'NIGHT' && body.endTime <= body.startTime) {
     throw new HttpError(400, 'Shift end time must be after the start time.');
@@ -61,15 +62,15 @@ async function assertNoOverlap({ staffId, shiftDate, startTime, endTime, ignoreI
   }
 }
 
-async function assertHrAvailable(staffId, shiftDate, client = db) {
+async function assertHrAvailable(staffId, shiftDate, startTime, endTime, client) {
   const { rows } = await client.query(
     `SELECT l.type, l.start_date, l.end_date
        FROM hr_employees e
        JOIN hr_leave_requests l ON l.emp = e.id
       WHERE e.staff_user_id = $1 AND l.status = 'Approved'
-        AND $2::date BETWEEN l.start_date AND l.end_date
+        AND l.end_date >= $2::date AND l.start_date <= $2::date + $3::integer
       ORDER BY l.start_date LIMIT 1`,
-    [staffId, shiftDate]
+    [staffId, shiftDate, endTime < startTime && endTime !== '00:00' ? 1 : 0]
   );
   if (rows[0]) {
     throw new HttpError(409, `HR shows approved ${rows[0].type.toLowerCase()} leave for this staff member on ${shiftDate}.`);
@@ -156,7 +157,7 @@ router.post('/', requirePosition('SUPERVISOR'), async (req, res) => {
   if (!staff[0]) {
     throw new HttpError(400, 'Schedules can only be created for active housekeeping staff.');
   }
-  await assertHrAvailable(staffId, body.shiftDate, client);
+  await assertHrAvailable(staffId, body.shiftDate, body.startTime, body.endTime, client);
   await assertNoOverlap({ staffId, shiftDate: body.shiftDate, startTime: body.startTime, endTime: body.endTime },client);
   const { rows } = await client.query(
     `INSERT INTO hk_schedules (staff_id, shift_date, shift, start_time, end_time, assigned_area, notes)
@@ -193,7 +194,7 @@ router.patch('/:id', requirePosition('SUPERVISOR'), async (req, res) => {
   if (merged.shiftDate && merged.shiftDate !== current.shift_date_text) {
     assertNotPast(merged.shiftDate);
   }
-  await assertHrAvailable(current.staff_id, merged.shiftDate || current.shift_date_text, client);
+  await assertHrAvailable(current.staff_id, merged.shiftDate || current.shift_date_text, merged.startTime, merged.endTime, client);
   await assertNoOverlap({
     staffId: current.staff_id,
     shiftDate: merged.shiftDate || current.shift_date_text,

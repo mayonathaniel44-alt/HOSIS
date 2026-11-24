@@ -31,6 +31,7 @@ import {
   BarChart,
   Bar,
 } from 'recharts'
+import DepartmentStaffing from '../../../frontend/src/components/DepartmentStaffing.jsx'
 import SalesAvailability from './SalesAvailability.jsx'
 import SalesSettings from './SalesSettings.jsx'
 import Notifications from './Notifications'
@@ -69,6 +70,7 @@ const singular = {
 }
 const nav = [
   ['Dashboard', LayoutDashboard],
+  ['Staff planning', Users],
   ['Availability', Building2],
   ['Campaigns', Megaphone, 'campaigns'],
   ['Inquiries', MessageSquare, 'inquiries'],
@@ -211,6 +213,7 @@ const columns = {
     ['name', 'Customer'],
     ['reservationRef', 'Reservations reference'],
     ['stay', 'Front Office stay'],
+    ['billing', 'Finance billing'],
     ['preparation', 'Housekeeping preparation'],
     ['date', 'Sale date'],
     ['amount', 'Booked value'],
@@ -425,6 +428,12 @@ function Workspace({ user, signOut, onSessionChange }) {
             .filter(Boolean)
             .join(' | ')
         : ''
+    }
+    if (key === 'billing') {
+      const billing = record.stay?.billing
+      if (!billing) return record.stay ? 'No lodging invoice yet' : ''
+      const status = billing.balance === 0 ? 'Current invoices paid' : 'Balance due'
+      return status + ' | ' + peso(billing.paid) + ' paid of ' + peso(billing.billed)
     }
     if (key === 'preparation')
       return record.preparation
@@ -1287,6 +1296,7 @@ function Workspace({ user, signOut, onSessionChange }) {
                   </p>
                 </>
               )}
+              {page === 'Staff planning' && <DepartmentStaffing department="sales" showLeave />}
               {page === 'Availability' && (
                 <SalesAvailability api={api} today={date} />
               )}

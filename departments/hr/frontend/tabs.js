@@ -122,9 +122,10 @@ HR.decide = async function (id, status) {
   const l = HR.LEAVES.find((x) => x.id === id);
   if (!l) return;
   try {
+    const decisionNotes = window.prompt('Optional HR decision note') ?? '';
     await HR.api(`/leaves/${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status, decisionNotes })
     });
     await HR.loadData(signal);
     if (signal.aborted) return;
@@ -139,6 +140,8 @@ HR.decide = async function (id, status) {
 HR.ASSIGN_OPTS = {
   frontdesk: ['Main Lobby Counter', 'Guest Relations Desk', 'Concierge Desk', 'Back Office', 'AM shift', 'PM shift', 'Night shift'],
   housekeeping: ['Floor 2 · Rooms 201–215', 'Floor 3 · Rooms 301–315', 'Floor 4 · Rooms 401–415', 'Floor 5 · Rooms 501–510', 'Lobby & Public Areas', 'Laundry Room', 'All floors (supervision)'],
+  sales: ['Corporate Accounts', 'Campaigns', 'Reservations Support'],
+  hr: ['Staff Records', 'Recruitment', 'Training'],
   maintenance: ['Electrical', 'Plumbing', 'HVAC', 'General Repairs', 'Engineering Office']
 };
 
@@ -185,7 +188,7 @@ HR.saveAssign = async function (k) {
 
 HR.deptPage = function () {
   const k = HR.state.dept; const d = HR.DEPTS[k];
-  const tabs = HR.TABS[k];
+  const tabs = HR.TABS[k] || HR.TABS.frontdesk;
   const activeTab = tabs[HR.state.tab] || tabs[0];
   return `<div class="crumbs"><button data-hr-action="records">Employee Records</button><span>/</span><span>${d.name}</span></div>
   <div style="display:flex;align-items:center;gap:16px"><div class="icbox">${HR.ic(d.icon)}</div><div><h1 style="margin:0">${d.name}</h1><p class="sub" style="margin:2px 0 0">${d.desc}</p></div>
@@ -286,7 +289,7 @@ HR.pageLeave = function () {
       leave.type,
       `${HR.fmtShort(leave.from)}${leave.to !== leave.from ? ` – ${HR.fmtShort(leave.to)}` : ''}`,
       leave.days,
-      HR.escape(leave.reason),
+      HR.escape(leave.reason) + (leave.remarks ? '<small class="muted">HR: ' + HR.escape(leave.remarks) + '</small>' : ''),
       HR.leaveBadge(leave.status),
       leave.status === 'Pending'
         ? `<div class="tools"><button class="btn sm ok" data-hr-action="leave" data-record="${HR.escape(leave.id)}" data-decision="Approved">Approve</button><button class="btn sm no" data-hr-action="leave" data-record="${HR.escape(leave.id)}" data-decision="Rejected">Reject</button></div>`

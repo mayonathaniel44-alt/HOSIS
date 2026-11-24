@@ -36,7 +36,7 @@ async function dashboard() {
   return model.dashboard()
 }
 
-async function activityReport(period = 'day', day, { search, page, exportAll } = {}) {
+async function activityReport(period = 'day', day, { search, page, exportAll, userId } = {}) {
   if (!['day', 'week', 'month', 'year'].includes(period)) {
     throw badRequest('INVALID_PERIOD', 'Choose day, week, month, or year.')
   }
@@ -44,6 +44,7 @@ async function activityReport(period = 'day', day, { search, page, exportAll } =
     search: optionalText(search, 'search', 250) || '',
     page: page === undefined ? 1 : positiveInteger(page, 'page'),
     exportAll: exportAll === '1',
+    userId,
   })
 }
 

@@ -1,26 +1,46 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const TOKEN_KEY = 'hosis.accessToken'
 const USER_KEY = 'hosis.user'
+const SIGNED_OUT_KEY = 'hosis.tabSignedOut'
+
 function storedToken() {
-  return window.localStorage.getItem(TOKEN_KEY) || window.sessionStorage.getItem(TOKEN_KEY)
+  const tab = window.sessionStorage
+  const token = tab.getItem(TOKEN_KEY)
+  if (token || tab.getItem(SIGNED_OUT_KEY)) return token
+  const remembered = window.localStorage.getItem(TOKEN_KEY)
+  if (remembered) {
+    tab.setItem(TOKEN_KEY, remembered)
+    const user = window.localStorage.getItem(USER_KEY)
+    if (user) tab.setItem(USER_KEY, user)
+  }
+  return remembered
 }
 
 function saveSession(session, remember) {
-  clearSession()
-  const storage = remember ? window.localStorage : window.sessionStorage
-  storage.setItem(TOKEN_KEY, session.token)
-  storage.setItem(USER_KEY, JSON.stringify(session.user))
+  const tab = window.sessionStorage
+  tab.removeItem(SIGNED_OUT_KEY)
+  tab.setItem(TOKEN_KEY, session.token)
+  tab.setItem(USER_KEY, JSON.stringify(session.user))
+  if (remember) {
+    window.localStorage.setItem(TOKEN_KEY, session.token)
+    window.localStorage.setItem(USER_KEY, JSON.stringify(session.user))
+  }
 }
 
 function clearSession() {
-  window.localStorage.removeItem(TOKEN_KEY)
-  window.localStorage.removeItem(USER_KEY)
+  const token = storedToken()
+  if (token && window.localStorage.getItem(TOKEN_KEY) === token) {
+    window.localStorage.removeItem(TOKEN_KEY)
+    window.localStorage.removeItem(USER_KEY)
+  }
   window.sessionStorage.removeItem(TOKEN_KEY)
   window.sessionStorage.removeItem(USER_KEY)
+  window.sessionStorage.setItem(SIGNED_OUT_KEY, '1')
 }
 
 function savedUser() {
-  const rawUser = window.localStorage.getItem(USER_KEY) || window.sessionStorage.getItem(USER_KEY)
+  storedToken()
+  const rawUser = window.sessionStorage.getItem(USER_KEY)
   if (!rawUser) return null
   try {
     return JSON.parse(rawUser)
@@ -34,7 +54,7 @@ export class ApiError extends Error {
   constructor(message, status, code) { super(message); this.name='ApiError'; this.status=status; this.code=code }
 }
 
-export async function request(path, options = {}) {
+export async function request(path, { responseType, ...options } = {}) {
   const headers = new Headers(options.headers || {})
   if (options.body !== undefined) headers.set('Content-Type', 'application/json')
   const accessToken = storedToken()
@@ -52,6 +72,7 @@ export async function request(path, options = {}) {
     window.dispatchEvent(new Event('hosis:unauthorized'))
   }
   if (response.status === 204) return null
+  if (response.ok && responseType === 'blob') return response.blob()
 
   let body
   try {
@@ -78,7 +99,7 @@ export const authApi = {
   saveSession,
   clearSession,
   getToken: storedToken,
-  isRemembered: () => !!window.localStorage.getItem(TOKEN_KEY),
+  isRemembered: () => Boolean(storedToken() && storedToken() === window.localStorage.getItem(TOKEN_KEY)),
   getSavedUser: savedUser,
 }
 
@@ -90,6 +111,9 @@ export const frontOfficeApi = {
   notifications: () => request('/housekeeping/notifications?unread=1'),
   acknowledge: (id) => request(`/housekeeping/notifications/${id}/read`,{method:'PATCH'}),
   dashboard: () => request('/front-office/dashboard'),
+  myLeave: () => request('/front-office/staff/leave'),
+  fileLeave: (body) => request('/front-office/staff/leave', json('POST', body)),
+  accountReport: (period, date, filters = {}) => request(`/front-office/reports/account?${new URLSearchParams({ period, date, ...filters })}`),
   activityReport: (period, date, filters = {}) => request(`/front-office/reports/activity?${new URLSearchParams({ period, date, ...filters })}`),
   stayActivity: (date) => request(`/front-office/reports/stay-activity?date=${encodeURIComponent(date)}`),
   guests: (search = '') => request(`/front-office/guests${search ? `?search=${encodeURIComponent(search)}` : ''}`),
@@ -134,6 +158,8 @@ export const adminApi = {
   createStaff: (staff) => request('/admin/staff', json('POST', staff)),
   updateStaff: (id, fields) => request(`/admin/staff/${id}`, json('PATCH', fields)),
   reportCatalog: () => request('/admin/reports'),
+  engineeringArchives: () => request('/engineering/reports/archive'),
+  engineeringArchiveFile: (id) => request(`/engineering/reports/archive/${encodeURIComponent(id)}/download`, { responseType: 'blob' }),
   exportReports: (filters) => request(`/admin/reports/export?${new URLSearchParams(filters)}`),
   audit: (filters) => request(`/admin/audit?${new URLSearchParams(filters)}`),
   activity: (limit = 50) => request(`/admin/activity?limit=${limit}`),

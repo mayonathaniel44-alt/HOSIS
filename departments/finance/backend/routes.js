@@ -70,6 +70,7 @@ router.get('/payroll-roster', async (req, res) => {
   res.json({ staff: rows })
 })
 
+router.use('/latest', require('./latestRoutes.js'))
 router.use(require('./samRoutes.js'))
 
 module.exports = router

@@ -38,6 +38,8 @@ HR.DEPTS={
   frontdesk:{name:'Front Desk',icon:'desk',desc:'Reception, guest relations, concierge and night audit',features:['Employee information and position','Front Desk staff schedules','Attendance monitoring','Leave status and staff availability','Department assignment updates']},
   finance:{name:'Financial Info',icon:'coin',desc:'Authorized employee and attendance data shared with Finance for payroll',features:['Employee records','Employment status','Attendance summaries','Approved leave records','Overtime / work-hour records','Payroll information']},
   housekeeping:{name:'Housekeeping',icon:'broom',desc:'Room attendants, laundry and public area cleaning staff',features:['Housekeeping employee records','Room-cleaning schedules','Attendance records','Leave requests and availability','Staff assignment information']},
+  sales:{name:'Sales & Marketing',icon:'brief',desc:'Sales staffing and availability',features:['Employee records','Department assignments','Leave and availability']},
+  hr:{name:'Human Resources',icon:'users',desc:'HR staffing and availability',features:['Employee records','Department assignments','Leave and availability']},
   maintenance:{name:'Maintenance',icon:'wrench',desc:'Engineering and technician personnel',features:['Technician employee records','Job positions and qualifications','Maintenance staff schedules','Attendance monitoring','Leave and availability','Department staffing information']}
 };
 
@@ -46,24 +48,8 @@ HR.LEAVES = [];
 HR.ASSIGN_LOG = [];
 
 HR.MAINT_REQ = [];
-HR.VACANCIES=[
-  {title:'Front Desk Associate',dept:'frontdesk',openings:2,applicants:5,posted:'2026-11-03',status:'Open'},
-  {title:'Room Attendant',dept:'housekeeping',openings:3,applicants:8,posted:'2026-11-05',status:'Open'},
-  {title:'Maintenance Technician',dept:'maintenance',openings:1,applicants:4,posted:'2026-11-08',status:'Open'},
-  {title:'Finance Assistant',dept:'finance',openings:1,applicants:6,posted:'2026-11-10',status:'Open'}
-];
-
-HR.CANDIDATES=[
-  {id:'CAN-001',name:'Janine Mercado',role:'Front Desk Associate',applied:'2026-11-16',stage:'Screening'},
-  {id:'CAN-002',name:'Kevin Bautista',role:'Room Attendant',applied:'2026-11-15',stage:'Interview'},
-  {id:'CAN-003',name:'Noel Ramirez',role:'Maintenance Technician',applied:'2026-11-14',stage:'Assessment'},
-  {id:'CAN-004',name:'Angela Tan',role:'Finance Assistant',applied:'2026-11-14',stage:'Screening'},
-  {id:'CAN-005',name:'Marvin Castillo',role:'Front Desk Associate',applied:'2026-11-13',stage:'Interview'},
-  {id:'CAN-006',name:'Rica Mendoza',role:'Room Attendant',applied:'2026-11-12',stage:'New'},
-  {id:'CAN-007',name:'Paula Reyes',role:'Finance Assistant',applied:'2026-11-11',stage:'Offer'},
-  {id:'CAN-008',name:'Jerome Aquino',role:'Room Attendant',applied:'2026-11-10',stage:'Screening'}
-];
-
+HR.VACANCIES=[];
+HR.CANDIDATES=[];
 HR.TRAINING=[
   {id:'TR-001',title:'Fire Safety & Evacuation',date:'2026-11-25',dept:'All departments',facilitator:'Safety Team',enrolled:18,capacity:24,status:'Upcoming'},
   {id:'TR-002',title:'Guest Service Excellence',date:'2026-12-02',dept:'Front Desk',facilitator:'Learning & Development',enrolled:8,capacity:12,status:'Upcoming'},
@@ -71,7 +57,7 @@ HR.TRAINING=[
   {id:'TR-004',title:'First Aid Refresher',date:'2026-11-10',dept:'Maintenance & Housekeeping',facilitator:'Safety Team',enrolled:12,capacity:12,status:'Completed'}
 ];
 
-HR.NAV=[['dashboard','Dashboard','grid'],['recruitment','Recruitment','brief'],['records','Employee Records','users'],['attendance','Attendance','calcheck'],['leave','Leave Requests','cal'],['training','Training & Development','cap'],['performance','Performance','chart'],['reports','Reports','report']];
+HR.NAV=[['dashboard','Dashboard','grid'],['recruitment','Recruitment','brief'],['records','Employee Records','users'],['attendance','Attendance','calcheck'],['leave','Leave Requests','cal'],['training','Training & Development','cap'],['performance','Performance','chart'],['reports','Reports','report'],['activity','Activity','clock'],['handoffs','Department handoffs','users']];
 
 HR.$ = (selector) => HR.root?.querySelector(selector);
 HR.emp = (id) => HR.E.find((e) => e.id === id);

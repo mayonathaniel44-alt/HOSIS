@@ -52,6 +52,7 @@ async function saveWorkbook(reports, fileName, selection) {
 export default function AdminReportsPage({ timeZone, refreshKey }) {
   const today = useHotelToday(timeZone)
   const [catalog, setCatalog] = useState(null)
+  const [archives, setArchives] = useState(null)
   const [loadingError, setLoadingError] = useState('')
   const [period, setPeriod] = useState('all')
   const [date, setDate] = useState('')
@@ -72,6 +73,37 @@ export default function AdminReportsPage({ timeZone, refreshKey }) {
   const selectedDate = date || today
   const selection = period === 'all' ? 'All recorded dates' : `${period[0].toUpperCase() + period.slice(1)} containing ${selectedDate}`
   const dateSuffix = period === 'all' ? 'all-dates' : `${period}-${selectedDate}`
+
+  async function toggleArchives() {
+    if (archives) {
+      setArchives(null)
+      return
+    }
+    setStatus({ busy: true, error: '', message: '' })
+    try {
+      const { records } = await adminApi.engineeringArchives()
+      setArchives(records)
+      setStatus({ busy: false, error: '', message: '' })
+    } catch (error) {
+      setStatus({ busy: false, error: error.message, message: '' })
+    }
+  }
+
+  async function downloadArchive(archive) {
+    setStatus({ busy: true, error: '', message: '' })
+    try {
+      const blob = await adminApi.engineeringArchiveFile(archive.id)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = archive.fileName
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 0)
+      setStatus({ busy: false, error: '', message: 'Engineering archive downloaded.' })
+    } catch (error) {
+      setStatus({ busy: false, error: error.message, message: '' })
+    }
+  }
 
   async function download(filters, name, bulk) {
     setStatus({ busy: true, error: '', message: '' })
@@ -132,6 +164,16 @@ export default function AdminReportsPage({ timeZone, refreshKey }) {
           <span>{report.title}{!report.dated && <small>Current snapshot</small>}</span>
           <button type="button" className="small-action" disabled={status.busy} aria-label={`Export ${report.title}`} onClick={() => download({ department: department.id, report: report.id }, report.id, false)}>Export</button>
         </li>)}</ul>
+        {department.id === 'engineering' && <>
+          <button type="button" className="button button-secondary" disabled={status.busy} aria-expanded={Boolean(archives)} onClick={toggleArchives}>
+            {archives ? 'Hide archived files' : 'View archived files'}
+          </button>
+          {archives?.length === 0 && <p>No Engineering reports have been archived.</p>}
+          {archives && <ul className="admin-report-list">{archives.map((archive) => <li key={archive.id}>
+            <span>{archive.fileName}<small>{new Date(archive.generatedAt).toLocaleString(undefined, { timeZone })}</small></span>
+            <button type="button" className="small-action" disabled={status.busy} onClick={() => downloadArchive(archive)}>Download</button>
+          </li>)}</ul>}
+        </>}
       </section>)}
     </div>
   </>

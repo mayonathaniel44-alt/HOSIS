@@ -27,7 +27,7 @@ router.route('/expenses')
   .get(controller.listExpenses)
   .post(requireBody, controller.createExpense)
 
-router.patch('/expenses/:id/approve', requireId, controller.approveExpense)
+router.patch('/expenses/:id/approve', requireId, require('./latestController').approveExpense)
 
 router.get('/revenue', controller.revenueMonitoring)
 router.get('/payroll', controller.listPayroll)

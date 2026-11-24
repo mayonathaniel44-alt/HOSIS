@@ -5,25 +5,31 @@ const authorize = require('../../../backend/src/middleware/authorize.js')
 const { appError } = require('../../../backend/src/lib/errors.js')
 
 const router = express.Router()
+router.use(require('./departmentHandoffs'))
 router.use(authenticate, authorize('HR', 'ADMIN'))
 
 router.get('/bootstrap', async (req, res) => {
-  const [employees, leaves, assignments, maintenanceRequirements] = await Promise.all([
+  const [employees, leaves, assignments, maintenanceRequirements, payroll] = await Promise.all([
     db.query(`SELECT e.id, e.name, e.dept, e.pos, e.status, e.hired, e.rate, e.assignment AS assign,
       week, today, time_in AS "in", days, late, absences AS abs, overtime AS ot,
-      contact, quals, license, spec, u.username AS "staffUsername", u.is_active AS "staffActive"
+      contact, quals, license, spec, recruitment_id AS "recruitmentId", u.username AS "staffUsername", u.is_active AS "staffActive"
       FROM hr_employees e LEFT JOIN users u ON u.id = e.staff_user_id ORDER BY e.id`),
-    db.query(`SELECT id, emp, type, start_date AS "from", end_date AS "to", days, status, reason
+    db.query(`SELECT id, emp, type, start_date AS "from", end_date AS "to", days, status, reason, decision_notes AS remarks
       FROM hr_leave_requests ORDER BY start_date DESC, id`),
     db.query(`SELECT date, emp, dept, from_value AS "from", to_value AS "to", by_user AS by, note
       FROM hr_assignment_logs ORDER BY id DESC`),
     db.query('SELECT area, need FROM hr_maintenance_requirements ORDER BY area'),
+    db.query(`SELECT DISTINCT ON (p.employee_id) p.employee_id, p.status,
+      p.period_start, p.period_end, p.disbursed_at
+      FROM finance_payroll p JOIN hr_employees e ON e.id=p.employee_id
+      ORDER BY p.employee_id, p.period_end DESC, p.id DESC`),
   ])
   res.json({
     employees: employees.rows,
     leaves: leaves.rows,
     assignments: assignments.rows,
     maintenanceRequirements: maintenanceRequirements.rows,
+    payrollStatus: payroll.rows,
     today: db.today(),
   })
 })
@@ -37,12 +43,27 @@ router.patch('/leaves/:id', async (req, res) => {
   if (decisionNotes.length > 500) {
     throw appError(400, 'INVALID_DECISION_NOTES', 'Decision notes must be 500 characters or fewer.')
   }
-  const result = await db.query(
+  const result = await db.withTransaction(async (client) => {
+    if (status === 'Approved') {
+      const { rows: [employee] } = await client.query(`SELECT e.staff_user_id,e.dept
+        FROM hr_leave_requests l JOIN hr_employees e ON e.id=l.emp WHERE l.id=$1 AND l.status='Pending'`, [req.params.id])
+      if (employee?.dept === 'housekeeping' && employee.staff_user_id) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', ['hk-schedule:' + employee.staff_user_id])
+        const { rowCount } = await client.query(`SELECT 1 FROM hk_schedules s
+          JOIN hr_leave_requests l ON l.id=$2
+          WHERE s.staff_id=$1 AND s.shift_date <= l.end_date
+          AND s.shift_date + CASE WHEN s.end_time < s.start_time AND s.end_time <> '00:00' THEN 1 ELSE 0 END >= l.start_date
+          LIMIT 1`, [employee.staff_user_id, req.params.id])
+        if (rowCount) throw appError(409, 'LEAVE_CONFLICTS_WITH_SHIFT', 'Ask Housekeeping to reassign the overlapping shift before approving this leave.')
+      }
+    }
+    return client.query(
     `UPDATE hr_leave_requests SET status = $1, decided_at = NOW(), decided_by = $2,
        decision_notes = NULLIF($3, ''), version = version + 1
      WHERE id = $4 AND status = 'Pending'`,
     [status, req.user.userId, decisionNotes, req.params.id],
-  )
+    )
+  })
   if (!result.rowCount) throw appError(409, 'LEAVE_ALREADY_DECIDED', 'The request is missing or has already been reviewed.')
   res.json({ ok: true })
 })
@@ -78,5 +99,7 @@ router.patch('/employees/:id/assignment', async (req, res) => {
   })
   res.json({ ok: true })
 })
+
+router.use(require('./hrManagementRoutes'))
 
 module.exports = router

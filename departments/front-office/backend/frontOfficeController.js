@@ -14,6 +14,9 @@ const search = (req) => typeof req.query.search === 'string' ? req.query.search.
 
 module.exports = {
   dashboard: controller(() => service.dashboard()),
+  accountReport: controller((req) => service.activityReport(req.query.period, req.query.date, {
+    search: req.query.search, page: req.query.page, exportAll: req.query.export, userId: req.user.id,
+  })),
   activityReport: controller((req) => service.activityReport(req.query.period, req.query.date, {
     search: req.query.search, page: req.query.page, exportAll: req.query.export,
   })),

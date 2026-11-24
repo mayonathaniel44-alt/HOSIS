@@ -40,12 +40,15 @@ import HR from "./data.js";
   }
 
   function payroll() {
+    const payrollByEmployee = new Map((HR.PAYROLL_STATUS || []).map(record => [record.employee_id, record]));
     const rows = list().map((e) => {
       const paidLeave = HR.LEAVES.filter((l) => l.emp === e.id && l.status === 'Approved' && e.status !== 'Contractual').reduce((total, l) => total + l.days, 0);
-      return [HR.person(e), name(e.dept), HR.statusBadge(e.status), `₱${e.rate.toLocaleString()}`, e.days, paidLeave, `${e.ot} h`, e.abs];
+      const payrollRecord = payrollByEmployee.get(e.id);
+      const payroll = payrollRecord ? payrollRecord.status.toLowerCase() + ' | ' + payrollRecord.period_end : 'No payroll record';
+      return [HR.person(e), name(e.dept), HR.statusBadge(e.status), `₱${e.rate.toLocaleString()}`, e.days, paidLeave, `${e.ot} h`, e.abs, payroll];
     });
     const exportButton = `<button class="btn gold" data-hr-action="export">${HR.ic('download', 'style="width:16px;height:16px;vertical-align:-3px"')} Export for Finance</button>`;
-    return HR.alertBox('info', 'info', 'HR shares validated employee and attendance information with Finance. <b>Payroll computation and processing stay with Finance</b>, not the HR subsystem.') + HR.panel('Employee information for payroll', 'Data package Finance needs to compute payroll. Cut-off Nov 1 – 15, 2026.', HR.table(['Employee', 'Department', 'Status', 'Daily rate', 'Days worked', 'Paid leave', 'Overtime', 'Absences'], rows), filter() + exportButton);
+    return HR.alertBox('info', 'info', 'HR shares validated employee and attendance information with Finance. <b>Payroll computation and processing stay with Finance</b>, not the HR subsystem.') + HR.panel('Employee information for payroll', 'Data package Finance needs to compute payroll. Cut-off Nov 1 – 15, 2026.', HR.table(['Employee', 'Department', 'Status', 'Daily rate', 'Days worked', 'Paid leave', 'Overtime', 'Absences', 'Finance payroll'], rows), filter() + exportButton);
   }
 
   HR.exportCSV = function () {

@@ -4,11 +4,18 @@ const authenticate = require('../../../backend/src/middleware/authenticate.js')
 const authorize = require('../../../backend/src/middleware/authorize.js')
 const { requireBody, requireId } = require('../../../backend/src/middleware/validate.js')
 
+const { listLeave, fileLeave } = require('./staffLeave')
+
 const router = express.Router()
 router.use(authenticate, authorize('FRONT_OFFICE', 'ADMIN'))
 
 router.get('/dashboard', controller.dashboard)
 router.get('/reports/activity', controller.activityReport)
+router.get('/reports/account', controller.accountReport)
+router.get('/staff/leave', async (req, res) => res.json(await listLeave(req.user.id)))
+router.post('/staff/leave', requireBody, async (req, res) => {
+  res.status(201).json({ request: await fileLeave(req.user.id, req.body) })
+})
 router.get('/reports/stay-activity', controller.stayActivity)
 
 router.route('/guests')

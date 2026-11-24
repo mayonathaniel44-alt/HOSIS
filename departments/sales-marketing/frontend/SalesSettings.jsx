@@ -203,8 +203,8 @@ export default function SalesSettings({
           <form
             onSubmit={(event) =>
               submit(event, async (_values, form) => {
-                if (!file || file.size > 3 * 1024 * 1024)
-                  throw new Error('Choose a Sales backup smaller than 3 MB.')
+                if (!file || file.size > 32 * 1024 * 1024)
+                  throw new Error('Choose a Sales backup up to 32 MB.')
                 let content
                 try {
                   content = JSON.parse(await file.text())

@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
        JOIN hk_rooms r ON r.room_id = t.room_id
        JOIN hk_users u ON u.user_id = i.inspected_by
       ${where}
-      ORDER BY i.inspected_at DESC LIMIT 20`,
+      ORDER BY i.inspected_at DESC, i.inspection_id DESC${where ? "" : " LIMIT 20"}`,
     params
   );
   res.json({ inspections: rows });

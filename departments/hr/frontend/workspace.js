@@ -5,10 +5,16 @@ HR.api = (path, options) => hrApi.request(path, { ...options, signal: HR.signal 
 HR.loadData = hydrateHr
 
 export async function hydrateHr(signal = HR.signal) {
-  const data = await hrApi.request('/bootstrap', { signal })
+  const [data, recruitment] = await Promise.all([
+    hrApi.request('/bootstrap', { signal }),
+    hrApi.request('/recruitment', { signal }),
+  ])
   if (signal.aborted) return
   HR.E = data.employees
+  HR.VACANCIES = recruitment.vacancies
+  HR.CANDIDATES = recruitment.candidates
   HR.LEAVES = data.leaves
+  HR.PAYROLL_STATUS = data.payrollStatus ?? []
   HR.ASSIGN_LOG = data.assignments
   HR.MAINT_REQ = data.maintenanceRequirements
   HR.TODAY = data.today
@@ -35,7 +41,7 @@ export function runHrAction(event) {
       if (validDepartment) HR.go('records', department)
       break
     case 'tab':
-      if (Object.hasOwn(HR.TABS[HR.state.dept] || [], tab)) {
+      if (Object.hasOwn(HR.TABS[HR.state.dept] || HR.TABS.frontdesk, tab)) {
         HR.state.tab = Number(tab)
         HR.render()
       }

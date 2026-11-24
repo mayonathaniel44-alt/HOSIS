@@ -45,13 +45,19 @@ function validateInvoice(body) {
   const subtotalCents = items.reduce((total, item) => total + Math.round(Number(item.amount) * 100), 0)
   const vatCents = Math.round(subtotalCents * 12 / 100)
   money(((subtotalCents + vatCents) / 100).toFixed(2), 'Invoice total')
-  return { ...validateDraft(body), items, subtotal: subtotalCents / 100, vat: vatCents / 100 }
+  const invoiceType = body.invoiceType || 'GUEST'
+  if (!['GUEST','CORPORATE','STAFF'].includes(invoiceType)) throw appError(400, 'INVALID_TYPE', 'Choose a valid invoice type.')
+  return { ...validateDraft(body), items, subtotal: subtotalCents / 100, vat: vatCents / 100,
+    invoiceType, department: field(body.department, 'department', 80),
+    reservationCode: field(body.reservationCode, 'reservation code', 50),
+    roomNumber: field(body.roomNumber, 'room number', 40), issueDate: date(body.issueDate) }
+
 }
 
 function validatePayment(body) {
   const amount = money(body.amount, 'Payment')
   const paymentMethod = typeof body.paymentMethod === 'string' ? body.paymentMethod.toUpperCase().replaceAll(' ', '_') : ''
-  if (Number(amount) <= 0 || !['CASH', 'CARD', 'BANK_TRANSFER', 'OTHER'].includes(paymentMethod)) {
+  if (Number(amount) <= 0 || !['CASH', 'CARD', 'BANK_TRANSFER', 'OTHER_E_WALLETS', 'GCASH', 'MAYA', 'SALARY_DEDUCTION', 'CHECK', 'OTHER'].includes(paymentMethod)) {
     throw appError(400, 'INVALID_PAYMENT', 'Enter a positive amount and a valid payment method.')
   }
   return { amount, paymentMethod, invoiceCode: field(body.invoiceCode, 'invoice code', 40, true),
@@ -62,7 +68,7 @@ function validateExpense(body) {
   const amount = money(body.amount, 'Expense')
   if (Number(amount) <= 0) throw appError(400, 'INVALID_AMOUNT', 'Expense amount must be positive.')
   return { amount, department: field(body.department, 'department', 80, true),
-    category: field(body.category, 'category', 120, true), notes: field(body.notes, 'notes', 2000) }
+    category: field(body.category, 'category', 120, true), expenseDate: date(body.expenseDate), notes: field(body.notes, 'notes', 2000) }
 }
 
 module.exports = { validateInvoice, validateDraft, validatePayment, validateExpense }

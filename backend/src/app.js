@@ -32,7 +32,11 @@ app.use(cors({
     return callback(error)
   },
 }))
-app.use(express.json({ limit: '3mb' }))
+const standardJson = express.json({ limit: '3mb' })
+app.use((req, res, next) => {
+  const isSalesRestore = req.method === 'POST' && req.path === '/api/v1/sales-marketing/improved/restore'
+  return isSalesRestore ? next() : standardJson(req, res, next)
+})
 app.use((req,res,next) => {
  if (['POST','PATCH','PUT'].includes(req.method)) {
   if (req.body === undefined) req.body = {}

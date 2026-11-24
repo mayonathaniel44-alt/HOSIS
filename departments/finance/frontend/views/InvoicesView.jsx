@@ -1,712 +1,1014 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { financeApi } from '../financeApi.js'
-import { peso } from './peso.js'
+import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
-export default function InvoicesView({ showToast }) {
-  const [subMode, setSubMode] = useState('list') // 'list' | 'create' | 'edit-draft'
+export default function InvoicesView({ user, showToast }) {
+  const isChecker = ['DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(
+    user?.role?.toUpperCase()
+  )
   const [invoices, setInvoices] = useState([])
+  const [loading, setLoading] = useState(true)
+
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
+  const [typeFilter, setTypeFilter] = useState('All')
 
-  // Selected draft for editing (Image 3)
-  const [draftInvoice, setDraftInvoice] = useState(null)
+  // Modals state
+  const [selectedInvoice, setSelectedInvoice] = useState(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [modalLoading, setModalLoading] = useState(false)
 
-  const [revision, setRevision] = useState(0)
-  const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    let active = true
-    financeApi.invoices()
-      .then((records) => {
-        if (!active) return
-        const mapped = records.map((r) => ({
-          id: r.invoiceCode || `INV-${r.id}`,
-          dbId: r.id,
-          date: r.issueDate || 'Draft',
-          guest: r.guestName,
-          reservation: r.reservationCode || '—',
-          room: r.roomNumber || '—',
-          total: Number(r.totalAmount || 0),
-          paid: Number(r.paidAmount || 0),
-          balance: Number(r.balanceDue || 0),
-          status: r.status === 'PART_PAID' ? 'Part-paid' : r.status === 'ISSUED' ? 'Issued' : r.status === 'PAID' ? 'Paid' : r.status === 'VOID' ? 'Void' : 'Draft',
-          email: r.guestEmail || '',
-          dueDate: r.dueDate || '',
-        }))
-        setInvoices(mapped)
+  // Create Invoice form state
+  const [invoiceType, setInvoiceType] = useState('GUEST') // 'GUEST' | 'CORPORATE' | 'STAFF'
+  const [customerName, setCustomerName] = useState('')
+  const [email, setEmail] = useState('')
+  const [roomNumber, setRoomNumber] = useState('')
+  const [reservationCode, setReservationCode] = useState('')
+  const [department, setDepartment] = useState('Front Office')
+  const [notes, setNotes] = useState('Standard Hotel Accommodation & Services')
+  const [issueNow, setIssueNow] = useState(true)
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10))
+  const [dueDate, setDueDate] = useState(
+    () => new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
+  )
+  const [lines, setLines] = useState([
+    { desc: '', qty: 1, unitPrice: 0, category: 'GENERAL', source: 'FINANCE' },
+  ])
+  const [submitting, setSubmitting] = useState(false)
+  const [activeRegisterTab, setActiveRegisterTab] = useState('invoices')
+  const [salesDeals, setSalesDeals] = useState([])
+
+  const loadSalesDeals = useCallback(async () => {
+    try {
+      const res = await financeApi.salesRecords()
+      const list = res?.data || res?.records || res || []
+      setSalesDeals(Array.isArray(list) ? list : [])
+    } catch (err) {
+      console.error('Failed to load sales deals in invoices view:', err)
+    }
+  }, [])
+
+  async function handleConvertSalesDeal(deal) {
+    try {
+      setSubmitting(true)
+      await financeApi.syncSalesInvoice({
+        dealId: deal.id,
+        dealCode: deal.dealCode,
+        clientName: deal.clientName,
+        packageName: deal.packageName,
+        contractAmount: deal.contractAmount,
+        milestoneStage: 'DEPOSIT_20',
+        paymentTermDays: deal.paymentTermDays || 30,
       })
-      .catch((error) => { if (active) showToast(error.message) })
-    return () => { active = false }
-  }, [revision, showToast])
-
-  // Create invoice form states (Image 2)
-  const [createBillTo, setCreateBillTo] = useState('')
-  const [createEmail, setCreateEmail] = useState('')
-  const [createDueDate, setCreateDueDate] = useState('')
-  const [createLines, setCreateLines] = useState([])
-
-  // Calculations for create invoice
-  const createSubtotal = createLines.reduce((sum, item) => sum + item.amount, 0)
-  const createVat = Math.round(createSubtotal * 12) / 100
-  const createTotal = createSubtotal + createVat
-
-  async function saveInvoice(issueNow, draft) {
-    if (busy) return
-    setBusy(true)
-    try {
-      const info = draft
-        ? { guestName: draft.guest, guestEmail: draft.email, dueDate: draft.dueDate, issueNow }
-        : { guestName: createBillTo, guestEmail: createEmail, dueDate: createDueDate, items: createLines, issueNow }
-      const result = draft
-        ? await financeApi.updateInvoice(draft.dbId, info)
-        : await financeApi.createInvoice(info)
-      setRevision((value) => value + 1)
-      if (!draft) {
-        setCreateBillTo('')
-        setCreateEmail('')
-        setCreateDueDate('')
-        setCreateLines([])
-      }
-      setSubMode('list')
-      showToast(result.invoiceCode + (issueNow ? ' issued.' : ' draft saved.'))
-    } catch (error) {
-      showToast(error.message)
+      showToast(`Sales deal ${deal.dealCode} successfully converted to Finance Folio!`)
+      await Promise.all([loadInvoices(), loadSalesDeals()])
+      setActiveRegisterTab('invoices')
+    } catch (err) {
+      showToast(err.message || 'Failed to convert sales deal to invoice.')
     } finally {
-      setBusy(false)
+      setSubmitting(false)
     }
   }
 
-  async function openInvoice(invoice) {
+  const loadInvoices = useCallback(async () => {
+    setLoading(true)
     try {
-      const detail = await financeApi.invoice(invoice.dbId)
-      setDraftInvoice({ ...invoice, payments: detail.payments, subtotal: Number(detail.subtotal), vat: Number(detail.vat),
-        items: detail.items.map((item) => ({ desc: item.description, qty: item.quantity,
-          unitPrice: Number(item.unitPrice), amount: Number(item.amount) })) })
-      setSubMode('edit-draft')
-    } catch (error) {
-      showToast(error.message)
+      const res = await financeApi.invoices('', '', '')
+      const rawInvoices = res.data || res || []
+
+      const mapped = rawInvoices.map((inv) => ({
+        id: inv.invoiceCode || `INV-${inv.id}`,
+        dbId: inv.id,
+        invoiceType: inv.invoiceType || 'GUEST',
+        guest: inv.guestName || 'Customer',
+        email: inv.guestEmail || '',
+        roomNumber: inv.roomNumber || '—',
+        reservationCode: inv.reservationCode || '—',
+        department: inv.department || 'Hotel Operations',
+        notes: inv.notes || '',
+        total: Number(inv.totalAmount || 0),
+        subtotal: Number(inv.subtotal || 0),
+        discount: Number(inv.discount || 0),
+        vat: Number(inv.vat || 0),
+        paid: Number(inv.paidAmount || 0),
+        balance: Number(inv.balanceDue || 0),
+        status:
+          inv.status === 'PAID'
+            ? 'Paid'
+            : inv.status === 'PART_PAID'
+            ? 'Part-paid'
+            : inv.status === 'ISSUED'
+            ? 'Issued'
+            : inv.status === 'DRAFT'
+            ? 'Draft'
+            : inv.status,
+        rawStatus: inv.status,
+        date: inv.issueDate
+          ? new Date(inv.issueDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+          : inv.createdAt
+          ? new Date(inv.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+          : '—',
+        dueDate: inv.dueDate
+          ? new Date(inv.dueDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+          : '—',
+      }))
+      setInvoices(mapped)
+    } catch (err) {
+      console.error('Failed to load invoices:', err)
+      showToast('Error loading invoices from database.')
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadInvoices()
+      loadSalesDeals()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [loadInvoices, loadSalesDeals])
+
+  async function openInvoiceDetails(inv) {
+    setSelectedInvoice(inv)
+    setModalLoading(true)
+    try {
+      const full = await financeApi.invoice(inv.dbId)
+      setSelectedInvoice((prev) => ({
+        ...prev,
+        items: full.items || [],
+        payments: full.payments || [],
+      }))
+    } catch (err) {
+      console.error('Failed to load full invoice details:', err)
+    } finally {
+      setModalLoading(false)
     }
   }
 
-  // Filtered invoices
-  const filtered = invoices.filter((item) => {
-    const matchesSearch =
-      item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.guest.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.reservation.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === 'All' || item.status === statusFilter
-    return matchesSearch && matchesStatus
+  async function handleVoidInvoice(inv) {
+    if (!window.confirm(`Are you sure you want to void invoice ${inv.id}? This will cancel the folio.`)) return
+    try {
+      await financeApi.updateInvoice(inv.dbId, { status: 'VOID' })
+      showToast(`Invoice ${inv.id} marked as VOID by Checker.`)
+      setSelectedInvoice(null)
+      loadInvoices()
+    } catch (err) {
+      console.error('Failed to void invoice:', err)
+      showToast(err.message || 'Failed to void invoice.')
+    }
+  }
+
+  function handleAddLine() {
+    setLines([...lines, { desc: 'Additional Service Item', qty: 1, unitPrice: 500, category: 'GENERAL', source: 'FINANCE' }])
+  }
+
+  function handleRemoveLine(index) {
+    if (lines.length <= 1) return
+    setLines(lines.filter((_, i) => i !== index))
+  }
+
+  function handleLineChange(index, field, val) {
+    const updated = [...lines]
+    updated[index][field] = val
+    setLines(updated)
+  }
+
+  const subtotal = lines.reduce((s, l) => s + (Number(l.qty || 1) * Number(l.unitPrice || 0)), 0)
+  const vat = Math.round(subtotal * 0.12 * 100) / 100
+  const total = subtotal + vat
+
+  async function handleCreateInvoice(e) {
+    e.preventDefault()
+    if (!customerName.trim()) {
+      showToast('Customer / Guest name is required.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await financeApi.createInvoice({
+        guestName: customerName.trim(),
+        guestEmail: email || null,
+        invoiceType,
+        roomNumber: invoiceType === 'GUEST' ? roomNumber : null,
+        reservationCode: invoiceType === 'GUEST' ? reservationCode : null,
+        department: invoiceType === 'STAFF' ? department : invoiceType === 'CORPORATE' ? 'Sales & Marketing' : null,
+        subtotal,
+        vat,
+        totalAmount: total,
+        status: issueNow ? 'ISSUED' : 'DRAFT',
+        issueNow,
+        issueDate,
+        dueDate,
+        notes,
+        items: lines.map((l) => ({
+          desc: l.desc,
+          qty: Number(l.qty || 1),
+          unitPrice: Number(l.unitPrice || 0),
+          amount: Number(l.qty || 1) * Number(l.unitPrice || 0),
+          category: l.category || 'GENERAL',
+          source: l.source || 'FINANCE',
+        })),
+      })
+
+      showToast(`Invoice successfully created and ${issueNow ? 'issued' : 'saved as draft'}.`)
+      setShowCreateModal(false)
+      // reset
+      setCustomerName('')
+      setRoomNumber('')
+      setReservationCode('')
+      loadInvoices()
+    } catch (err) {
+      console.error('Failed to create invoice:', err)
+      showToast(err.message || 'Failed to create invoice.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleIssueDraft(inv) {
+    try {
+      await financeApi.updateInvoice(inv.dbId, { issueNow: true, status: 'ISSUED' })
+      showToast(`Invoice ${inv.id} has been officially issued.`)
+      loadInvoices()
+      if (selectedInvoice && selectedInvoice.dbId === inv.dbId) {
+        setSelectedInvoice((prev) => ({ ...prev, status: 'Issued', rawStatus: 'ISSUED' }))
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to update invoice.')
+    }
+  }
+
+  function handleBulkExportCsv() {
+    if (!invoices.length) {
+      showToast('No invoices to export.')
+      return
+    }
+    const headers = [
+      { key: 'id', label: 'Invoice Code' },
+      { key: 'invoiceType', label: 'Type' },
+      { key: 'guest', label: 'Guest / Customer Name' },
+      { key: 'roomNumber', label: 'Room' },
+      { key: 'reservationCode', label: 'Reservation Code' },
+      { key: 'department', label: 'Department' },
+      { key: 'date', label: 'Issue Date' },
+      { key: 'dueDate', label: 'Due Date' },
+      { key: 'subtotal', label: 'Subtotal (PHP)' },
+      { key: 'vat', label: '12% VAT (PHP)' },
+      { key: 'total', label: 'Total Amount (PHP)' },
+      { key: 'paid', label: 'Paid Amount (PHP)' },
+      { key: 'balance', label: 'Balance Due (PHP)' },
+      { key: 'status', label: 'Status' },
+      { key: 'notes', label: 'Notes' },
+    ]
+    exportToCsv('hosis-invoices-register', invoices, headers)
+    showToast('Exported invoices register to CSV.')
+  }
+
+  function handleBulkExportJson() {
+    if (!invoices.length) {
+      showToast('No invoices to export.')
+      return
+    }
+    exportToJson('hosis-invoices-register', invoices)
+    showToast('Exported invoices register to JSON.')
+  }
+
+  const totalBilled = invoices.reduce((s, i) => s + (i.rawStatus !== 'DRAFT' ? i.total : 0), 0)
+  const totalPaid = invoices.reduce((s, i) => s + i.paid, 0)
+  const totalReceivables = invoices.reduce((s, i) => s + (i.rawStatus !== 'DRAFT' ? i.balance : 0), 0)
+
+  const filteredInvoices = invoices.filter((inv) => {
+    const q = searchTerm.toLowerCase()
+    const matchSearch =
+      inv.id.toLowerCase().includes(q) ||
+      inv.guest.toLowerCase().includes(q) ||
+      inv.roomNumber.toLowerCase().includes(q) ||
+      inv.reservationCode.toLowerCase().includes(q) ||
+      inv.notes.toLowerCase().includes(q)
+
+    const matchStatus = statusFilter === 'All' || inv.status === statusFilter || inv.rawStatus === statusFilter
+    const matchType = typeFilter === 'All' || inv.invoiceType === typeFilter
+    return matchSearch && matchStatus && matchType
   })
 
-  // ================= VIEW: CREATE INVOICE (Image 2) =================
-  if (subMode === 'create') {
-    return (
-      <>
-        <div className="finance-breadcrumb">Finance &amp; Accounting / Invoices</div>
-        <header className="finance-header">
-          <div className="finance-header-titles">
-            <h1>Create invoice</h1>
-            <p>
-              <button
-                type="button"
-                onClick={() => setSubMode('list')}
-                style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0 }}
-              >
-                ← Back to invoice records
-              </button>{' '}
-              · New billing preview
-            </p>
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">GUEST &amp; CORPORATE BILLING</span>
+          <h1>Invoices &amp; Billing Folios <span className="wave">✦</span></h1>
+          <p>Issue guest folios, manage corporate event accounts, and monitor accounts receivable balances.</p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={handleBulkExportCsv}
+            title="Bulk export all invoices to CSV spreadsheet"
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={handleBulkExportJson}
+            title="Bulk export invoices to JSON"
+          >
+            Export JSON
+          </button>
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={() => setShowCreateModal(true)}
+            title="Create a new customer or corporate invoice"
+          >
+            + Create New Invoice
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <section className="stats-grid fin-kpi-grid fin-kpi-grid-3">
+        <article className="surface stat-card fin-kpi-card">
+          <div className="stat-top">
+            <span>TOTAL INVOICED BILLED</span>
+            <span className="stat-icon stat-gold">📑</span>
           </div>
-          <span className="fin-badge fin-badge-yellow" style={{ fontSize: '12px', padding: '4px 12px' }}>
-            Unsaved invoice
+          <div className="stat-value" style={{ color: '#0d1238' }}>
+            ₱{totalBilled.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </div>
+          <span className="stat-note" style={{ color: '#16a34a', fontWeight: 600 }}>
+            {invoices.length} total billing records
           </span>
-        </header>
+        </article>
+        <article className="surface stat-card fin-kpi-card">
+          <div className="stat-top">
+            <span>TOTAL COLLECTIONS REALIZED</span>
+            <span className="stat-icon stat-mint">✓</span>
+          </div>
+          <div className="stat-value" style={{ color: '#16a34a' }}>
+            ₱{totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </div>
+          <span className="stat-note" style={{ color: '#16a34a', fontWeight: 600 }}>
+            Settled guest &amp; client payments
+          </span>
+        </article>
+        <article className="surface stat-card fin-kpi-card">
+          <div className="stat-top">
+            <span>OUTSTANDING RECEIVABLES DUE</span>
+            <span className="stat-icon stat-peach">⏳</span>
+          </div>
+          <div className="stat-value" style={{ color: '#d97706' }}>
+            ₱{totalReceivables.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </div>
+          <span className="stat-note" style={{ color: '#d97706', fontWeight: 600 }}>
+            Pending collection balance
+          </span>
+        </article>
+      </section>
 
-        <div className="fin-grid-2-1">
-          {/* Left Column */}
-          <div>
-            {/* Billing Information Card */}
-            <div className="fin-surface">
-              <h3 className="fin-surface-title" style={{ marginBottom: '12px' }}>Billing information</h3>
-              <div className="fin-form-row">
-                <div className="fin-form-group">
-                  <label>Bill to</label>
-                  <input
-                    type="text"
-                    value={createBillTo}
-                    onChange={(e) => setCreateBillTo(e.target.value)}
-                  />
-                </div>
-                <div className="fin-form-group">
-                  <label>Email</label>
-                  <input
-                    type="email"
-                    value={createEmail}
-                    onChange={(e) => setCreateEmail(e.target.value)}
-                  />
-                </div>
+      {/* Register Tab Selector */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+        <button
+          type="button"
+          onClick={() => setActiveRegisterTab('invoices')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: activeRegisterTab === 'invoices' ? '1px solid #c99a3d' : '1px solid #e2e8f0',
+            background: activeRegisterTab === 'invoices' ? 'linear-gradient(105deg, #c99a3d, #b8882e)' : '#ffffff',
+            color: activeRegisterTab === 'invoices' ? '#ffffff' : '#475569',
+          }}
+        >
+          📑 Guest &amp; Standard Folios ({invoices.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveRegisterTab('sales')
+            loadSalesDeals()
+          }}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: activeRegisterTab === 'sales' ? '1px solid #c99a3d' : '1px solid #e2e8f0',
+            background: activeRegisterTab === 'sales' ? 'linear-gradient(105deg, #c99a3d, #b8882e)' : '#ffffff',
+            color: activeRegisterTab === 'sales' ? '#ffffff' : '#475569',
+          }}
+        >
+          🤝 Sales &amp; Marketing Contracts ({salesDeals.length})
+        </button>
+      </div>
+
+      {activeRegisterTab === 'invoices' ? (
+        <>
+          {/* Filters Toolbar */}
+          <div className="fin-surface" style={{ padding: '12px 18px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="fin-input-wrap" style={{ flex: 1, minWidth: '220px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search invoice #, guest name, room, or reservation code..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-              <div className="fin-form-row">
 
-                <div className="fin-form-group">
-                  <label>Due date</label>
-                  <input
-                    type="date"
-                    value={createDueDate}
-                    onChange={(e) => setCreateDueDate(e.target.value)}
-                  />
-                </div>
+              <div className="fin-select-wrap">
+                <label>Invoice Type</label>
+                <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                  <option value="All">All Types</option>
+                  <option value="GUEST">Guest Folios</option>
+                  <option value="CORPORATE">Corporate &amp; Sales</option>
+                  <option value="STAFF">Staff Charges</option>
+                </select>
+              </div>
+
+              <div className="fin-select-wrap">
+                <label>Billing Status</label>
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                  <option value="All">All Statuses</option>
+                  <option value="Issued">Issued (Unsettled)</option>
+                  <option value="Part-paid">Partially Paid</option>
+                  <option value="Paid">Fully Paid</option>
+                  <option value="Draft">Draft</option>
+                </select>
               </div>
             </div>
+          </div>
 
-            {/* Retrieved Charges Table */}
-            <div className="fin-surface">
-              <div className="fin-surface-header">
-                <div>
-                  <h3 className="fin-surface-title">Finance charge lines</h3>
-                  <p className="fin-surface-subtitle">Editable before issue · Amounts below exclude VAT</p>
-                </div>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-secondary"
-                  onClick={() => {
-                    const desc = prompt('Enter charge description:')
-                    const amount = parseFloat(prompt('Enter amount (exclude VAT):') || '0')
-                    if (desc && amount) {
-                      setCreateLines([...createLines, { desc, qty: 1, unitPrice: amount, amount }])
-                    }
-                  }}
-                  style={{ fontSize: '11.5px', padding: '5px 12px' }}
-                >
-                  + Add line item
-                </button>
+          {/* Invoices Table */}
+          <div className="fin-surface">
+            <div className="fin-surface-header">
+              <div>
+                <h3 className="fin-surface-title">Invoice &amp; Folio Register</h3>
+                <p className="fin-surface-subtitle">Click any invoice to view full itemization, payments received, and printable statement.</p>
               </div>
+              <span className="fin-badge fin-badge-blue">
+                {loading ? 'Loading...' : `${filteredInvoices.length} Invoices`}
+              </span>
+            </div>
 
+            <div className="fin-table-scroll">
               <table className="fin-table">
                 <thead>
                   <tr>
-                    <th>Description / source</th>
-                    <th>Qty</th>
-                    <th>Unit price</th>
-                    <th>Amount</th>
-                    <th>Action</th>
+                    <th>INVOICE #</th>
+                    <th>CUSTOMER / GUEST</th>
+                    <th>TYPE &amp; LOCATION</th>
+                    <th>DATE ISSUED</th>
+                    <th style={{ textAlign: 'right' }}>TOTAL AMOUNT</th>
+                    <th style={{ textAlign: 'right' }}>PAID</th>
+                    <th style={{ textAlign: 'right' }}>BALANCE DUE</th>
+                    <th>STATUS</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {createLines.map((line, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: 600 }}>{line.desc}</td>
-                      <td>{line.qty}</td>
-                      <td>{peso.format(line.unitPrice)}</td>
-                      <td style={{ fontWeight: 700 }}>{peso.format(line.amount)}</td>
+                  {loading && (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                        Loading invoices from database...
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && filteredInvoices.length === 0 && (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                        No invoices found matching current filters.
+                      </td>
+                    </tr>
+                  )}
+                  {!loading && filteredInvoices.map((inv) => (
+                    <tr
+                      key={inv.dbId}
+                      className="clickable-row"
+                      onClick={() => openInvoiceDetails(inv)}
+                    >
                       <td>
-                        <button
-                          type="button"
-                          onClick={() => setCreateLines(createLines.filter((_, i) => i !== idx))}
-                          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '11px' }}
+                        <strong style={{ color: '#d4af37' }}>{inv.id}</strong>
+                        <small style={{ display: 'block', color: '#64748b' }}>Due: {inv.dueDate}</small>
+                      </td>
+                      <td>
+                        <strong>{inv.guest}</strong>
+                        {inv.email && <small style={{ display: 'block', color: '#64748b' }}>{inv.email}</small>}
+                      </td>
+                      <td>
+                        <span className="fin-badge fin-badge-gold" style={{ fontSize: '11px', padding: '2px 8px' }}>
+                          {inv.invoiceType}
+                        </span>
+                        <small style={{ display: 'block', color: '#64748b', marginTop: '2px' }}>
+                          {inv.invoiceType === 'GUEST' ? `Room ${inv.roomNumber}` : inv.department}
+                        </small>
+                      </td>
+                      <td style={{ fontSize: '13px', color: '#94a3b8' }}>{inv.date}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                        ₱{inv.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#22c55e' }}>
+                        ₱{inv.paid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: inv.balance > 0 ? '#f59e0b' : '#22c55e' }}>
+                        ₱{inv.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td>
+                        <span
+                          className={`fin-badge ${
+                            inv.status === 'Paid'
+                              ? 'fin-badge-green'
+                              : inv.status === 'Part-paid'
+                              ? 'fin-badge-gold'
+                              : inv.status === 'Issued'
+                              ? 'fin-badge-blue'
+                              : 'fin-badge-gray'
+                          }`}
                         >
-                          Remove
-                        </button>
+                          {inv.status}
+                        </span>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '10px' }}>
-                {createLines.length} charge lines retrieved · No duplicate charge references
-              </div>
             </div>
           </div>
-
-          {/* Right Column: Invoice Summary & Before You Issue */}
-          <div>
-            <div className="fin-surface">
-              <h3 className="fin-surface-title" style={{ marginBottom: '14px' }}>Invoice summary</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Subtotal</span>
-                  <strong>{peso.format(createSubtotal)}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Discount</span>
-                  <span>₱0.00</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>VAT - 12%</span>
-                  <span>{peso.format(createVat)}</span>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: '17px',
-                    fontWeight: 800,
-                    color: '#0d1238',
-                    borderTop: '1px solid #e2e8f0',
-                    paddingTop: '10px',
-                    marginTop: '6px',
-                  }}
-                >
-                  <span>Invoice total</span>
-                  <span>{peso.format(createTotal)}</span>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '10px 12px',
-                  fontSize: '11.5px',
-                  color: '#64748b',
-                  margin: '16px 0',
-                }}
-              >
-                ⓘ Illustrative VAT calculation. Confirm billing and tax details before issuing.
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-primary"
-                  disabled={busy} onClick={() => saveInvoice(true)}
-                  style={{ justifyContent: 'center', width: '100%', padding: '9px 0', borderRadius: '8px' }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                  Issue invoice
-                </button>
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-secondary"
-                  disabled={busy} onClick={() => saveInvoice(false)}
-                  style={{ justifyContent: 'center', width: '100%', padding: '9px 0', borderRadius: '8px' }}
-                >
-                  Save as draft
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubMode('list')}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#64748b',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    marginTop: '4px',
-                  }}
-                >
-                  Cancel / back to records
-                </button>
-              </div>
+        </>
+      ) : (
+        /* Sales Deals Register */
+        <div className="fin-surface">
+          <div className="fin-surface-header">
+            <div>
+              <h3 className="fin-surface-title">Sales &amp; Marketing B2B Contracts</h3>
+              <p className="fin-surface-subtitle">Confirmed corporate bookings, wedding banquets, and event packages from Sales &amp; Marketing ready to bill.</p>
             </div>
+            <span className="fin-badge fin-badge-gold">
+              {salesDeals.length} Sales Deals
+            </span>
+          </div>
 
-            <div className="fin-surface">
-              <h3 className="fin-surface-title" style={{ marginBottom: '10px' }}>Before you issue</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: '#16a34a' }}>
-                <div>✓ Reservation and guest matched</div>
-                <div>Finance charges entered manually</div>
-                <div>✓ Line amounts and VAT calculated</div>
-              </div>
-              <p style={{ fontSize: '11.5px', color: '#64748b', marginTop: '12px', lineHeight: '1.4' }}>
-                Issuing locks billing information and charges. Drafts stay editable and are excluded from revenue.
-              </p>
-            </div>
+          <div className="fin-table-scroll">
+            <table className="fin-table">
+              <thead>
+                <tr>
+                  <th>DEAL CODE</th>
+                  <th>CLIENT / ORGANIZATION</th>
+                  <th>EVENT &amp; ATTENDEES</th>
+                  <th>PACKAGE DETAILS</th>
+                  <th style={{ textAlign: 'right' }}>CONTRACT VALUE</th>
+                  <th>STAGE / STATUS</th>
+                  <th style={{ textAlign: 'center' }}>ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                {salesDeals.length === 0 && (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                      No sales records found.
+                    </td>
+                  </tr>
+                )}
+                {salesDeals.map((deal) => (
+                  <tr key={deal.id}>
+                    <td>
+                      <strong style={{ color: '#d4af37' }}>{deal.dealCode}</strong>
+                      <small style={{ display: 'block', color: '#64748b' }}>{deal.eventType || 'Event'}</small>
+                    </td>
+                    <td>
+                      <strong>{deal.clientName}</strong>
+                      <small style={{ display: 'block', color: '#64748b' }}>
+                        {deal.contactPerson} ({deal.contactEmail})
+                      </small>
+                    </td>
+                    <td>
+                      <div>{deal.eventDate ? new Date(deal.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Flexible date'}</div>
+                      <small style={{ color: '#64748b' }}>{deal.attendees || 0} pax</small>
+                    </td>
+                    <td>
+                      <span>{deal.packageName}</span>
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#1e293b' }}>
+                      ₱{Number(deal.contractAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td>
+                      <span className={`fin-badge ${deal.status === 'INVOICED' ? 'fin-badge-green' : 'fin-badge-blue'}`}>
+                        {deal.status === 'INVOICED' ? '✓ INVOICED' : deal.status}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      {deal.status === 'INVOICED' ? (
+                        <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: 600 }}>
+                          Folio Linked
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="button button-primary"
+                          disabled={submitting || !deal.milestoneEligible || deal.status === 'CANCELLED'}
+                          style={{ minHeight: '30px', padding: '0 10px', fontSize: '11px' }}
+                          onClick={() => handleConvertSalesDeal(deal)}
+                        >
+                          + Bill to Finance Folio
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-      </>
-    )
-  }
+      )}
 
-  // ================= VIEW: DRAFT EDIT (Image 3) =================
-  if (subMode === 'edit-draft' && draftInvoice) {
-    const draftSubtotal = draftInvoice.subtotal
-    const draftVat = draftInvoice.vat
-    const draftTotal = draftSubtotal + draftVat
-
-    return (
-      <>
-        <div className="finance-breadcrumb">Finance &amp; Accounting / Invoices</div>
-        <header className="finance-header">
-          <div className="finance-header-titles">
-            <h1>Invoice {draftInvoice.id}</h1>
-            <p>
+      {/* Invoice Details Modal */}
+      {selectedInvoice && (
+        <div className="fin-modal-overlay" onClick={() => setSelectedInvoice(null)}>
+          <div className="fin-modal-window wide" onClick={(e) => e.stopPropagation()}>
+            <div className="fin-modal-header">
+              <h3 className="fin-modal-title">Official Billing Statement &amp; Folio</h3>
               <button
                 type="button"
-                onClick={() => setSubMode('list')}
-                style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0 }}
+                className="fin-modal-close-btn"
+                onClick={() => setSelectedInvoice(null)}
               >
-                ← Back to invoice records
-              </button>{' '}
-              · {draftInvoice.guest} · {draftInvoice.reservation}
-            </p>
-          </div>
-          <span className="fin-badge fin-badge-yellow" style={{ fontSize: '12px', padding: '4px 12px' }}>
-            Draft · Editing permitted
-          </span>
-        </header>
-
-        <div
-          style={{
-            background: '#eff6ff',
-            border: '1px solid #bfdbfe',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            fontSize: '12px',
-            color: '#1e40af',
-            marginBottom: '18px',
-          }}
-        >
-          {draftInvoice.status === "Draft" ? "Billing details can be edited before issue. Draft totals are excluded from revenue." : "Issued invoice details are locked."}
-        </div>
-
-        <div className="fin-grid-2-1">
-          {/* Left Column */}
-          <div>
-            <div className="fin-surface">
-              <div className="fin-surface-header">
-                <h3 className="fin-surface-title">Billing information</h3>
-                <span className="fin-badge fin-badge-gray">Editable draft</span>
-              </div>
-              <div className="fin-form-row">
-                <div className="fin-form-group">
-                  <label>Bill to</label>
-                  <input
-                    type="text"
-                    value={draftInvoice.guest} readOnly={draftInvoice.status !== "Draft"}
-                    onChange={(e) => setDraftInvoice({ ...draftInvoice, guest: e.target.value })}
-                  />
-                </div>
-                <div className="fin-form-group">
-                  <label>Email</label>
-                  <input
-                    type="email"
-                    value={draftInvoice.email} readOnly={draftInvoice.status !== "Draft"}
-                    onChange={(e) => setDraftInvoice({ ...draftInvoice, email: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="fin-form-row">
-                <div className="fin-form-group">
-                  <label>Invoice date</label>
-                  <input
-                    type="text"
-                    value={draftInvoice.status === "Draft" ? "" : draftInvoice.date} readOnly
-                  />
-                </div>
-                <div className="fin-form-group">
-                  <label>Due date</label>
-                  <input
-                    type="text"
-                    value={draftInvoice.dueDate} readOnly={draftInvoice.status !== "Draft"}
-                    onChange={(e) => setDraftInvoice({ ...draftInvoice, dueDate: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div style={{ fontSize: '11px', color: '#64748b' }}>
-                {draftInvoice.reservation} · {draftInvoice.room}
-              </div>
+                ✕
+              </button>
             </div>
+            <div className="fin-modal-body">
+              <div className="fin-paper-document">
+                <div className="fin-paper-header">
+                  <div>
+                    <h2 className="fin-paper-title">GRAND HORIZON HOTEL &amp; RESORT</h2>
+                    <span className="fin-paper-subtitle">OFFICIAL GUEST &amp; CUSTOMER BILLING FOLIO</span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '18px', fontWeight: 800, color: '#d4af37' }}>{selectedInvoice.id}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>Issued: {selectedInvoice.date}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>Payment Due: {selectedInvoice.dueDate}</div>
+                  </div>
+                </div>
 
-            <div className="fin-surface">
-              <div className="fin-surface-header">
-                <h3 className="fin-surface-title">Itemized charges</h3>
-              </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', marginBottom: '16px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>BILLED TO</span>
+                    <div style={{ fontWeight: 700, fontSize: '15px' }}>{selectedInvoice.guest}</div>
+                    {selectedInvoice.roomNumber && selectedInvoice.roomNumber !== '—' && (
+                      <div style={{ color: '#cbd5e1' }}>Room {selectedInvoice.roomNumber} · Res: {selectedInvoice.reservationCode}</div>
+                    )}
+                    {selectedInvoice.email && <div style={{ color: '#64748b' }}>{selectedInvoice.email}</div>}
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>ACCOUNT CLASSIFICATION</span>
+                    <div style={{ fontWeight: 600 }}>{selectedInvoice.invoiceType} INVOICE</div>
+                    <div style={{ color: '#94a3b8' }}>Status: {selectedInvoice.status}</div>
+                    {selectedInvoice.notes && <div style={{ color: '#64748b', fontSize: '12px' }}>{selectedInvoice.notes}</div>}
+                  </div>
+                </div>
 
-              <table className="fin-table">
-                <thead>
-                  <tr>
-                    <th>Description / source</th>
-                    <th>Qty</th>
-                    <th>Unit price</th>
-                    <th>Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {draftInvoice.items?.map((item, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: 600 }}>{item.desc}</td>
-                      <td>{item.qty}</td>
-                      <td>{peso.format(item.unitPrice)}</td>
-                      <td style={{ fontWeight: 700 }}>{peso.format(item.amount)}</td>
+                {/* Line Items */}
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '13px' }}>ITEMIZED CHARGES</h4>
+                <table className="fin-table" style={{ marginBottom: '16px' }}>
+                  <thead>
+                    <tr>
+                      <th>DESCRIPTION</th>
+                      <th>CATEGORY</th>
+                      <th style={{ textAlign: 'center' }}>QTY</th>
+                      <th style={{ textAlign: 'right' }}>UNIT PRICE</th>
+                      <th style={{ textAlign: 'right' }}>AMOUNT</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '10px' }}>
-                Source: Finance register
+                  </thead>
+                  <tbody>
+                    {modalLoading ? (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '14px', color: '#64748b' }}>
+                          Loading items...
+                        </td>
+                      </tr>
+                    ) : (selectedInvoice.items || []).length === 0 ? (
+                      <tr>
+                        <td>{selectedInvoice.notes || 'Hotel Accommodation Charge'}</td>
+                        <td>GENERAL</td>
+                        <td style={{ textAlign: 'center' }}>1</td>
+                        <td style={{ textAlign: 'right' }}>₱{selectedInvoice.subtotal.toLocaleString()}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>₱{selectedInvoice.subtotal.toLocaleString()}</td>
+                      </tr>
+                    ) : (
+                      selectedInvoice.items.map((item, i) => (
+                        <tr key={i}>
+                          <td>{item.description}</td>
+                          <td>
+                            <span className="fin-badge fin-badge-blue" style={{ fontSize: '10px' }}>
+                              {item.category || item.source || 'CHARGE'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>{item.quantity}</td>
+                          <td style={{ textAlign: 'right' }}>₱{Number(item.unitPrice).toLocaleString()}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>₱{Number(item.amount).toLocaleString()}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Totals Summary */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                  <div style={{ width: '280px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ color: '#94a3b8' }}>Subtotal:</span>
+                      <strong>₱{selectedInvoice.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ color: '#94a3b8' }}>12% VAT:</span>
+                      <strong>₱{selectedInvoice.vat.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '6px', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 700 }}>Total Billed:</span>
+                      <strong style={{ fontSize: '16px' }}>₱{selectedInvoice.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#22c55e', marginBottom: '4px' }}>
+                      <span>Paid to Date:</span>
+                      <strong>₱{selectedInvoice.paid.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid rgba(212, 175, 55, 0.4)', paddingTop: '6px', color: selectedInvoice.balance > 0 ? '#f59e0b' : '#22c55e' }}>
+                      <span style={{ fontWeight: 800 }}>Balance Due:</span>
+                      <strong style={{ fontSize: '18px', fontWeight: 800 }}>₱{selectedInvoice.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-
-            <div className="fin-surface">
-              <h3 className="fin-surface-title">Linked payments</h3>
-              {draftInvoice.payments.length ? <ul>{draftInvoice.payments.map((payment) => <li key={payment.id}>
-                {payment.receiptCode} · {peso.format(payment.amount)} · {payment.status}
-              </li>)}</ul> : <p>No linked payments.</p>}
-            </div>
-          </div>
-
-          {/* Right Column: Totals & Editing Rules */}
-          <div>
-            <div className="fin-surface">
-              <h3 className="fin-surface-title" style={{ marginBottom: '14px' }}>Invoice totals</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Subtotal</span>
-                  <strong>{peso.format(draftSubtotal)}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>Discount</span>
-                  <span>₱0.00</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#64748b' }}>VAT - 12%</span>
-                  <span>{peso.format(draftVat)}</span>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: '17px',
-                    fontWeight: 800,
-                    color: '#0d1238',
-                    borderTop: '1px solid #e2e8f0',
-                    paddingTop: '10px',
-                    marginTop: '6px',
-                  }}
+            <div className="fin-modal-footer">
+              {!isChecker && (
+                <span style={{ fontSize: '11.5px', color: '#64748b', marginRight: 'auto' }}>
+                  ℹ️ <strong>Segregation of Duties:</strong> Voiding issued folios requires Checker / Finance Head authorization.
+                </span>
+              )}
+              {isChecker && selectedInvoice.rawStatus !== 'VOID' && selectedInvoice.rawStatus !== 'PAID' && (
+                <button
+                  type="button"
+                  className="fin-btn fin-btn-danger"
+                  style={{ marginRight: 'auto' }}
+                  onClick={() => handleVoidInvoice(selectedInvoice)}
+                  title="Checker Action: Void / Cancel this issued folio"
                 >
-                  <span>Draft total</span>
-                  <span>{peso.format(draftTotal)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
-                  <span>Linked payments</span>
-                  <span>₱0.00</span>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '18px' }}>
+                  🚫 Void / Cancel Folio
+                </button>
+              )}
+              <button
+                type="button"
+                className="fin-btn fin-btn-secondary"
+                onClick={() => setSelectedInvoice(null)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="fin-btn fin-btn-secondary"
+                onClick={() => window.print()}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9" />
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                  <rect x="6" y="14" width="12" height="8" />
+                </svg>
+                Print Folio
+              </button>
+              {selectedInvoice.rawStatus === 'DRAFT' && (
                 <button
                   type="button"
                   className="fin-btn fin-btn-primary"
-                  disabled={busy || draftInvoice.status !== "Draft"} onClick={() => saveInvoice(false, draftInvoice)}
-                  style={{ justifyContent: 'center', width: '100%', padding: '9px 0', borderRadius: '8px' }}
+                  onClick={() => handleIssueDraft(selectedInvoice)}
                 >
-                  Save changes
+                  Officially Issue Invoice
                 </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Invoice Modal */}
+      {showCreateModal && (
+        <div className="fin-modal-overlay" onClick={() => setShowCreateModal(false)}>
+          <div className="fin-modal-window wide" onClick={(e) => e.stopPropagation()}>
+            <form onSubmit={handleCreateInvoice}>
+              {invoiceType === 'STAFF' && <label>Department<input value={department} onChange={event => setDepartment(event.target.value)} required /></label>}
+              <div className="fin-modal-header">
+                <h3 className="fin-modal-title">Generate Customer or Corporate Invoice</h3>
+                <button
+                  type="button"
+                  className="fin-modal-close-btn"
+                  onClick={() => setShowCreateModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="fin-modal-body">
+                <div className="fin-form-grid fin-form-grid-3">
+                  <div className="fin-field">
+                    <label className="fin-label">Invoice Classification</label>
+                    <select
+                      className="fin-select"
+                      value={invoiceType}
+                      onChange={(e) => setInvoiceType(e.target.value)}
+                    >
+                      <option value="GUEST">Guest Folio (Hotel Room / Guest)</option>
+                      <option value="CORPORATE">Corporate Client / Sales Event</option>
+                      <option value="STAFF">Staff Account Charge</option>
+                    </select>
+                  </div>
+                  <div className="fin-field">
+                    <label className="fin-label">Customer / Guest Name <span className="fin-required">*</span></label>
+                    <input
+                      type="text"
+                      className="fin-input"
+                      placeholder="e.g. Atty. Ronald Hernandez"
+                      required
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
+                  </div>
+                  <div className="fin-field">
+                    <label className="fin-label">Billing Email</label>
+                    <input
+                      type="email"
+                      className="fin-input"
+                      placeholder="guest@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {invoiceType === 'GUEST' && (
+                  <div className="fin-form-grid fin-form-grid-2">
+                    <div className="fin-field">
+                      <label className="fin-label">Room Number</label>
+                      <input
+                        type="text"
+                        className="fin-input"
+                        placeholder="e.g. 305"
+                        value={roomNumber}
+                        onChange={(e) => setRoomNumber(e.target.value)}
+                      />
+                    </div>
+                    <div className="fin-field">
+                      <label className="fin-label">Reservation Code</label>
+                      <input
+                        type="text"
+                        className="fin-input"
+                        placeholder="e.g. RES-261099"
+                        value={reservationCode}
+                        onChange={(e) => setReservationCode(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="fin-form-grid fin-form-grid-2">
+                  <div className="fin-field">
+                    <label className="fin-label">Issue Date</label>
+                    <input
+                      type="date"
+                      className="fin-input"
+                      value={issueDate}
+                      onChange={(e) => setIssueDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="fin-field">
+                    <label className="fin-label">Payment Due Date</label>
+                    <input
+                      type="date"
+                      className="fin-input"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Line Items Editor */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <h4 style={{ margin: 0, fontSize: '13px' }}>Itemized Charges &amp; Services</h4>
+                  <button
+                    type="button"
+                    className="fin-btn fin-btn-secondary"
+                    style={{ padding: '4px 10px', fontSize: '12px' }}
+                    onClick={handleAddLine}
+                  >
+                    ➕ Add Line Item
+                  </button>
+                </div>
+
+                <div style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '8px', marginBottom: '14px' }}>
+                  {lines.map((l, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr auto', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        placeholder="Item description"
+                        className="fin-input"
+                        value={l.desc}
+                        onChange={(e) => handleLineChange(idx, 'desc', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Qty"
+                        className="fin-input"
+                        value={l.qty}
+                        onChange={(e) => handleLineChange(idx, 'qty', e.target.value)}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Unit Price"
+                        className="fin-input"
+                        value={l.unitPrice}
+                        onChange={(e) => handleLineChange(idx, 'unitPrice', e.target.value)}
+                      />
+                      <select
+                        className="fin-select"
+                        value={l.category}
+                        onChange={(e) => handleLineChange(idx, 'category', e.target.value)}
+                      >
+                        <option value="ROOM">Room</option>
+                        <option value="SERVICES">Services</option>
+                        <option value="DAMAGE_BILL">HK Damage</option>
+                        <option value="EVENT_BANQUET">Sales Event</option>
+                        <option value="GENERAL">General</option>
+                      </select>
+                      <button
+                        type="button"
+                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '16px' }}
+                        onClick={() => handleRemoveLine(idx)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Calculation Box */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(212, 175, 55, 0.08)', border: '1px solid rgba(212, 175, 55, 0.25)', padding: '12px', borderRadius: '8px', marginBottom: '14px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>SUBTOTAL: ₱{subtotal.toLocaleString()} · 12% VAT: ₱{vat.toLocaleString()}</span>
+                    <div style={{ fontSize: '13px', color: '#cbd5e1' }}>Government statutory VAT automatically applied.</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>TOTAL INVOICE AMOUNT</span>
+                    <div style={{ fontSize: '20px', fontWeight: 800, color: '#38bdf8' }}>₱{total.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '14px' }}>
+                  <label className="fin-label">Invoice Notes</label>
+                  <input
+                    type="text"
+                    className="fin-input"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={issueNow}
+                      onChange={(e) => setIssueNow(e.target.checked)}
+                    />
+                    <span>Issue immediately (Uncheck to save as draft)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="fin-modal-footer">
                 <button
                   type="button"
                   className="fin-btn fin-btn-secondary"
-                  disabled={busy || draftInvoice.status !== "Draft"} onClick={() => saveInvoice(true, draftInvoice)}
-                  style={{ justifyContent: 'center', width: '100%', padding: '9px 0', borderRadius: '8px' }}
+                  onClick={() => setShowCreateModal(false)}
                 >
-                  Issue invoice
+                  Cancel
                 </button>
                 <button
-                  type="button"
-                  onClick={() => setSubMode('list')}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#64748b',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    marginTop: '4px',
-                  }}
+                  type="submit"
+                  className="fin-btn fin-btn-primary"
+                  disabled={submitting}
                 >
-                  Discard changes
+                  {submitting ? 'Generating…' : '✓ Create Invoice'}
                 </button>
               </div>
-            </div>
-
-            <div className="fin-surface">
-              <h3 className="fin-surface-title" style={{ marginBottom: '8px' }}>Editing rules</h3>
-              <div style={{ fontWeight: 700, fontSize: '12px', color: '#0d1238', marginBottom: '8px' }}>
-                Draft → Issued → Paid
-              </div>
-              <p style={{ fontSize: '11.5px', color: '#64748b', lineHeight: '1.4', margin: '0 0 8px' }}>
-                <strong>Draft:</strong> billing information and line items can be edited by permitted finance staff.
-              </p>
-              <p style={{ fontSize: '11.5px', color: '#64748b', lineHeight: '1.4', margin: 0 }}>
-                <strong>Issued or paid:</strong> billing and charges become read-only. Linked payments and history remain visible.
-              </p>
-            </div>
+            </form>
           </div>
         </div>
-      </>
-    )
-  }
-
-  // ================= VIEW: INVOICE REGISTER (Image 1) =================
-  const issuedTotal = invoices.filter((i) => !['Draft', 'Void'].includes(i.status)).reduce((s, i) => s + i.total, 0)
-  const paidTotal = invoices.reduce((s, i) => s + i.paid, 0)
-  const balanceTotal = invoices.filter((i) => i.status !== 'Draft').reduce((s, i) => s + i.balance, 0)
-  const draftsCount = invoices.filter((i) => i.status === 'Draft').length
-
-  return (
-    <>
-      <div className="finance-breadcrumb">Finance &amp; Accounting / Invoices</div>
-      <header className="finance-header">
-        <div className="finance-header-titles">
-          <h1>Invoice records</h1>
-          <p>Manage guest billing, outstanding balances and permitted invoice updates.</p>
-        </div>
-        <button
-          type="button"
-          className="fin-btn fin-btn-primary"
-          onClick={() => setSubMode('create')}
-        >
-          + Create invoice
-        </button>
-      </header>
-
-      {/* KPI Row */}
-      <section className="fin-kpi-grid">
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Issued invoices</span>
-          <div className="fin-kpi-val">{peso.format(issuedTotal)}</div>
-          <span className="fin-kpi-note neutral">All issued Finance invoices</span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Payments received</span>
-          <div className="fin-kpi-val">{peso.format(paidTotal)}</div>
-          <span className="fin-kpi-note neutral">Finance collections</span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Outstanding balance</span>
-          <div className="fin-kpi-val">{peso.format(balanceTotal)}</div>
-          <span className="fin-kpi-note neutral">Unpaid balance on issued invoices</span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Drafts</span>
-          <div className="fin-kpi-val">{draftsCount}</div>
-          <span className="fin-kpi-note neutral">Excluded from revenue</span>
-        </div>
-      </section>
-
-      {/* Table Card */}
-      <div className="fin-surface">
-        <div className="fin-surface-header">
-          <h3 className="fin-surface-title">Guest invoice register</h3>
-          
-        </div>
-
-        {/* Filters */}
-        <div className="fin-filter-row">
-          <div className="fin-input-wrap">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Invoice, guest or reservation"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
-          <div className="fin-select-wrap">
-            <label>Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="All">All statuses</option>
-              <option value="Issued">Issued</option>
-              <option value="Part-paid">Part-paid</option>
-              <option value="Paid">Paid</option>
-              <option value="Draft">Draft</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Invoices Table */}
-        <div className="fin-table-scroll">
-          <table className="fin-table">
-            <thead>
-              <tr>
-                <th>Invoice / issued</th>
-                <th>Guest / reservation</th>
-                <th>Total (PHP)</th>
-                <th>Paid / balance</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((inv) => (
-                <tr key={inv.id}>
-                  <td>
-                    <strong>{inv.id}</strong>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>{inv.date}</div>
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{inv.guest}</div>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>{inv.reservation} · {inv.room}</div>
-                  </td>
-                  <td style={{ fontWeight: 700 }}>{peso.format(inv.total)}</td>
-                  <td>
-                    <div>{peso.format(inv.paid)} paid</div>
-                    <div style={{ fontSize: '11px', color: inv.balance > 0 ? '#b45309' : '#64748b' }}>
-                      {inv.status === 'Draft' ? 'Draft only' : `₱${inv.balance.toLocaleString()}.00 due`}
-                    </div>
-                  </td>
-                  <td>
-                    <span
-                      className={`fin-badge ${
-                        inv.status === 'Paid'
-                          ? 'fin-badge-green'
-                          : inv.status === 'Part-paid'
-                          ? 'fin-badge-yellow'
-                          : inv.status === 'Issued'
-                          ? 'fin-badge-blue'
-                          : 'fin-badge-gray'
-                      }`}
-                    >
-                      {inv.status}
-                    </span>
-                  </td>
-                  <td>
-                    {inv.status === 'Draft' ? (
-                      <button
-                        type="button"
-                        onClick={() => openInvoice(inv)}
-                        style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 600, fontSize: '12px', cursor: 'pointer' }}
-                      >
-                        View / edit →
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => openInvoice(inv)}
-                        style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 600, fontSize: '12px', cursor: 'pointer' }}
-                      >
-                        View invoice →
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="fin-table-footer">
-          <span>Showing {filtered.length} of {invoices.length} invoices · Newest billing period</span>
-          <div className="fin-pagination">
-            <button type="button" className="fin-page-btn" disabled>Previous</button>
-            <button type="button" className="fin-page-btn active">1</button>
-            <button type="button" className="fin-page-btn" disabled>Next</button>
-          </div>
-        </div>
-
-        <div className="fin-callout" style={{ marginTop: '16px' }}>
-          ⓘ <strong>Editing permission:</strong> authorized finance staff may update drafts only. Issued and paid invoices are read-only; payment records remain linked to their invoice.
-        </div>
-      </div>
+      )}
     </>
   )
 }
-

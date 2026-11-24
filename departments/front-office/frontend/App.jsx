@@ -10,6 +10,9 @@ import {loadWorkspace} from './workspace.js'
 import { housekeepingLandingHash, isHousekeepingHash } from '../../../frontend/src/modules/housekeeping/tabs.js'
 import HousekeepingApp from '@housekeeping/HousekeepingApp.jsx'
 import PublicLostFoundPage from '@housekeeping/pages/PublicLostFoundPage.jsx'
+import AccountRecordsPage from './AccountRecordsPage.jsx'
+import DepartmentStaffing from '../../../frontend/src/components/DepartmentStaffing.jsx'
+import StaffLeavePage from './StaffLeavePage.jsx'
 import ReportsPage from './ReportsPage.jsx'
 import { exportPdf } from '@housekeeping/exportReport.js'
 
@@ -142,6 +145,9 @@ const navigation = [
   { id: 'Housekeeping findings', icon: 'alert' },
   { id: 'Billing', icon: 'receipt' },
   { id: 'Reports', icon: 'calendar' },
+  { id: 'Staff planning', icon: 'users' },
+  { id: 'Leave requests', icon: 'calendar' },
+  { id: 'Account records', icon: 'users' },
 ]
 
 function Icon({ name, size = 18, className = '' }) {
@@ -240,6 +246,7 @@ function App() {
   const [selectedRecord, setSelectedRecord] = useState(null)
   const [dialogError, setDialogError] = useState('')
   const [savingDialog, setSavingDialog] = useState(false)
+  const logoutDialog = useRef(null)
   const dialogSubmitLock = useRef(false)
   const paymentAttempt = useRef(null)
   const workspaceRevision = useRef(0)
@@ -366,16 +373,11 @@ function App() {
       setUser(null)
       setToast('Your session expired. Please sign in again.')
     }
-    function handleStorage(event) {
-      if (event.storageArea === window.localStorage && (event.key === null || event.key === 'hosis.accessToken')) window.location.reload()
-    }
     window.addEventListener('hosis:unauthorized', handleUnauthorized)
-    window.addEventListener('storage', handleStorage)
     const handleHashChange = () => setWorkspaceHash(window.location.hash)
     window.addEventListener('hashchange', handleHashChange)
     return () => {
       window.removeEventListener('hosis:unauthorized', handleUnauthorized)
-      window.removeEventListener('storage', handleStorage)
       window.removeEventListener('hashchange', handleHashChange)
     }
   }, [])
@@ -758,7 +760,7 @@ function App() {
     return <>
       <BackToAdmin onClick={returnToAdmin} />
       <Suspense fallback={<p>Loading department workspace</p>}>
-        {adminDepartment === 'FINANCE' && <FinanceApp onSignOut={signOut} />}
+        {adminDepartment === 'FINANCE' && <FinanceApp user={user} onSignOut={signOut} />}
         {adminDepartment === 'HR' && <HumanResourcesApp user={user} onSignOut={signOut} />}
         {adminDepartment === 'SALES_MARKETING' && <SalesMarketingApp user={user} onSignOut={signOut} onSessionChange={replaceSession} />}
       </Suspense>
@@ -775,7 +777,7 @@ function App() {
   }
   if (signedIn && user?.role === 'FINANCE') {
     return <Suspense fallback={<p>Loading department workspace…</p>}>
-      <FinanceApp onSignOut={signOut} />
+      <FinanceApp user={user} onSignOut={signOut} />
     </Suspense>
   }
   if (signedIn && user?.role === 'SALES_MARKETING') {
@@ -1047,7 +1049,10 @@ function App() {
     'Guest requests': renderRequests,
     'Housekeeping findings': renderHousekeepingFindings,
     Billing: renderBilling,
-    Reports: () => <ReportsPage today={todayISO} search={search} />,
+    Reports: () => <ReportsPage key="department" today={todayISO} search={search} />,
+    'Staff planning': () => <DepartmentStaffing department="frontdesk" />,
+    'Leave requests': () => <StaffLeavePage today={todayISO} search={search} />,
+    'Account records': () => <AccountRecordsPage today={todayISO} search={search} />,
   }
 
   return (
@@ -1060,10 +1065,11 @@ function App() {
         <div className="sidebar-bottom"><div className="help-card"><span className="help-icon"><Icon name="sparkle" size={18} /></span><strong>Here to help</strong><p>Need a hand? Your hotel admin is one message away.</p><button onClick={() => notify('Please contact your hotel administrator for support.')}>Get support <Icon name="arrow" size={14} /></button></div><button className="profile-button" onClick={() => notify(`Signed in as ${displayName} · ${accessLabel}`)}><Avatar initials={displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="dots" size={18} /></button></div>
       </aside>
       <main className="main-panel">
-        <header className="topbar"><button className="mobile-brand" onClick={() => setActivePage('Dashboard')}><Brand compact /></button><div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activePage}</strong></div><div className="topbar-tools"><label className="global-search"><Icon name="search" size={17} /><input type="search" aria-label={`Search ${activePage}`} placeholder={`Search ${activePage}`} value={search} onChange={(event) => setSearch(event.target.value)} /></label><span className="topbar-date"><Icon name="sun" size={17} />{dateLabel}</span><FrontOfficeNotifications key={user?.id} notices={notices} error={noticeError} loading={loadingWorkspace} acknowledging={acknowledgingNotice} onAcknowledge={acknowledgeNotice} onOpen={openNotice} onRetry={() => performAction(refreshData, 'Front Office data refreshed.')} /><span className="topbar-divider" /><button className="topbar-profile" onClick={signOut} aria-label="Sign out"><Avatar initials={initials(displayName)} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="logout" size={16} /></button></div></header>
+        <header className="topbar"><button className="mobile-brand" onClick={() => setActivePage('Dashboard')}><Brand compact /></button><div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activePage}</strong></div><div className="topbar-tools"><label className="global-search"><Icon name="search" size={17} /><input type="search" aria-label={`Search ${activePage}`} placeholder={`Search ${activePage}`} value={search} onChange={(event) => setSearch(event.target.value)} /></label><span className="topbar-date"><Icon name="sun" size={17} />{dateLabel}</span><FrontOfficeNotifications key={user?.id} notices={notices} error={noticeError} loading={loadingWorkspace} acknowledging={acknowledgingNotice} onAcknowledge={acknowledgeNotice} onOpen={openNotice} onRetry={() => performAction(refreshData, 'Front Office data refreshed.')} /><span className="topbar-divider" /><button className="topbar-profile" onClick={() => logoutDialog.current?.showModal()} aria-label="Sign out"><Avatar initials={initials(displayName)} small /><span><strong>{displayName}</strong><small>{accessLabel}</small></span><Icon name="logout" size={16} /></button></div></header>
         <section className="content-area">{dataError && <div className="api-error" role="alert"><strong>Couldn’t load Front Office records.</strong><span>{dataError}</span><button className="small-action" onClick={() => performAction(refreshData, 'Front Office data refreshed.')}>Retry</button></div>}{loadingWorkspace && <div className="loading-banner">Loading Front Office records…</div>}{pageRenderer[activePage]()}</section>
         <footer className="app-footer"><span>© {today.getFullYear()} Grand Horizon Hotel</span><span><i /> Connected to HOSIS API</span></footer>
       </main>
+      <LogoutDialog dialogRef={logoutDialog} onConfirm={signOut} />
       {modal && <Modal
         modal={modal}
         selectedRecord={selectedRecord} timeZone={user?.timeZone}
@@ -1078,6 +1084,33 @@ function App() {
       {toast && <div className="toast"><Icon name="check" size={17} />{toast}</div>}
     </div>
   )
+}
+
+function LogoutDialog({ dialogRef, onConfirm }) {
+  const [pending, setPending] = useState(false)
+
+  async function confirm() {
+    setPending(true)
+    try {
+      await onConfirm()
+    } finally {
+      dialogRef.current?.close()
+      setPending(false)
+    }
+  }
+
+  return <dialog ref={dialogRef} className="modal-card front-office-logout"
+    aria-labelledby="logout-heading" onCancel={(event) => { if (pending) event.preventDefault() }}>
+    <div className="front-office-logout-icon" aria-hidden="true"><Icon name="logout" size={22} /></div>
+    <h2 id="logout-heading">Are you sure you want to log out?</h2>
+    <div className="modal-actions">
+      <button type="button" className="button button-secondary" autoFocus disabled={pending}
+        onClick={() => dialogRef.current?.close()}>Stay signed in</button>
+      <button type="button" className="button button-primary" disabled={pending} onClick={confirm}>
+        {pending ? 'Logging out?' : 'Log out'}
+      </button>
+    </div>
+  </dialog>
 }
 
 function BackToAdmin({ onClick }) {

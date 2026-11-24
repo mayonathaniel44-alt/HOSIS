@@ -47,11 +47,14 @@ const unauthorized = () => ({
     error: { code: 'UNAUTHENTICATED', message: 'Expired' },
   }),
 })
-test('current session reads changes made in another tab instead of a cached token', () => {
+test('an active tab keeps its session when another tab remembers a different login', () => {
   const c = client()
   c.auth.saveSession(session('old'), true)
   c.window.localStorage.setItem('hosis.accessToken', 'new')
-  assert.equal(c.auth.getToken(), 'new')
+  assert.equal(c.auth.getToken(), 'old')
+  c.auth.clearSession()
+  assert.equal(c.auth.getToken(), null)
+  assert.equal(c.window.localStorage.getItem('hosis.accessToken'), 'new')
 })
 test('a delayed 401 from an old session cannot erase a newer login', async () => {
   let resolve

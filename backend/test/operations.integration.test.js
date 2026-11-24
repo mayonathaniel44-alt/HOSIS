@@ -83,6 +83,80 @@ test(
       } = await pool.query(
         'SELECT CURRENT_DATE::text AS today,(CURRENT_DATE+1)::text AS tomorrow,(CURRENT_DATE+2)::text AS later',
       )
+      await t.test('Front Office staff file leave with HR and can export only their own account activity', async () => {
+        const employee = prefix + '.fo-leave'
+        const leavePath = '/front-office/staff/leave'
+        assert.equal((await api('GET', leavePath, 'fo')).linked, false)
+        await api('GET', leavePath, 'sales', undefined, 403)
+        await pool.query(`INSERT INTO hr_employees
+          (id,name,dept,pos,status,hired,rate,assignment,week,today,time_in,contact,staff_user_id)
+          VALUES ($1,'Front Office Tester','frontdesk','Clerk','Regular',CURRENT_DATE,100,'Desk','[]','present','06:00','',$2)`,
+          [employee, accounts.fo])
+        const { today } = await api('GET', '/sales-marketing/improved/workspace', 'sales')
+        const data = { type: 'Vacation', startDate: today, endDate: today, reason: 'Personal leave' }
+        const { request } = await api('POST', leavePath, 'fo', data, 201)
+        await api('POST', leavePath, 'fo', data, 409)
+        assert.ok((await api('GET', '/hr/bootstrap', 'hr')).leaves.some(row => row.id === request.id))
+        await api('PATCH', '/hr/leaves/' + request.id, 'hr', { status: 'Approved', decisionNotes: 'Approved by HR' })
+        assert.equal((await api('GET', leavePath, 'fo')).requests[0].decision_notes, 'Approved by HR')
+        await pool.query("INSERT INTO front_office_activity(user_id,action,description) VALUES($1,'GUEST_UPDATED','Other account activity')",
+          [accounts.admin])
+        const report = await api('GET', '/front-office/reports/account?date=' + today + '&export=1&userId=' + accounts.admin, 'fo')
+        assert.ok(report.rows.some(row => row.action === 'LEAVE_REQUEST_FILED'))
+        assert.ok(!report.rows.some(row => row.description === 'Other account activity'))
+      })
+      await t.test('HR manages recruitment and hires into the shared employee roster', async () => {
+        await api('GET', '/hr/recruitment', 'fo', undefined, 403)
+        const vacancy = (await api('POST', '/hr/vacancies', 'hr', {
+          title: 'Reservations coordinator', dept: 'frontdesk', openings: 1, status: 'Open',
+        }, 201)).vacancy
+        const { id } = await api('POST', '/hr/applicants', 'hr', {
+          vacancyId: vacancy.id, name: 'Fictional Applicant',
+        }, 201)
+        await api('DELETE', '/hr/vacancies/' + vacancy.id, 'hr', undefined, 409)
+        const application = { vacancyId: vacancy.id, name: 'Fictional Applicant', stage: 'Hired' }
+        const { hiredEmployeeId } = await api('PUT', '/hr/applicants/' + id, 'hr', application)
+        assert.equal((await api('PUT', '/hr/applicants/' + id, 'hr', application)).hiredEmployeeId, hiredEmployeeId)
+        await api('DELETE', '/hr/applicants/' + id, 'hr', undefined, 409)
+        await api('DELETE', '/hr/employees/' + hiredEmployeeId, 'hr', undefined, 409)
+        await api('PATCH', '/hr/employees/' + hiredEmployeeId + '/attendance', 'hr', {
+          today: 'present', timeIn: '08:00', days: 4, late: 0, absences: 0, overtime: 1,
+          periodStart: '2026-11-01', periodEnd: '2026-11-15',
+        })
+        const employee = (await api('GET', '/hr/bootstrap', 'hr')).employees.find(row => row.id === hiredEmployeeId)
+        assert.equal(employee.days, 4)
+        assert.equal(employee.recruitmentId, id)
+        const staff = (await api('GET', '/finance/latest/integrations/hr/timesheets?periodStart=2026-11-01&periodEnd=2026-11-15', 'finance')).staff
+        const unmatched = (await api('GET', '/finance/latest/integrations/hr/timesheets?periodStart=2026-10-01&periodEnd=2026-10-15', 'finance')).staff
+        assert.ok(!unmatched.some(row => row.employeeId === hiredEmployeeId))
+        assert.equal(staff.find(row => row.employeeId === hiredEmployeeId).regularHours, 32)
+      })
+      await t.test('HR department handoffs scope staffing, accounts and leave to the appropriate users', async () => {
+        const employee = await api('POST', '/hr/employees', 'hr', {
+          name: 'Sales Coordinator', pos: 'Coordinator', dept: 'sales', status: 'Regular',
+        }, 201)
+        const id = employee.employee.id
+        await api('GET', '/hr/account-links', 'hr', undefined, 403)
+        await api('PATCH', '/hr/account-links/' + id, 'admin', { staffUserId: accounts.finance }, 409)
+        await api('PATCH', '/hr/account-links/' + id, 'admin', { staffUserId: accounts.sales })
+        const roster = await api('GET', '/hr/department-staffing?department=finance', 'sales')
+        assert.equal(roster.department, 'sales')
+        assert.ok(roster.staff.some(row => row.id === id))
+        assert.equal(Object.hasOwn(roster.staff[0], 'rate'), false)
+        const leave = await api('POST', '/hr/department-leave', 'sales', {
+          type: 'Vacation', startDate: roster.today, endDate: roster.today, reason: 'Scheduled time off',
+        }, 201)
+        await api('PATCH', '/hr/leaves/' + leave.request.id, 'hr', { status: 'Approved' })
+        assert.equal((await api('GET', '/hr/department-leave', 'sales')).requests[0].status, 'Approved')
+        assert.equal((await api('GET', '/hr/department-staffing', 'sales')).staff.find(row => row.id === id).availability, 'On leave')
+        const coverage = { neededOn: roster.today, staffNeeded: 2, details: 'Maintenance coverage' }
+        await api('POST', '/hr/department-staffing', 'technician', coverage, 403)
+        const staffing = await api('POST', '/hr/department-staffing', 'engineer', coverage, 201)
+        assert.ok((await api('GET', '/hr/staffing-requests', 'hr')).requests.some(row => row.id === staffing.request.id))
+        await api('PATCH', '/hr/staffing-requests/' + staffing.request.id, 'hr', { status: 'Approved', note: 'Coverage approved' })
+        assert.equal((await api('GET', '/hr/department-staffing', 'engineer')).requests.find(row => row.id === staffing.request.id).review_note, 'Coverage approved')
+        assert.ok(!(await api('GET', '/hr/department-staffing', 'sales')).requests.some(row => row.id === staffing.request.id))
+      })
       await t.test('Sales & Marketing uses shared sign-in with department-only access', async () => {
         const details = { name: prefix, contact: 'Demo Buyer', email: 'buyer@example.invalid', source: 'Referral', status: 'New' }
         await api('GET', '/sales-marketing/overview', 'fo', undefined, 403)
@@ -156,6 +230,16 @@ test(
         assert.equal(records.find((record) => record.id === inquiry.id).archived, false)
         assert.equal(records.find((record) => record.id === missing.id).subject, missing.subject)
         assert.equal((await api('POST', base + '/restore', signedIn, backup)).restored, 0)
+        await pool.query(`UPDATE sales_marketing_records
+          SET details=details || jsonb_build_object('backupFixture', repeat('x', 4*1024*1024))
+          WHERE kind='inquiry' AND id=$1`, [missing.id])
+        try {
+          const largerBackup = await api('GET', base + '/backup', signedIn)
+          assert.ok(Buffer.byteLength(JSON.stringify(largerBackup)) > 3 * 1024 * 1024)
+          assert.equal((await api('POST', base + '/restore', signedIn, largerBackup)).restored, 0)
+        } finally {
+          await pool.query("UPDATE sales_marketing_records SET details=details - 'backupFixture' WHERE kind='inquiry' AND id=$1", [missing.id])
+        }
         await api('PATCH', '/admin/staff/' + head.id, 'admin', { position: 'SALES_STAFF' })
         await api('GET', audit, signedIn, undefined, 401)
       })
@@ -191,8 +275,98 @@ test(
         const expense = await api('POST', '/finance/expenses', 'finance', {
           department: 'Engineering', category: 'Test example', amount: '20.00',
         }, 201)
-        const approval = await api('PATCH', '/finance/expenses/' + expense.id + '/approve', 'finance')
+        await api('PATCH', '/finance/expenses/' + expense.id + '/approve', 'finance', undefined, 409)
+        const approval = await api('PATCH', '/finance/expenses/' + expense.id + '/approve', 'admin')
         assert.equal(approval.status, 'APPROVED')
+      })
+      await t.test('Updated Finance workspace reads shared data and saves controlled workflows', async () => {
+        const path = '/finance/latest'
+        await api('GET', path + '/dashboard', 'fo', undefined, 403)
+        await api('GET', path + '/dashboard', 'finance')
+        for (const route of ['/invoices', '/payments', '/expenses', '/payroll', '/reports', '/revenue', '/audit',
+          '/leave-requests', '/leave-requests/summary', '/integrations/housekeeping/damages',
+          '/integrations/maintenance/records', '/integrations/sales/records',
+          '/integrations/city-ledger/aging', '/statutory-rates', '/integrations/hr/timesheets']) {
+          await api('GET', path + route, 'finance')
+        }
+        const signoff = { reportType: 'Income & expenditure', period: 'daily', date: dates.today }
+        const signed = await api('POST', path + '/reports/sign-off', 'finance', signoff)
+        assert.ok(signed.signedAt)
+        const report = await api('GET', path + '/reports?date=' + dates.today, 'finance')
+        assert.equal(report.signedAt, signed.signedAt)
+        assert.equal(report.generatedAt, signed.generatedAt)
+        const expense = await api('POST', path + '/integrations/maintenance/expenses', 'finance', {
+          category: 'Test work order', amount: '25.00', workOrderId: prefix, expenseClassification: 'CAPEX',
+        }, 201)
+        assert.equal(expense.workOrderId, prefix)
+        const engineeringId = prefix + '-engineering'
+        await pool.query(
+          "INSERT INTO engineering.engineering_records(collection,record_id,payload) VALUES('finance',$1,$2)",
+          [engineeringId, { id: engineeringId, description: 'Pump servicing', status: 'Unpaid', amount: 38 }],
+        )
+        const engineeringExpenses = await api('GET', path + '/integrations/maintenance/records', 'finance')
+        assert.ok(engineeringExpenses.workOrders.some(record => record.id === engineeringId))
+        const linked = await api('POST', path + '/integrations/maintenance/expenses', 'finance', {
+          engineeringRecordId: engineeringId, amount: '1.00',
+        }, 201)
+        assert.equal(Number(linked.amount), 38)
+        await api('POST', path + '/integrations/maintenance/expenses', 'finance', { engineeringRecordId: engineeringId }, 409)
+        await api('POST', path + '/expenses/' + linked.id + '/settle', 'admin', { reference: 'before-approval' }, 409)
+        await api('PATCH', path + '/expenses/' + linked.id + '/approve', 'admin')
+        await api('POST', path + '/expenses/' + linked.id + '/settle', 'finance', { reference: 'self-settlement' }, 409)
+        await api('POST', path + '/expenses/' + linked.id + '/settle', 'admin', { reference: prefix + '-bank' })
+        const outbox = await api('GET', '/engineering/integration/outbox', 'engineer')
+        assert.equal(outbox.records.find(record => record.id === engineeringId).status, 'PAID')
+        await api('GET', '/engineering/integration/outbox', 'technician', undefined, 403)
+        await pool.query("DELETE FROM engineering.engineering_records WHERE collection='finance' AND record_id=$1", [engineeringId])
+        const draft = await api('POST', path + '/invoices', 'finance', {
+          guestName: 'Test corporate invoice', invoiceType: 'CORPORATE', department: 'Finance',
+          items: [{ desc: 'Accounting services', qty: 1, unitPrice: '10.00' }],
+        }, 201)
+        assert.equal((await api('GET', path + '/invoices/' + draft.id, 'finance')).invoiceType, 'CORPORATE')
+        await api('POST', path + '/invoices/' + draft.id + '/void', 'finance')
+        const payroll = await api('POST', path + '/payroll', 'finance', {
+          employeeId: prefix, employeeName: 'Test Payroll', department: 'Finance', basicPay: '1000.00',
+          periodStart: dates.today, periodEnd: dates.later,
+        }, 201)
+        await api('PATCH', path + '/payroll/' + payroll.id + '/disburse', 'finance', undefined, 409)
+        await api('PATCH', path + '/payroll/' + payroll.id + '/disburse', 'admin')
+        const audit = await api('POST', path + '/night-audit/run', 'finance', { auditDate: dates.today }, 201)
+        assert.equal(audit.auditDate, dates.today)
+        assert.ok((await api('GET', path + '/night-audit', 'finance')).some(row => row.id === audit.id))
+        await pool.query(
+          `INSERT INTO hr_employees (id, name, dept, pos, status, hired, rate, assignment, week, today, time_in, contact)
+           VALUES ($1,'Finance Employee','finance','Clerk','Regular',CURRENT_DATE,100,'Finance','[]','present','06:00','')`,
+          [prefix + '.finleave'],
+        )
+        const employeePayroll = await api('POST', path + '/payroll', 'finance', {
+          employeeId: prefix + '.finleave', employeeName: 'Finance Employee', department: 'Finance',
+          basicPay: '90.00', periodStart: dates.today, periodEnd: dates.later,
+        }, 201)
+        await api('PATCH', path + '/payroll/' + employeePayroll.id + '/disburse', 'admin')
+        const hrPayroll = (await api('GET', '/hr/bootstrap', 'hr')).payrollStatus.find(row => row.employee_id === prefix + '.finleave')
+        assert.equal(hrPayroll.status, 'DISBURSED')
+        assert.equal(Object.hasOwn(hrPayroll, 'netPayable'), false)
+        const leave = await api('POST', path + '/leave-requests', 'finance', {
+          employeeId: prefix + '.finleave', employeeName: 'Test Employee', department: 'Finance', leaveType: 'Vacation Leave (VL)',
+          startDate: dates.tomorrow, endDate: dates.later, reason: 'Finance integration test',
+        }, 201)
+        await api('PATCH', path + '/leave-requests/' + leave.id + '/status', 'admin', { status: 'APPROVED' })
+        assert.equal((await pool.query("SELECT status FROM hr_leave_requests WHERE emp=$1", [prefix + '.finleave'])).rows[0].status, 'Approved')
+        const csv = await api('GET', path + '/export?entity=all&format=csv', 'finance')
+        assert.ok(csv.includes('Test Payroll'))
+        const dispatch = await api('POST', path + '/subsystems/dispatch', 'admin', { targetSubsystems: ['SUPER_ADMIN'] })
+        assert.equal(dispatch.totalSubsystemsDispatched, 1)
+      })
+      await t.test('Finance reports and exports include expenses beyond the screen limit', async () => {
+        await pool.query(`INSERT INTO finance_expenses (voucher_code,department,category,amount,status,expense_date)
+          SELECT 'AUDIT-EXPORT-' || n,'Finance','Export regression',1,'APPROVED',
+            CASE WHEN n=1 THEN DATE '2020-03-01' ELSE DATE '2020-03-02' END
+          FROM generate_series(1, 151) n`)
+        const report = await api('GET', '/finance/latest/reports?period=daily&date=2020-03-01', 'finance')
+        assert.ok(report.expenses.some(expense => expense.voucherCode === 'AUDIT-EXPORT-1'))
+        const archive = await api('GET', '/finance/latest/export?entity=master&format=json', 'finance')
+        assert.equal(archive.expenses.filter(expense => expense.voucherCode.startsWith('AUDIT-EXPORT-')).length, 151)
       })
       await t.test('HR uses shared sign-in and persists protected operations', async () => {
         assert.equal((await api('GET', '/auth/me', 'hr')).user.role, 'HR')
@@ -273,6 +447,48 @@ test(
         }
       })
       let reservation
+      await t.test('Engineering leave reaches HR and only Admin can export Engineering archives', async () => {
+        const { randomUUID } = require('node:crypto')
+        const { employee } = await api('POST', '/hr/employees', 'hr', {
+          name: 'Engineering Technician', pos: 'Technician', dept: 'maintenance', status: 'Regular',
+        }, 201)
+        await api('PATCH', '/hr/account-links/' + employee.id, 'admin', { staffUserId: accounts.technician })
+        const { today } = await api('GET', '/hr/department-staffing', 'engineer')
+        const { record } = await api('POST', '/engineering/leaves', 'technician', {
+          operationId: randomUUID(), leaveType: 'Vacation Leave (VL)',
+          startDate: today, endDate: today, reason: 'Scheduled leave',
+        }, 201)
+        await api('PATCH', '/hr/leaves/' + record.hrLeaveId, 'hr', { status: 'Approved' })
+        const { records } = await api('GET', '/engineering/leaves?status=Approved', 'technician')
+        assert.equal(records.find(row => row.id === record.id)?.status, 'Approved')
+
+        await api('GET', '/engineering/reports/archive', 'engineer', undefined, 403)
+        for (const format of ['csv', 'xlsx']) {
+          const { record: archive } = await api('POST', '/engineering/reports/generate', 'admin', {
+            periodType: 'daily', anchorDate: today, format,
+          }, 201)
+          const response = await fetch(base + '/engineering/reports/archive/' + archive.id + '/download', {
+            headers: { Authorization: 'Bearer ' + sessions.admin.token },
+          })
+          assert.equal(response.status, 200)
+          const content = Buffer.from(await response.arrayBuffer())
+          if (format === 'csv') {
+            assert.match(content.toString(), /Scheduled leave|Vacation Leave/)
+            assert.match(content.toString(), /Exported by Admin/)
+          }
+          else assert.equal(content.subarray(0, 2).toString(), 'PK')
+        }
+        const dailyCsv = { periodType: 'daily', anchorDate: today, format: 'csv' }
+        const previous = await api('POST', '/engineering/reports/generate', 'admin', dailyCsv)
+        assert.equal(previous.reused, true)
+        await pool.query('UPDATE engineering.engineering_leave_records SET reason=$1 WHERE id=$2', ['Revised request', record.id])
+        const revised = await api('POST', '/engineering/reports/generate', 'admin', dailyCsv, 201)
+        assert.notEqual(revised.record.id, previous.record.id)
+        const catalog = await api('GET', '/admin/reports', 'admin')
+        const engineering = catalog.find(department => department.id === 'engineering')
+        assert.ok(engineering.reports.some(item => item.id === 'eng-leave'))
+        assert.ok(engineering.reports.some(item => item.id === 'eng-report-archives'))
+      })
       await t.test('Admin and Front Office can enter their Housekeeping workspaces', async () => {
         const supervisor = await api('POST', '/auth/login', null, {
           username: `${prefix}.admin`, password, role: 'HOUSEKEEPING',
@@ -668,8 +884,11 @@ test(
           guestId: guest.id, roomId: salesRoom.id, roomType: 'Suite', checkIn: period.start, checkOut: period.finish,
         },201)
         assert.equal(free(await api('GET', availability, 'sales')), beforeBooking - 1)
+        const corporate = await api('POST', path + '/records/clients', 'sales', {
+          name: prefix + ' corporate', contact: 'Group coordinator',
+        }, 201)
         const inquiry = await api('POST', path + '/records/inquiries', 'sales', {
-          name: prefix, subject: 'Group stay', source: 'Referral', date: today, status: 'New',
+          name: prefix, subject: 'Group stay', source: 'Referral', date: today, status: 'New', clientId: corporate.id,
         }, 201)
         const act = (record, action, who, values = {}, status = 200) =>
           api('POST', path + '/records/' + record.id + '/action', who, {
@@ -686,6 +905,25 @@ test(
           availabilityConfirmed: true, reservationRef: stay.confirmationCode, preparation: 'Set up two extra towels',
         })
         assert.equal(sale.reservationRef, stay.confirmationCode)
+        const finance = '/finance/latest/integrations/sales/'
+        const deal = (await api('GET', finance + 'records', 'finance')).find(row => row.dealCode === 'SM-' + sale.id)
+        assert.ok(deal.milestoneEligible)
+        const milestone = await api('POST', finance + 'sync-invoice', 'finance', { dealId: deal.id, milestoneStage: 'DEPOSIT_20' }, 201)
+        assert.equal(Number(milestone.invoice.totalAmount), 336)
+        await api('POST', finance + 'sync-invoice', 'finance', { dealId: deal.id, milestoneStage: 'DEPOSIT_20' }, 409)
+        await api('POST', finance + 'sync-invoice', 'finance', { dealId: deal.id, milestoneStage: 'FULL_PAYMENT' }, 409)
+        await api('POST', '/front-office/invoices', 'fo', {
+          guestId: guest.id, reservationId: stay.id, amount: '1500.00', chargeType: 'LODGING',
+        }, 409)
+        const folio = await api('GET', '/front-office/reservations/' + stay.id + '/folio', 'fo')
+        assert.ok(folio.invoices.some(invoice => invoice.invoiceNumber === milestone.invoice.invoiceCode))
+        assert.equal(folio.hasLodging, false)
+        await api('POST', '/finance/latest/payments', 'finance', {
+          invoiceCode: milestone.invoice.invoiceCode, amount: '100.00', paymentMethod: 'CASH', reference: prefix + '-milestone',
+        }, 201)
+        const salesBilling = (await api('GET', path + '/workspace', 'sales')).records.find(row => row.id === sale.id).stay.billing
+        assert.deepEqual(salesBilling, { billed: 336, paid: 100, balance: 236 })
+
         const roomPath = '/housekeeping/rooms/' + salesRoom.id
         const preparationPath = roomPath + '/sales-preparation/' + stay.id + '/complete'
         assert.equal((await api('GET', roomPath, 'sup')).salesPreparations[0].preparation, sale.preparation)
@@ -1266,9 +1504,19 @@ test(
           await pool.query(
             `INSERT INTO hr_leave_requests
                (id,emp,type,start_date,end_date,days,status,reason)
-             VALUES ($1,$2,'Annual',$3,$3,1,'Approved','Synthetic leave')`,
+             VALUES ($1,$2,'Annual',$3,$3,1,'Pending','Synthetic leave')`,
             [leave, employee, dates.tomorrow],
           )
+          const overnight = {
+            staffId: accounts.other, shiftDate: dates.today, shift: 'NIGHT',
+            startTime: '22:00', endTime: '06:00', assignedArea: 'Floor 2',
+          }
+          const { schedule } = await api('POST', '/housekeeping/schedules', 'sup', overnight, 201)
+          const blocked = await api('PATCH', '/hr/leaves/' + leave, 'hr', { status: 'Approved' }, 409)
+          assert.equal(blocked.error.code, 'LEAVE_CONFLICTS_WITH_SHIFT')
+          await pool.query('DELETE FROM hk_schedules WHERE schedule_id=$1', [schedule.schedule_id])
+          await api('PATCH', '/hr/leaves/' + leave, 'hr', { status: 'Approved' })
+          await api('POST', '/housekeeping/schedules', 'sup', overnight, 409)
           const availability = await api(
             'GET', `/housekeeping/integrations/hr/availability?date=${dates.tomorrow}`, 'sup',
           )

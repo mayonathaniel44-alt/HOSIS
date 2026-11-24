@@ -10,12 +10,20 @@ const { appError } = require('../../../backend/src/lib/errors.js');
 const router = express.Router();
 const run = (fn) => fn;
 const head = authorize('head');
-router.use(authenticate, authorize('ENGINEERING', 'TECHNICIAN', 'ADMIN'), (req, res, next) => {
+const engineeringAccess = authorize('ENGINEERING', 'TECHNICIAN', 'ADMIN');
+const leaveReviewAccess = authorize('HR');
+router.use(authenticate, (req, res, next) => {
+    const hrLeaveAccess = req.user.role === 'HR' && (
+        (req.method === 'GET' && /^\/leaves\/?$/.test(req.path)) ||
+        (req.method === 'PATCH' && /^\/leaves\/[1-9][0-9]*\/status\/?$/.test(req.path))
+    );
+    return (hrLeaveAccess ? leaveReviewAccess : engineeringAccess)(req, res, next);
+}, (req, res, next) => {
     req.user = {
         id: req.user.id,
         full_name: req.user.name,
         email: req.user.username,
-        role: req.user.role === 'TECHNICIAN' ? 'technician' : 'head',
+        role: ({ TECHNICIAN: 'technician', HR: 'hr' })[req.user.role] || 'head',
         isAdministrator: req.user.role === 'ADMIN',
         active: true
     };
@@ -73,11 +81,23 @@ router.get('/staff-consumption', head, async (req, res) => {
         netAmount: record.status === 'Reversed' ? 0 : Number(record.amount),
     })));
 });
-router.get('/integration/outbox', head, (req, res) => res.json({ enabled: false, sharedRegister: true, records: [] }));
+router.get('/integration/outbox', head, async (_req, res) => {
+    const { rows: records } = await pool.query(`
+        SELECT e.record_id AS id, e.payload->>'description' AS description, f.voucher_code AS voucher,
+            COALESCE(f.status,'AWAITING_FINANCE') AS status, f.settled_at AS "settledAt"
+        FROM engineering.engineering_records e
+        LEFT JOIN finance_expenses f ON f.engineering_record_id=e.record_id
+        WHERE e.collection='finance' AND (lower(e.payload->>'status')='unpaid' OR f.id IS NOT NULL)
+        ORDER BY e.record_id DESC LIMIT 200`
+    );
+    res.json({ sharedRegister: true, records });
+});
 router.get('/backup', head, async (req, res) => {
     const data = await readData(pool);
     res.json({ format: 'hosis-engineering-records', exportedAt: new Date().toISOString(), records: data });
 });
+router.use('/leaves', require('./leave.js'));
+router.use('/reports', require('./reports.js'));
 
 async function readData(client) {
     const records = await client.query(
@@ -103,6 +123,13 @@ async function writeAudit(client, user, change) {
     );
 }
 async function saveRecord(client, collection, record) {
+    if (collection === 'finance') {
+        await client.query('SELECT pg_advisory_xact_lock(41800, 35)');
+        const { rowCount } = await client.query(
+            'SELECT 1 FROM finance_expenses WHERE engineering_record_id=$1', [record.id]
+        );
+        if (rowCount) throw appError(409, 'FINANCE_VOUCHER_LINKED', 'Finance now manages settlement of this expense.');
+    }
     await client.query(
         'INSERT INTO engineering.engineering_records (collection, record_id, payload) VALUES ($1,$2,$3) ON CONFLICT (collection, record_id) DO UPDATE SET payload = EXCLUDED.payload',
         [collection, record.id, JSON.stringify(record)]
@@ -136,6 +163,12 @@ router.get(
                 own.usage = data.usage.filter(
                     (r) => String(r.technicianId) === String(req.user.id)
                 );
+                const { rows: settlements } = await client.query(
+                    'SELECT engineering_record_id, status FROM finance_expenses WHERE engineering_record_id = ANY($1::text[])',
+                    [data.expenses.filter((r) => String(r.technicianId) === String(req.user.id))
+                        .map((r) => r.financeId).filter(Boolean)]
+                );
+                const financeStatus = new Map(settlements.map((r) => [r.engineering_record_id, r.status]));
                 own.expenses = data.expenses
                     .filter(
                         (r) => String(r.technicianId) === String(req.user.id)
@@ -143,6 +176,7 @@ router.get(
                     .map((r) => ({
                         ...r,
                         paymentStatus:
+                            financeStatus.get(r.financeId) ||
                             data.finance.find((f) => f.id === r.financeId)
                                 ?.status || 'Not in Finance'
                     }));
@@ -388,7 +422,7 @@ router.get(
             ? req.query.before
             : '9223372036854775807';
         const result = await pool.query(
-            'SELECT id, actor_name, action, collection, record_id, before_data, after_data, created_at FROM engineering.engineering_audit WHERE id < $1 ORDER BY id DESC LIMIT 100',
+            'SELECT id, actor_id, actor_name, action, collection, record_id, before_data, after_data, created_at FROM engineering.engineering_audit WHERE id < $1 ORDER BY id DESC LIMIT 100',
             [before]
         );
         res.json({

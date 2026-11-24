@@ -1,0 +1,85 @@
+.repair-queue {
+  min-height: 100vh;
+  padding: clamp(16px, 4vw, 48px);
+  background: #f3f1e9;
+  color: #20194d;
+}
+
+.repair-queue-header,
+.repair-queue-actions,
+.repair-queue-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.repair-queue-header {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.repair-queue-header h1 { margin: 12px 0 4px; }
+.repair-queue p { margin: 0 0 12px; overflow-wrap: anywhere; }
+.repair-queue a { color: #3022a8; }
+
+.repair-queue-stages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.repair-queue-stage {
+  min-width: 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: #eae7f4;
+}
+
+.repair-queue-stage h2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
+
+.repair-queue-card {
+  padding: 16px;
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 2px 8px #20194d14;
+}
+
+.repair-queue-card + .repair-queue-card { margin-top: 12px; }
+.repair-queue-card h3 { margin: 0 0 8px; }
+.repair-queue-tags { gap: 6px; margin-bottom: 12px; }
+
+.repair-queue-tags span,
+.repair-queue-stage h2 span {
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #fff1c4;
+  color: #554005;
+  font-size: .8rem;
+}
+
+.repair-queue button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #777293;
+  border-radius: 8px;
+  background: white;
+  color: #20194d;
+}
+
+.repair-queue button.repair-queue-primary {
+  background: #3022a8;
+  border-color: #3022a8;
+  color: white;
+}
+
+.repair-queue button:disabled { opacity: .65; }
+.repair-queue :is(a, button):focus-visible { outline: 3px solid #875f00; outline-offset: 3px; }
+.repair-queue-error { padding: 12px; border-radius: 8px; background: #fae8ec; color: #801528; }

@@ -2669,3 +2669,37 @@ tbody tr:last-child td {
   z-index: 8;
   box-shadow: 0 4px 16px rgba(19, 14, 65, .22);
 }
+
+.front-office-logout {
+  width: min(420px, calc(100% - 32px));
+  padding: 28px;
+  border-radius: 16px;
+  color: #211c42;
+}
+
+.front-office-logout::backdrop {
+  background: rgba(21, 18, 59, 0.52);
+  backdrop-filter: blur(4px);
+}
+
+.front-office-logout-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: #f8efdb;
+  color: #76531e;
+}
+
+.front-office-logout h2 {
+  margin: 16px 0 24px;
+  font: 600 24px/1.3 'Playfair Display', Georgia, serif;
+}
+
+.front-office-logout .modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}

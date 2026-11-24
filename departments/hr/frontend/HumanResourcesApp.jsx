@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import HrHandoffs from './HrHandoffs.jsx';
+import HrManagement from './HrManagement.jsx';
 import HR from './data.js';
 import './tabs.js';
 import './finance.js';
@@ -101,7 +103,10 @@ export default function HumanResourcesApp({ user, onSignOut }) {
       HR.currentView = '';
       HR.apiError = '';
       HR.E = [];
+      HR.VACANCIES = [];
+      HR.CANDIDATES = [];
       HR.LEAVES = [];
+      HR.PAYROLL_STATUS = [];
       HR.ASSIGN_LOG = [];
       HR.MAINT_REQ = [];
     };
@@ -205,7 +210,14 @@ export default function HumanResourcesApp({ user, onSignOut }) {
             </div>
           </div>
         </header>
-        <main className="content" id="view" aria-busy={!ready} dangerouslySetInnerHTML={{ __html: ready && HR.currentView ? sanitizeHrHtml(HR.currentView) : '' }} />
+        <main className="content" id="view" aria-busy={!ready}>
+          {ready && !['recruitment', 'activity', 'handoffs'].includes(HR.state?.page) && HR.currentView &&
+            <div dangerouslySetInnerHTML={{ __html: sanitizeHrHtml(HR.currentView) }} />}
+          {ready && HR.state?.page === 'handoffs' && <HrHandoffs administrator={user.role === 'ADMIN'} />}
+          {ready && ['recruitment', 'records', 'attendance', 'leave', 'reports', 'activity'].includes(HR.state?.page) &&
+            <HrManagement key={HR.state.page} page={HR.state.page} query={query}
+              refresh={async () => { await hydrateHr(); if (!HR.signal?.aborted) HR.render(); }} />}
+        </main>
       </div>
 
       <div className="modal-bg" id="modalBg"><div className="modal" id="modal" /></div>

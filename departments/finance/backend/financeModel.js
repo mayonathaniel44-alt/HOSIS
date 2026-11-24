@@ -185,13 +185,13 @@ async function createInvoice(data, userId, userName = 'Finance Staff') {
     const vat = Number(data.vat ?? Math.round(subtotal * 0.12 * 100) / 100)
     const totalAmount = subtotal - discount + vat
     const status = data.issueNow ? 'ISSUED' : 'DRAFT'
-    const issueDate = data.issueNow ? new Date().toISOString().slice(0, 10) : data.issueDate || null
+    const issueDate = data.issueDate || (data.issueNow ? new Date().toISOString().slice(0, 10) : null)
     const dueDate = data.dueDate || new Date(Date.now() + 86400000 * 2).toISOString().slice(0, 10)
 
     const { rows } = await client.query(
       `INSERT INTO finance_invoices
-        (invoice_code, guest_name, guest_email, reservation_code, room_number, subtotal, discount, vat, total_amount, paid_amount, balance_due, status, issue_date, due_date, notes, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0.00, $9, $10, $11, $12, $13, $14)
+        (invoice_code, guest_name, guest_email, reservation_code, room_number, subtotal, discount, vat, total_amount, paid_amount, balance_due, status, issue_date, due_date, notes, created_by, invoice_type, department)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0.00, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING id, invoice_code AS "invoiceCode", guest_name AS "guestName", total_amount AS "totalAmount", status`,
       [
         invoiceCode,
@@ -208,6 +208,8 @@ async function createInvoice(data, userId, userName = 'Finance Staff') {
         dueDate,
         data.notes || null,
         userId || null,
+        data.invoiceType,
+        data.department,
       ],
     )
 
@@ -417,16 +419,17 @@ async function listExpenses(status = '') {
   return rows
 }
 
-async function createExpense(data, userId, userName = 'Elena Ramos') {
-  const voucherCode = code('FIN-EXP')
-
-  const { rows } = await pool.query(
-    `INSERT INTO finance_expenses (voucher_code, department, category, amount, status, approved_by, notes, expense_date, created_by)
-     VALUES ($1, $2, $3, $4, 'PENDING', $5, $6, $7, $8)
-     RETURNING id, voucher_code AS "voucherCode", department, category, amount, status, expense_date AS "expenseDate"`,
-    [voucherCode, data.department, data.category, Number(data.amount), userName, data.notes || null, data.expenseDate || new Date().toISOString().slice(0, 10), userId || null],
-  )
-  return rows[0]
+async function createExpense(data, userId, userName) {
+  return transaction(async (client) => {
+    const voucherCode = code('FIN-EXP')
+    const { rows: [created] } = await client.query(`
+      INSERT INTO finance_expenses (voucher_code, department, category, amount, status, notes, expense_date, created_by)
+      VALUES ($1,$2,$3,$4,'PENDING',$5,COALESCE($6::date,CURRENT_DATE),$7)
+      RETURNING id, voucher_code AS "voucherCode", department, category, amount, status, expense_date AS "expenseDate"
+    `, [voucherCode, data.department, data.category, data.amount, data.notes, data.expenseDate, userId])
+    await recordAudit(client, code('FIN-TXN'), 'Expense submitted', voucherCode, data.amount, 'Pending approval', 'Finance', userName)
+    return created
+  })
 }
 
 async function approveExpense(id, approverName = 'D. Villanueva') {
