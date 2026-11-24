@@ -113,9 +113,10 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
 
   return (
     <div className="finance-root-fullscreen">
-      {/* Top Navbar - Financial Tasks Only, Completely Isolated */}
-      <header className="finance-top-navbar" role="banner">
-        <div className="finance-navbar-brand">
+      {/* Sidebar Navigation - Financial Operations */}
+      <aside className="finance-sidebar" role="navigation" aria-label="Financial Subsystem Navigation">
+        {/* Brand Section */}
+        <div className="finance-sidebar-brand">
           <HotelCrest />
           <div className="finance-brand-text">
             <h1 className="finance-brand-name">Grand Horizon Hotel</h1>
@@ -123,65 +124,72 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
           </div>
         </div>
 
-        {/* Central Financial Task Navigation */}
-        <nav className="finance-tasks-nav" aria-label="Financial Task Navigation">
-          {financialTasks.map((task) => (
-            <button
-              key={task.id}
-              type="button"
-              className={`finance-task-tab ${activeTab === task.id ? 'active' : ''}`}
-              onClick={() => setActiveTab(task.id)}
-            >
-              <span className="task-tab-icon">{task.icon}</span>
-              <span className="task-tab-label">{task.label}</span>
-            </button>
-          ))}
-        </nav>
+        {/* Navigation Items */}
+        <div className="finance-sidebar-nav-container">
+          <div className="finance-sidebar-section-label">FINANCE OPERATIONS</div>
+          <nav className="finance-sidebar-nav" aria-label="Financial Task Navigation">
+            {financialTasks.map((task) => (
+              <button
+                key={task.id}
+                type="button"
+                className={`finance-sidebar-nav-item ${activeTab === task.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(task.id)}
+              >
+                <span className="finance-nav-icon">{task.icon}</span>
+                <span className="finance-nav-label">{task.label}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
 
-        {/* User Identity, Role & Sign out */}
-        <div className="finance-navbar-meta">
-          <span className="finance-role-pill">ROLE: {roleDisplay}</span>
-          <div className="finance-user-chip" title={`Signed in as ${userDisplayName} (${roleDisplay})`}>
+        {/* Sidebar Footer: User Info, Role Badge & Switcher Actions */}
+        <div className="finance-sidebar-footer">
+          <div className="finance-sidebar-role-badge">
+            <span className="finance-role-pill">ROLE: {roleDisplay}</span>
+          </div>
+
+          <div className="finance-sidebar-user-chip" title={`Signed in as ${userDisplayName} (${roleDisplay})`}>
             <span className="finance-user-avatar">{userInitials}</span>
             <div className="finance-user-info">
               <strong>{userDisplayName}</strong>
               <small>{userHandle}</small>
             </div>
           </div>
-          {onOpenFrontOffice && (user?.role === 'ADMIN' || user?.role === 'FRONT_OFFICE') && (
-            <button
-              type="button"
-              className="finance-signout-btn"
-              onClick={onOpenFrontOffice}
-              title="Open Front Office Workspace"
-              style={{ background: 'rgba(56, 189, 248, 0.15)', borderColor: '#38bdf8', color: '#38bdf8' }}
-            >
-              Front Office
-            </button>
-          )}
-          {onOpenAdmin && (['ADMIN', 'SUPER_ADMIN', 'FINANCE_ADMIN'].includes(user?.role?.toUpperCase())) && (
-            <button
-              type="button"
-              className="finance-signout-btn"
-              onClick={onOpenAdmin}
-              title="Open Admin Console"
-              style={{ background: 'rgba(212, 175, 55, 0.15)', borderColor: '#d4af37', color: '#d4af37' }}
-            >
-              Admin Console
-            </button>
-          )}
-          {onSignOut && (
-            <button
-              type="button"
-              className="finance-signout-btn"
-              onClick={onSignOut}
-              title="Sign out of Finance system"
-            >
-              Sign out
-            </button>
-          )}
+
+          <div className="finance-sidebar-actions">
+            {onOpenFrontOffice && (user?.role === 'ADMIN' || user?.role === 'FRONT_OFFICE') && (
+              <button
+                type="button"
+                className="finance-switch-btn finance-switch-fo"
+                onClick={onOpenFrontOffice}
+                title="Open Front Office Workspace"
+              >
+                ← Front Office
+              </button>
+            )}
+            {onOpenAdmin && (['ADMIN', 'SUPER_ADMIN', 'FINANCE_ADMIN'].includes(user?.role?.toUpperCase())) && (
+              <button
+                type="button"
+                className="finance-switch-btn finance-switch-admin"
+                onClick={onOpenAdmin}
+                title="Open Admin Console"
+              >
+                ⚙ Admin Console
+              </button>
+            )}
+            {onSignOut && (
+              <button
+                type="button"
+                className="finance-sidebar-signout-btn"
+                onClick={onSignOut}
+                title="Sign out of Finance system"
+              >
+                Sign out
+              </button>
+            )}
+          </div>
         </div>
-      </header>
+      </aside>
 
       {/* Fullscreen Main Work Surface */}
       <main className="finance-fullscreen-main">
