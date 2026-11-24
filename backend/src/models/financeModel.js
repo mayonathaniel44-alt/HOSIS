@@ -646,8 +646,7 @@ async function listPayroll(department = '', status = '', search = '') {
 }
 
 async function createPayroll(data, userId, userName = 'Finance Officer') {
-  const nextRes = await pool.query(`SELECT COUNT(*) + 1 AS num FROM finance_payroll`)
-  const payrollCode = data.payrollCode || `PR-2610${String(nextRes.rows[0].num).padStart(2, '0')}`
+  const payrollCode = data.payrollCode || (await nextCode(pool, 'seq_finance_payroll_num', 'PR-26', 4))
 
   const regularHours = Number(data.regularHours || 80)
   const overtimeHours = Number(data.overtimeHours || 0)
@@ -677,7 +676,7 @@ async function createPayroll(data, userId, userName = 'Finance Officer') {
      RETURNING id, payroll_code AS "payrollCode", employee_name AS "employeeName", gross_pay AS "grossPay", net_payable AS "netPayable", status`,
     [
       payrollCode,
-      data.employeeId || `EMP-${String(nextRes.rows[0].num).padStart(3, '0')}`,
+      data.employeeId || `EMP-${Date.now().toString().slice(-4)}`,
       data.employeeName,
       data.department,
       data.roleTitle || 'Hotel Staff',
@@ -768,10 +767,12 @@ async function revenueReconciliation(period = 'all', dateStr = null) {
   const bounds = period !== 'all' ? getPeriodBounds(period, dateStr) : null
 
   let invWhere = `WHERE status != 'DRAFT'`
+  let itemJoin = ''
   let params = []
   if (bounds) {
     params.push(bounds.startDate, bounds.endDate)
     invWhere += ` AND (issue_date >= $1 AND issue_date <= $2 OR created_at::date >= $1 AND created_at::date <= $2)`
+    itemJoin = `JOIN finance_invoices inv ON inv.id = finance_invoice_items.invoice_id AND (inv.issue_date >= $1 AND inv.issue_date <= $2 OR inv.created_at::date >= $1 AND inv.created_at::date <= $2)`
   }
 
   const [aggregatesRes, invoicesRes, breakdownRes] = await Promise.all([
@@ -813,7 +814,8 @@ async function revenueReconciliation(period = 'all', dateStr = null) {
         COALESCE(SUM(amount) FILTER (WHERE source = 'SALES_MARKETING' OR category = 'EVENT_BANQUET' OR description ILIKE '%Ballroom%' OR description ILIKE '%Conference%'), 0) AS sales_marketing,
         COALESCE(SUM(amount) FILTER (WHERE NOT (description ILIKE '%Suite%' OR description ILIKE '%Room%' OR description ILIKE '%Dining%' OR description ILIKE '%Food%' OR description ILIKE '%Buffet%' OR description ILIKE '%Damage%' OR source = 'HOUSEKEEPING' OR source = 'SALES_MARKETING')), 0) AS services
       FROM finance_invoice_items
-    `),
+      ${itemJoin}
+    `, params),
   ])
 
   const agg = aggregatesRes.rows[0]
