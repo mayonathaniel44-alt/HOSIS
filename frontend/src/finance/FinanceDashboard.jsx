@@ -102,7 +102,11 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
     }, 3500)
   }
 
-  const financialTasks = [
+  const isChecker = ['DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(
+    user?.role?.toUpperCase()
+  )
+
+  const allFinancialTasks = [
     { id: 'overview', label: 'Dashboard', icon: '📊' },
     { id: 'invoices', label: 'Invoices', icon: '📑' },
     { id: 'payments', label: 'Payments', icon: '💳' },
@@ -111,9 +115,16 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
     { id: 'leave', label: 'Leave Requests', icon: '📅' },
     { id: 'reports', label: 'Financial Reports', icon: '📈' },
     { id: 'revenue', label: 'Revenue', icon: '🏨' },
-    { id: 'integrations', label: 'Integrations', icon: '🔗' },
-    { id: 'history', label: 'Audit Trail', icon: '📜' },
+    { id: 'integrations', label: 'Integrations', icon: '🔗', checkerOnly: true },
+    { id: 'history', label: 'Audit Trail', icon: '📜', checkerOnly: true },
   ]
+
+  const financialTasks = allFinancialTasks.filter((t) => !t.checkerOnly || isChecker)
+
+  // Segregation of Duties: If Officer attempts to navigate to checker-only tabs, redirect to overview
+  if (!isChecker && (activeTab === 'integrations' || activeTab === 'history')) {
+    setActiveTab('overview')
+  }
 
   return (
     <div className={`finance-root-fullscreen ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`}>

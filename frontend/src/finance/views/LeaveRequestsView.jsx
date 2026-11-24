@@ -100,6 +100,9 @@ const DEPARTMENTS = [
 ]
 
 export default function LeaveRequestsView({ user, showToast }) {
+  const isChecker = ['DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(
+    user?.role?.toUpperCase()
+  )
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState(null)
@@ -656,14 +659,14 @@ export default function LeaveRequestsView({ user, showToast }) {
                               setReviewAction('APPROVED')
                               setShowReviewModal(true)
                             }}
-                            title="Review, Approve, or Reject Request"
+                            title={isChecker && req.status === 'PENDING' ? 'Review, Approve, or Reject Request' : 'View Leave Details'}
                             style={{
-                              background: req.status === 'PENDING' ? '#0d1238' : '#f8fafc',
-                              color: req.status === 'PENDING' ? '#d4af37' : '#334155',
+                              background: isChecker && req.status === 'PENDING' ? '#0d1238' : '#f8fafc',
+                              color: isChecker && req.status === 'PENDING' ? '#d4af37' : '#334155',
                               border: '1px solid #cbd5e1',
                             }}
                           >
-                            {req.status === 'PENDING' ? 'Review / Decision' : 'View Details'}
+                            {isChecker && req.status === 'PENDING' ? 'Review / Decision' : 'View Details'}
                           </button>
                         </div>
                       </td>
@@ -677,9 +680,9 @@ export default function LeaveRequestsView({ user, showToast }) {
 
       {/* SUBMIT LEAVE REQUEST MODAL */}
       {showSubmitModal && (
-        <div className="fin-modal-backdrop" onClick={() => !submitting && setShowSubmitModal(false)}>
+        <div className="fin-modal-overlay" onClick={() => !submitting && setShowSubmitModal(false)}>
           <div
-            className="fin-modal"
+            className="fin-modal-window"
             style={{ maxWidth: '640px' }}
             onClick={(e) => e.stopPropagation()}
             role="dialog"
@@ -692,7 +695,7 @@ export default function LeaveRequestsView({ user, showToast }) {
               </div>
               <button
                 type="button"
-                className="fin-modal-close"
+                className="fin-modal-close-btn"
                 onClick={() => setShowSubmitModal(false)}
                 disabled={submitting}
               >
@@ -876,9 +879,9 @@ export default function LeaveRequestsView({ user, showToast }) {
 
       {/* REVIEW / DECISION MODAL */}
       {showReviewModal && selectedRequest && (
-        <div className="fin-modal-backdrop" onClick={() => !reviewSubmitting && setShowReviewModal(false)}>
+        <div className="fin-modal-overlay" onClick={() => !reviewSubmitting && setShowReviewModal(false)}>
           <div
-            className="fin-modal"
+            className="fin-modal-window"
             style={{ maxWidth: '580px' }}
             onClick={(e) => e.stopPropagation()}
             role="dialog"
@@ -886,14 +889,16 @@ export default function LeaveRequestsView({ user, showToast }) {
           >
             <div className="fin-modal-header">
               <div>
-                <h3 className="fin-modal-title">Review Leave: {selectedRequest.requestCode}</h3>
+                <h3 className="fin-modal-title">
+                  {isChecker ? `Review Leave: ${selectedRequest.requestCode}` : `Leave Details: ${selectedRequest.requestCode}`}
+                </h3>
                 <p className="fin-modal-subtitle">
                   {selectedRequest.employeeName} — {selectedRequest.department}
                 </p>
               </div>
               <button
                 type="button"
-                className="fin-modal-close"
+                className="fin-modal-close-btn"
                 onClick={() => setShowReviewModal(false)}
                 disabled={reviewSubmitting}
               >
@@ -901,7 +906,7 @@ export default function LeaveRequestsView({ user, showToast }) {
               </button>
             </div>
 
-            <form onSubmit={handleReviewSubmit}>
+            <form onSubmit={isChecker ? handleReviewSubmit : (e) => { e.preventDefault(); setShowReviewModal(false) }}>
               <div className="fin-modal-body">
                 <div
                   style={{
@@ -952,7 +957,7 @@ export default function LeaveRequestsView({ user, showToast }) {
                   <div style={{ marginTop: '10px', fontSize: '13px' }}>
                     <span style={{ color: '#64748b' }}>Reason Stated:</span>
                     <div style={{ fontStyle: 'italic', marginTop: '2px', color: '#1e293b' }}>
-                      "{selectedRequest.reason}"
+                      &ldquo;{selectedRequest.reason}&rdquo;
                     </div>
                   </div>
 
@@ -961,70 +966,84 @@ export default function LeaveRequestsView({ user, showToast }) {
                       Contact during leave: <strong>{selectedRequest.contactInfo}</strong>
                     </div>
                   )}
+
+                  {selectedRequest.rejectionReason && (
+                    <div style={{ marginTop: '8px', padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '12px', color: '#991b1b' }}>
+                      <strong>Rejection Note:</strong> {selectedRequest.rejectionReason}
+                    </div>
+                  )}
                 </div>
 
-                <div className="fin-form-group">
-                  <label className="fin-label">Manager / Finance Decision *</label>
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <label
-                      style={{
-                        flex: 1,
-                        padding: '10px 14px',
-                        border: `2px solid ${reviewAction === 'APPROVED' ? '#22c55e' : '#e2e8f0'}`,
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        background: reviewAction === 'APPROVED' ? 'rgba(34, 197, 94, 0.08)' : '#ffffff',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="decision"
-                        value="APPROVED"
-                        checked={reviewAction === 'APPROVED'}
-                        onChange={(e) => setReviewAction(e.target.value)}
-                      />
-                      <strong style={{ color: '#16a34a' }}>✓ Approve Leave</strong>
-                    </label>
+                {isChecker ? (
+                  <>
+                    <div className="fin-form-group">
+                      <label className="fin-label">Manager / Finance Decision *</label>
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <label
+                          style={{
+                            flex: 1,
+                            padding: '10px 14px',
+                            border: `2px solid ${reviewAction === 'APPROVED' ? '#22c55e' : '#e2e8f0'}`,
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: reviewAction === 'APPROVED' ? 'rgba(34, 197, 94, 0.08)' : '#ffffff',
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="decision"
+                            value="APPROVED"
+                            checked={reviewAction === 'APPROVED'}
+                            onChange={(e) => setReviewAction(e.target.value)}
+                          />
+                          <strong style={{ color: '#16a34a' }}>✓ Approve Leave</strong>
+                        </label>
 
-                    <label
-                      style={{
-                        flex: 1,
-                        padding: '10px 14px',
-                        border: `2px solid ${reviewAction === 'REJECTED' ? '#ef4444' : '#e2e8f0'}`,
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        background: reviewAction === 'REJECTED' ? 'rgba(239, 68, 68, 0.08)' : '#ffffff',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="decision"
-                        value="REJECTED"
-                        checked={reviewAction === 'REJECTED'}
-                        onChange={(e) => setReviewAction(e.target.value)}
-                      />
-                      <strong style={{ color: '#dc2626' }}>✕ Reject Leave</strong>
-                    </label>
-                  </div>
-                </div>
+                        <label
+                          style={{
+                            flex: 1,
+                            padding: '10px 14px',
+                            border: `2px solid ${reviewAction === 'REJECTED' ? '#ef4444' : '#e2e8f0'}`,
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: reviewAction === 'REJECTED' ? 'rgba(239, 68, 68, 0.08)' : '#ffffff',
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="decision"
+                            value="REJECTED"
+                            checked={reviewAction === 'REJECTED'}
+                            onChange={(e) => setReviewAction(e.target.value)}
+                          />
+                          <strong style={{ color: '#dc2626' }}>✕ Reject Leave</strong>
+                        </label>
+                      </div>
+                    </div>
 
-                {reviewAction === 'REJECTED' && (
-                  <div className="fin-form-group">
-                    <label className="fin-label">Reason for Rejection *</label>
-                    <textarea
-                      className="fin-input"
-                      rows="2"
-                      placeholder="Specify staffing shortage, blackout dates, or policy restriction..."
-                      value={reviewNote}
-                      onChange={(e) => setReviewNote(e.target.value)}
-                      required
-                    />
+                    {reviewAction === 'REJECTED' && (
+                      <div className="fin-form-group">
+                        <label className="fin-label">Reason for Rejection *</label>
+                        <textarea
+                          className="fin-input"
+                          rows="2"
+                          placeholder="Specify staffing shortage, blackout dates, or policy restriction..."
+                          value={reviewNote}
+                          onChange={(e) => setReviewNote(e.target.value)}
+                          required
+                        />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ padding: '10px 14px', background: 'rgba(212, 175, 55, 0.08)', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.25)', fontSize: '12px', color: '#854d0e' }}>
+                    ℹ️ <strong>Segregation of Duties (Maker-Checker):</strong> Finance Officers can submit and monitor their own leave filings. Approvals and rejections are authorized by the Department Head.
                   </div>
                 )}
               </div>
@@ -1038,13 +1057,15 @@ export default function LeaveRequestsView({ user, showToast }) {
                 >
                   Close
                 </button>
-                <button
-                  type="submit"
-                  className={`fin-btn ${reviewAction === 'APPROVED' ? 'fin-btn-primary' : 'fin-btn-danger'}`}
-                  disabled={reviewSubmitting}
-                >
-                  {reviewSubmitting ? 'Recording Decision…' : `Confirm ${reviewAction === 'APPROVED' ? 'Approval' : 'Rejection'}`}
-                </button>
+                {isChecker && (
+                  <button
+                    type="submit"
+                    className={`fin-btn ${reviewAction === 'APPROVED' ? 'fin-btn-primary' : 'fin-btn-danger'}`}
+                    disabled={reviewSubmitting}
+                  >
+                    {reviewSubmitting ? 'Recording Decision…' : `Confirm ${reviewAction === 'APPROVED' ? 'Approval' : 'Rejection'}`}
+                  </button>
+                )}
               </div>
             </form>
           </div>

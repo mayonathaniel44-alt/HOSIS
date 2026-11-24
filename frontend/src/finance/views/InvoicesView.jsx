@@ -3,6 +3,9 @@ import { financeApi } from '../../services/api'
 import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
 export default function InvoicesView({ user, showToast }) {
+  const isChecker = ['DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(
+    user?.role?.toUpperCase()
+  )
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -103,6 +106,31 @@ export default function InvoicesView({ user, showToast }) {
       console.error('Failed to load full invoice details:', err)
     } finally {
       setModalLoading(false)
+    }
+  }
+
+  async function handleIssueDraft(inv) {
+    try {
+      await financeApi.updateInvoice(inv.dbId, { status: 'ISSUED' })
+      showToast(`Invoice ${inv.id} has been officially issued.`)
+      setSelectedInvoice(null)
+      loadInvoices()
+    } catch (err) {
+      console.error('Failed to issue draft:', err)
+      showToast(err.message || 'Failed to issue invoice.')
+    }
+  }
+
+  async function handleVoidInvoice(inv) {
+    if (!window.confirm(`Are you sure you want to void invoice ${inv.id}? This will cancel the folio.`)) return
+    try {
+      await financeApi.updateInvoice(inv.dbId, { status: 'VOID' })
+      showToast(`Invoice ${inv.id} marked as VOID by Checker.`)
+      setSelectedInvoice(null)
+      loadInvoices()
+    } catch (err) {
+      console.error('Failed to void invoice:', err)
+      showToast(err.message || 'Failed to void invoice.')
     }
   }
 
@@ -554,6 +582,22 @@ export default function InvoicesView({ user, showToast }) {
               </div>
             </div>
             <div className="fin-modal-footer">
+              {!isChecker && (
+                <span style={{ fontSize: '11.5px', color: '#64748b', marginRight: 'auto' }}>
+                  ℹ️ <strong>Segregation of Duties:</strong> Voiding issued folios requires Checker / Finance Head authorization.
+                </span>
+              )}
+              {isChecker && selectedInvoice.rawStatus !== 'VOID' && selectedInvoice.rawStatus !== 'PAID' && (
+                <button
+                  type="button"
+                  className="fin-btn fin-btn-danger"
+                  style={{ marginRight: 'auto' }}
+                  onClick={() => handleVoidInvoice(selectedInvoice)}
+                  title="Checker Action: Void / Cancel this issued folio"
+                >
+                  🚫 Void / Cancel Folio
+                </button>
+              )}
               <button
                 type="button"
                 className="fin-btn fin-btn-secondary"

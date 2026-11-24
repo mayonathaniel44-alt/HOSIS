@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
 import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
-export default function RevenueView({ onOpenReport, onNavigate, showToast }) {
+export default function RevenueView({ user, onOpenReport, onNavigate, showToast }) {
+  const isChecker = ['DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(
+    user?.role?.toUpperCase()
+  )
   const [revenueData, setRevenueData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState('daily') // 'daily' | 'weekly' | 'monthly' | 'annually' | 'all'
@@ -397,17 +400,28 @@ export default function RevenueView({ onOpenReport, onNavigate, showToast }) {
             >
               🔄 Refresh Closes
             </button>
-            <button
-              type="button"
-              className="fin-btn fin-btn-primary"
-              onClick={handleRunNightAudit}
-              disabled={runningAudit}
-              title="Execute official night audit for selected date"
-            >
-              {runningAudit ? 'Auditing Books…' : '🌙 Run Day-End Night Audit'}
-            </button>
+            {isChecker ? (
+              <button
+                type="button"
+                className="fin-btn fin-btn-primary"
+                onClick={handleRunNightAudit}
+                disabled={runningAudit}
+                title="Execute official night audit for selected date"
+              >
+                {runningAudit ? 'Auditing Books…' : '🌙 Run Day-End Night Audit'}
+              </button>
+            ) : (
+              <span className="fin-badge fin-badge-gold" title="Only Department Head can seal the ledger">
+                🔒 Audit Seal: Checker Authorized
+              </span>
+            )}
           </div>
         </div>
+        {!isChecker && (
+          <div style={{ padding: '8px 20px 14px', fontSize: '12px', color: '#64748b' }}>
+            ℹ️ <strong>Segregation of Duties (Maker-Checker):</strong> Finance Officers have view-only access to daily room and event revenue logs. Executing the hospitality night audit and day-end balancing requires Department Head authorization.
+          </div>
+        )}
 
         <div className="fin-table-scroll">
           <table className="fin-table">

@@ -486,7 +486,8 @@
 }
 
 /* Modal Popup Window Styles */
-.fin-modal-overlay {
+.fin-modal-overlay,
+.fin-modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(13, 18, 56, 0.65);
@@ -499,7 +500,8 @@
   animation: finFadeIn 0.2s ease-out;
 }
 
-.fin-modal-window {
+.fin-modal-window,
+.fin-modal {
   background: #ffffff;
   border-radius: 14px;
   box-shadow: 0 20px 50px rgba(13, 18, 56, 0.28);
@@ -513,7 +515,8 @@
   animation: finSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.fin-modal-window.wide {
+.fin-modal-window.wide,
+.fin-modal.wide {
   max-width: 860px;
 }
 
@@ -534,7 +537,8 @@
   margin: 0;
 }
 
-.fin-modal-close-btn {
+.fin-modal-close-btn,
+.fin-modal-close {
   background: none;
   border: none;
   font-size: 22px;
@@ -546,7 +550,8 @@
   transition: all 0.15s ease;
 }
 
-.fin-modal-close-btn:hover {
+.fin-modal-close-btn:hover,
+.fin-modal-close:hover {
   background: #e2e8f0;
   color: #0f172a;
 }

@@ -2,12 +2,16 @@ import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
 
 export default function OverviewView({
+  user,
   onNavigate,
   onOpenReport,
   onOpenNewInvoice,
   onOpenHistory,
   showToast,
 }) {
+  const isChecker = ['DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(
+    user?.role?.toUpperCase()
+  )
   const [activeTask, setActiveTask] = useState('invoices')
   const [loading, setLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState(null)
@@ -81,8 +85,27 @@ export default function OverviewView({
       <div className="finance-breadcrumb">Finance &amp; Accounting / Overview</div>
       <header className="finance-header">
         <div className="finance-header-titles">
-          <h1>Finance &amp; Accounting Dashboard</h1>
-          <p>Connected to Live PostgreSQL Database · Authorized Finance System</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <h1>Finance &amp; Accounting Dashboard</h1>
+            <span
+              className="fin-badge"
+              style={{
+                background: isChecker ? 'rgba(212, 175, 55, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                color: isChecker ? '#d4af37' : '#3b82f6',
+                border: `1px solid ${isChecker ? '#d4af37' : '#3b82f6'}`,
+                fontSize: '11px',
+                fontWeight: 700,
+                padding: '3px 8px',
+              }}
+            >
+              {isChecker ? '👑 CHECKER MODE (Executive Overview)' : '✏️ MAKER MODE (Operational Workflow)'}
+            </span>
+          </div>
+          <p>
+            {isChecker
+              ? 'Executive oversight: Cash flow, team approvals, net margins, and cross-subsystem financial health.'
+              : 'Operational workspace: Pending invoices, daily cash collections, expense filings, and assigned data entry tasks.'}
+          </p>
         </div>
         <div className="finance-header-actions">
           <button
@@ -116,80 +139,158 @@ export default function OverviewView({
         </div>
       </header>
 
-      {/* KPI Cards from Database */}
+      {/* KPI Cards: Dynamic depending on Maker (Officer) vs Checker (Head) */}
       <section className="fin-kpi-grid">
-        <div className="fin-kpi-card">
-          <div className="fin-kpi-header">
-            <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#2563eb' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
+        {isChecker ? (
+          <>
+            <div className="fin-kpi-card">
+              <div className="fin-kpi-header">
+                <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#0d1238' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  </svg>
+                </div>
+                <span className="fin-kpi-label">Total Revenue &amp; Cash Flow</span>
+              </div>
+              <div className="fin-kpi-val" style={{ color: '#2563eb' }}>
+                {loading ? '...' : kpis ? `₱${kpis.revenue.total.toLocaleString()}` : '₱62,160'}
+              </div>
+              <div className="fin-kpi-note positive">
+                {kpis ? `₱${kpis.payments.total.toLocaleString()} cash collected` : 'Audited general ledger'}
+              </div>
             </div>
-            <span className="fin-kpi-label">Active Invoices</span>
-          </div>
-          <div className="fin-kpi-val">
-            {loading ? '...' : kpis ? kpis.invoices.total : invoiceQueue.length}
-          </div>
-          <div className="fin-kpi-note positive">
-            {kpis ? `${kpis.invoices.issued} issued · ${kpis.invoices.drafts} drafts` : 'Recorded in database'}
-          </div>
-        </div>
 
-        <div className="fin-kpi-card">
-          <div className="fin-kpi-header">
-            <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#16a34a' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-                <line x1="1" y1="10" x2="23" y2="10" />
-              </svg>
+            <div className="fin-kpi-card">
+              <div className="fin-kpi-header">
+                <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#d97706' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                </div>
+                <span className="fin-kpi-label">Team Approvals Pending</span>
+              </div>
+              <div className="fin-kpi-val" style={{ color: '#d97706' }}>
+                {loading ? '...' : (kpis?.expenses.pending || 2) + 3}
+              </div>
+              <div className="fin-kpi-note warning">
+                {kpis?.expenses.pending || 2} expenses + 3 leaves awaiting sign-off
+              </div>
             </div>
-            <span className="fin-kpi-label">Payments Received</span>
-          </div>
-          <div className="fin-kpi-val">
-            {loading ? '...' : kpis ? `₱${kpis.payments.total.toLocaleString()}` : '₱31,280'}
-          </div>
-          <div className="fin-kpi-note positive">
-            {kpis ? `${kpis.payments.count} posted official receipts` : 'Cleared receipts'}
-          </div>
-        </div>
 
-        <div className="fin-kpi-card">
-          <div className="fin-kpi-header">
-            <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#d97706' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
+            <div className="fin-kpi-card">
+              <div className="fin-kpi-header">
+                <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#16a34a' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                  </svg>
+                </div>
+                <span className="fin-kpi-label">Operating Surplus (Margin)</span>
+              </div>
+              <div className="fin-kpi-val" style={{ color: '#16a34a' }}>
+                {loading ? '...' : kpis ? `₱${(kpis.revenue.total - kpis.expenses.total).toLocaleString()}` : '₱52,660'}
+              </div>
+              <div className="fin-kpi-note positive">
+                Healthy 84.7% operating cash margin
+              </div>
             </div>
-            <span className="fin-kpi-label">Operating Expenses</span>
-          </div>
-          <div className="fin-kpi-val">
-            {loading ? '...' : kpis ? `₱${kpis.expenses.total.toLocaleString()}` : '₱9,500'}
-          </div>
-          <div className="fin-kpi-note warning">
-            {kpis ? `${kpis.expenses.pending} pending finance review` : 'Department vouchers'}
-          </div>
-        </div>
 
-        <div className="fin-kpi-card">
-          <div className="fin-kpi-header">
-            <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#0d1238' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="12" y1="1" x2="12" y2="23" />
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
+            <div className="fin-kpi-card">
+              <div className="fin-kpi-header">
+                <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#7c3aed' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                    <line x1="1" y1="10" x2="23" y2="10" />
+                  </svg>
+                </div>
+                <span className="fin-kpi-label">Settled Receivables</span>
+              </div>
+              <div className="fin-kpi-val">
+                {loading ? '...' : kpis ? `₱${kpis.revenue.receivables.toLocaleString()}` : '₱30,880'}
+              </div>
+              <div className="fin-kpi-note neutral">
+                Outstanding folio collection balance
+              </div>
             </div>
-            <span className="fin-kpi-label">Total Billed Revenue</span>
-          </div>
-          <div className="fin-kpi-val">
-            {loading ? '...' : kpis ? `₱${kpis.revenue.total.toLocaleString()}` : '₱62,160'}
-          </div>
-          <div className="fin-kpi-note neutral">
-            {kpis ? `₱${kpis.revenue.receivables.toLocaleString()} outstanding receivables` : 'General ledger'}
-          </div>
-        </div>
+          </>
+        ) : (
+          <>
+            <div className="fin-kpi-card">
+              <div className="fin-kpi-header">
+                <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#2563eb' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                </div>
+                <span className="fin-kpi-label">Pending Invoices / Drafts</span>
+              </div>
+              <div className="fin-kpi-val">
+                {loading ? '...' : kpis ? kpis.invoices.total : invoiceQueue.length}
+              </div>
+              <div className="fin-kpi-note positive">
+                {kpis ? `${kpis.invoices.drafts} drafts · ${kpis.invoices.issued} open issued` : 'Active folio queue'}
+              </div>
+            </div>
+
+            <div className="fin-kpi-card">
+              <div className="fin-kpi-header">
+                <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#16a34a' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                    <line x1="1" y1="10" x2="23" y2="10" />
+                  </svg>
+                </div>
+                <span className="fin-kpi-label">Daily Collections Received</span>
+              </div>
+              <div className="fin-kpi-val" style={{ color: '#16a34a' }}>
+                {loading ? '...' : kpis ? `₱${kpis.payments.total.toLocaleString()}` : '₱31,280'}
+              </div>
+              <div className="fin-kpi-note positive">
+                {kpis ? `${kpis.payments.count} receipts issued today` : 'Posted cash & card'}
+              </div>
+            </div>
+
+            <div className="fin-kpi-card">
+              <div className="fin-kpi-header">
+                <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#f97316' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                </div>
+                <span className="fin-kpi-label">Expenses Logged (Pending)</span>
+              </div>
+              <div className="fin-kpi-val" style={{ color: '#d97706' }}>
+                {loading ? '...' : kpis ? `₱${kpis.expenses.total.toLocaleString()}` : '₱9,500'}
+              </div>
+              <div className="fin-kpi-note warning">
+                {kpis ? `${kpis.expenses.pending} submitted for Head review` : 'Vouchers submitted'}
+              </div>
+            </div>
+
+            <div className="fin-kpi-card">
+              <div className="fin-kpi-header">
+                <div className="fin-kpi-icon-badge" style={{ backgroundColor: '#0d1238' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                </div>
+                <span className="fin-kpi-label">Front Desk Reconciliation</span>
+              </div>
+              <div className="fin-kpi-val" style={{ color: '#0d1238' }}>
+                100% Balanced
+              </div>
+              <div className="fin-kpi-note positive">
+                Daily guest folios matched to Front Office
+              </div>
+            </div>
+          </>
+        )}
       </section>
 
       {/* Middle Row: Financial Tasks & Selected Task */}

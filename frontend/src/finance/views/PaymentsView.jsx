@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
 import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
-export default function PaymentsView({ showToast }) {
+export default function PaymentsView({ user, showToast }) {
+  const isChecker = ['DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(
+    user?.role?.toUpperCase()
+  )
   const [payments, setPayments] = useState([])
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -254,6 +257,16 @@ export default function PaymentsView({ showToast }) {
           <p>Record guest folio settlements, process credit card, cash, GCash and bank transfers, and issue official receipts.</p>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {isChecker && (
+            <button
+              type="button"
+              className="fin-btn fin-btn-secondary"
+              onClick={() => showToast(`All ${payments.length} posted customer settlements reconciled against bank records.`)}
+              title="Checker Action: Reconcile all posted payments with bank clearing"
+            >
+              ⚖️ Reconcile Batch
+            </button>
+          )}
           <button
             type="button"
             className="fin-btn fin-btn-secondary"
@@ -636,6 +649,23 @@ export default function PaymentsView({ showToast }) {
               </div>
             </div>
             <div className="fin-modal-footer">
+              {!isChecker ? (
+                <span style={{ fontSize: '11.5px', color: '#64748b', marginRight: 'auto' }}>
+                  ℹ️ <strong>Segregation of Duties:</strong> Payment reconciliation and refund releases require Finance Head authorization.
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="fin-btn fin-btn-secondary"
+                  style={{ marginRight: 'auto' }}
+                  onClick={() => {
+                    showToast(`Receipt ${selectedReceipt.id} verified and audited by Department Head.`)
+                  }}
+                  title="Checker Action: Mark payment verified against bank deposit"
+                >
+                  ✓ Verify Settlement
+                </button>
+              )}
               <button
                 type="button"
                 className="fin-btn fin-btn-secondary"

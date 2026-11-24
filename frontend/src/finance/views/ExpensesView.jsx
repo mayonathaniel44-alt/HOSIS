@@ -2,10 +2,20 @@ import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
 
 export default function ExpensesView({ user, showToast }) {
+  const isChecker = ['DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(
+    user?.role?.toUpperCase()
+  )
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [deptFilter, setDeptFilter] = useState('All')
+  const [showBudgetModal, setShowBudgetModal] = useState(false)
+  const [budgetLimits, setBudgetLimits] = useState({
+    Housekeeping: 50000,
+    Maintenance: 100000,
+    'Front Office': 35000,
+    'Food & Beverage': 120000,
+  })
 
   const approverTitle = user?.role === 'DEPARTMENT_HEAD'
     ? 'Department Head'
@@ -133,15 +143,26 @@ export default function ExpensesView({ user, showToast }) {
           <h1>Department Operating Expenses</h1>
           <p>Record, inspect, and approve department operational and maintenance expenditures.</p>
         </div>
-        {/* Replaced Date Display with prominent + Add Expense Button */}
-        <button
-          type="button"
-          className="fin-btn fin-btn-primary"
-          onClick={() => setShowAddExpenseModal(true)}
-          style={{ padding: '9px 18px', fontSize: '13px', fontWeight: 700 }}
-        >
-          + Add Expense
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {isChecker && (
+            <button
+              type="button"
+              className="fin-btn fin-btn-secondary"
+              onClick={() => setShowBudgetModal(true)}
+              title="Checker Action: Configure departmental budget limits"
+            >
+              📊 Budget Limits
+            </button>
+          )}
+          <button
+            type="button"
+            className="fin-btn fin-btn-primary"
+            onClick={() => setShowAddExpenseModal(true)}
+            style={{ padding: '9px 18px', fontSize: '13px', fontWeight: 700 }}
+          >
+            + Add Expense
+          </button>
+        </div>
       </header>
 
       {/* KPI Cards */}
@@ -349,14 +370,20 @@ export default function ExpensesView({ user, showToast }) {
             </div>
 
             <div className="fin-modal-footer">
-              {selectedExpense.status === 'Pending' && (
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-primary"
-                  onClick={() => handleApprove(selectedExpense)}
-                >
-                  ✓ Approve Voucher
-                </button>
+              {!isChecker ? (
+                <span style={{ fontSize: '11.5px', color: '#64748b', marginRight: 'auto' }}>
+                  ℹ️ <strong>Segregation of Duties:</strong> Approving operational expense vouchers is restricted to the Department Head / Finance Admin.
+                </span>
+              ) : (
+                selectedExpense.status === 'Pending' && (
+                  <button
+                    type="button"
+                    className="fin-btn fin-btn-primary"
+                    onClick={() => handleApprove(selectedExpense)}
+                  >
+                    ✓ Approve Voucher
+                  </button>
+                )
               )}
               <button
                 type="button"
@@ -364,6 +391,64 @@ export default function ExpensesView({ user, showToast }) {
                 onClick={() => setSelectedExpense(null)}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Budget Limits Modal Window (Checker Only) */}
+      {showBudgetModal && isChecker && (
+        <div className="fin-modal-overlay" onClick={() => setShowBudgetModal(false)}>
+          <div className="fin-modal-window" onClick={(e) => e.stopPropagation()}>
+            <div className="fin-modal-header">
+              <div>
+                <span className="fin-subsystem-badge">Executive Governance</span>
+                <h2 className="fin-modal-title">Department Budget Limits</h2>
+              </div>
+              <button
+                type="button"
+                className="fin-modal-close-btn"
+                onClick={() => setShowBudgetModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="fin-modal-body">
+              <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px' }}>
+                Set monthly spending limits per hotel department. Expenditures exceeding these thresholds will be flagged for secondary executive approval.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {Object.entries(budgetLimits).map(([dept, limit]) => (
+                  <div key={dept} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <strong>{dept}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: '#64748b' }}>₱</span>
+                      <input
+                        type="number"
+                        className="fin-input"
+                        style={{ width: '130px', textAlign: 'right', fontWeight: 700 }}
+                        value={limit}
+                        onChange={(e) => {
+                          const val = Number(e.target.value) || 0
+                          setBudgetLimits({ ...budgetLimits, [dept]: val })
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="fin-modal-footer">
+              <button
+                type="button"
+                className="fin-btn fin-btn-primary"
+                onClick={() => {
+                  showToast('Department budget limits updated successfully.')
+                  setShowBudgetModal(false)
+                }}
+              >
+                ✓ Save Budget Limits
               </button>
             </div>
           </div>

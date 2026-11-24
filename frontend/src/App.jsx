@@ -399,45 +399,74 @@ function App() {
     try {
       if (modal === 'reservation') {
         const guestId = formData.get('guestId')
+        const roomId = formData.get('roomId') ? Number(formData.get('roomId')) : null
+        let roomType = formData.get('type')
+        if (!roomType && roomId) {
+          const roomObj = roomList.find((r) => Number(r.id) === roomId)
+          if (roomObj) roomType = roomObj.type
+        }
+        if (!roomType) roomType = 'Deluxe Room'
+
+        const checkIn = formData.get('checkin')
+        let checkOut = formData.get('checkout')
+        if (checkOut <= checkIn) {
+          const next = new Date(new Date(checkIn).getTime() + 86400000)
+          checkOut = next.toISOString().slice(0, 10)
+        }
+
         const reservation = {
-          roomId: formData.get('roomId') ? Number(formData.get('roomId')) : null,
-          roomType: formData.get('type'),
-          checkIn: formData.get('checkin'),
-          checkOut: formData.get('checkout'),
+          roomId,
+          roomType,
+          checkIn,
+          checkOut,
         }
         if (guestId) {
           reservation.guestId = Number(guestId)
         } else {
-          const [firstName, ...lastName] = (name || '').split(/\s+/)
-          reservation.guest = { firstName, lastName: lastName.join(' ') }
+          const parts = (name || '').trim().split(/\s+/)
+          const firstName = parts[0] || 'Guest'
+          const lastName = parts.slice(1).join(' ') || parts[0] || 'Guest'
+          reservation.guest = { firstName, lastName }
         }
         await frontOfficeApi.createReservation(reservation)
         setActivePage('Reservations')
         successMessage = 'Reservation created.'
       } else if (modal === 'request') {
+        const roomId = formData.get('roomId') ? Number(formData.get('roomId')) : null
+        let guestName = name
+        if (!guestName && roomId) {
+          const activeRes = reservations.find(
+            (r) => Number(r.roomId) === roomId && ['CHECKED_IN', 'CONFIRMED'].includes(r.status)
+          )
+          if (activeRes?.guest) guestName = activeRes.guest
+        }
         await frontOfficeApi.createRequest({
-          guestName: name,
-          roomId: formData.get('roomId') ? Number(formData.get('roomId')) : null,
+          guestName: guestName || 'Front Office Guest',
+          roomId,
           request: formData.get('request'),
-          priority: formData.get('priority'),
+          priority: formData.get('priority') || 'STANDARD',
         })
         setActivePage('Guest requests')
         successMessage = 'Guest request recorded.'
       } else if (modal === 'guest') {
-        const [firstName, ...lastName] = (name || '').split(/\s+/)
+        const parts = (name || '').trim().split(/\s+/)
+        const firstName = parts[0] || 'Guest'
+        const lastName = parts.slice(1).join(' ') || parts[0] || 'Guest'
         await frontOfficeApi.createGuest({
           firstName,
-          lastName: lastName.join(' '),
+          lastName,
           email: formData.get('email') || undefined,
           phone: formData.get('phone') || undefined,
         })
         setActivePage('Guests')
         successMessage = 'Guest profile created.'
       } else if (modal === 'edit-guest') {
-        const [firstName, ...lastName] = (name || '').split(/\s+/)
+        const parts = (name || '').trim().split(/\s+/)
+        const firstName = parts[0] || 'Guest'
+        const lastName = parts.slice(1).join(' ') || parts[0] || 'Guest'
         await frontOfficeApi.updateGuest(selectedRecord.id, {
           firstName,
-          lastName: lastName.join(' '),
+          lastName,
           email: formData.get('email') || null,
           phone: formData.get('phone') || null,
         })
@@ -458,12 +487,21 @@ function App() {
         })
         successMessage = 'Payment recorded.'
       } else if (modal === 'invoice') {
+        const reservationId = formData.get('reservationId') ? Number(formData.get('reservationId')) : undefined
+        let guestId = Number(formData.get('guestId'))
+        if (reservationId) {
+          const res = reservations.find((r) => Number(r.id) === reservationId)
+          if (res?.guestId) {
+            guestId = Number(res.guestId)
+          }
+        }
         await frontOfficeApi.createInvoice({
-          guestId: Number(formData.get('guestId')),
-          reservationId: formData.get('reservationId') ? Number(formData.get('reservationId')) : undefined,
+          guestId,
+          reservationId,
           amount: formData.get('amount'),
           notes: formData.get('notes') || undefined,
         })
+        setActivePage('Billing')
         successMessage = 'Invoice created.'
       }
       setModal(null)
@@ -1279,7 +1317,7 @@ function StatCard({ label, value, suffix, note, icon, color, onClick }) {
 
 function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, onSubmit }) {
   const roomTypes = [...new Set(rooms.map((room) => room.type))]
-  const [selectedRoomType, setSelectedRoomType] = useState(selectedRecord?.roomType || roomTypes[0] || '')
+  const [selectedRoomType, setSelectedRoomType] = useState(selectedRecord?.roomType || roomTypes[0] || 'Deluxe Room')
   const [selectedGuestId, setSelectedGuestId] = useState(selectedRecord?.guestId ? String(selectedRecord.guestId) : '')
   const localToday = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
   const nextDay = new Date(`${localToday}T00:00:00`)
@@ -1289,6 +1327,15 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
   const [checkOutDate, setCheckOutDate] = useState(localTomorrow)
   const [editCheckInDate, setEditCheckInDate] = useState(selectedRecord?.checkIn || localToday)
   const [editCheckOutDate, setEditCheckOutDate] = useState(selectedRecord?.checkOut || localTomorrow)
+
+  const [selectedInvoiceGuestId, setSelectedInvoiceGuestId] = useState(
+    selectedRecord?.guestId ? String(selectedRecord.guestId) : (guests[0]?.id ? String(guests[0].id) : '')
+  )
+  const [selectedInvoiceResId, setSelectedInvoiceResId] = useState(
+    selectedRecord?.reservationId ? String(selectedRecord.reservationId) : ''
+  )
+  const [requestGuestName, setRequestGuestName] = useState(selectedRecord?.name || selectedRecord?.guestName || '')
+
   const titles = {
     reservation: ['GUEST STAYS', 'Create a reservation', 'Add the details for an upcoming guest stay.'],
     request: ['GUEST EXPERIENCE', 'Log a guest request', 'Let the team know what your guest needs.'],
@@ -1345,7 +1392,20 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
             </>}
           </>}
 
-          {['request', 'guest', 'edit-guest'].includes(modal) && <>
+          {modal === 'request' && <>
+            <label htmlFor="modal-guest">Guest name</label>
+            <input
+              id="modal-guest"
+              name="guest"
+              placeholder="e.g. Taylor Morgan"
+              value={requestGuestName}
+              onChange={(e) => setRequestGuestName(e.target.value)}
+              required
+              autoFocus
+            />
+          </>}
+
+          {['guest', 'edit-guest'].includes(modal) && <>
             <label htmlFor="modal-guest">Guest name</label>
             <input id="modal-guest" name="guest" placeholder="e.g. Taylor Morgan" defaultValue={name} required autoFocus />
           </>}
@@ -1359,12 +1419,43 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
 
           {modal === 'reservation' && <>
             <div className="form-row">
-              <div><label htmlFor="modal-type">Room type</label><input id="modal-type" name="type" list="room-types" value={selectedRoomType} onChange={(event) => setSelectedRoomType(event.target.value)} required /><datalist id="room-types">{roomTypes.map((roomType) => <option key={roomType} value={roomType} />)}</datalist></div>
-              <div><label htmlFor="modal-room">Room assignment</label><select id="modal-room" name="roomId" defaultValue={selectedRecord?.roomId ? String(selectedRecord.roomId) : ''}><option value="">Assign later</option>{roomsForStay.map((room) => <option key={room.id} value={room.id}>{room.number} · {room.type}</option>)}</select></div>
+              <div>
+                <label htmlFor="modal-type">Room type</label>
+                <select id="modal-type" name="type" value={selectedRoomType} onChange={(event) => setSelectedRoomType(event.target.value)} required>
+                  {roomTypes.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="modal-room">Room assignment</label>
+                <select id="modal-room" name="roomId" defaultValue={selectedRecord?.roomId ? String(selectedRecord.roomId) : ''}>
+                  <option value="">Assign later</option>
+                  {roomsForStay.map((room) => <option key={room.id} value={room.id}>{room.number} · {room.type}</option>)}
+                </select>
+              </div>
             </div>
             <div className="form-row">
-              <div><label htmlFor="modal-checkin">Check-in</label><input id="modal-checkin" name="checkin" type="date" value={checkInDate} onChange={(event) => setCheckInDate(event.target.value)} required /></div>
-              <div><label htmlFor="modal-checkout">Check-out</label><input id="modal-checkout" name="checkout" type="date" value={checkOutDate} onChange={(event) => setCheckOutDate(event.target.value)} required /></div>
+              <div>
+                <label htmlFor="modal-checkin">Check-in</label>
+                <input
+                  id="modal-checkin"
+                  name="checkin"
+                  type="date"
+                  value={checkInDate}
+                  onChange={(event) => {
+                    const newCheckIn = event.target.value
+                    setCheckInDate(newCheckIn)
+                    if (newCheckIn >= checkOutDate) {
+                      const next = new Date(new Date(newCheckIn).getTime() + 86400000)
+                      setCheckOutDate(next.toISOString().slice(0, 10))
+                    }
+                  }}
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="modal-checkout">Check-out</label>
+                <input id="modal-checkout" name="checkout" type="date" value={checkOutDate} onChange={(event) => setCheckOutDate(event.target.value)} required />
+              </div>
             </div>
           </>}
 
@@ -1384,7 +1475,26 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
 
           {modal === 'request' && <>
             <div className="form-row">
-              <div><label htmlFor="request-room">Room number</label><select id="request-room" name="roomId" defaultValue={selectedRecord?.roomId ? String(selectedRecord.roomId) : ''}><option value="">Not assigned</option>{rooms.map((room) => <option key={room.id} value={room.id}>{room.number}</option>)}</select></div>
+              <div>
+                <label htmlFor="request-room">Room number</label>
+                <select
+                  id="request-room"
+                  name="roomId"
+                  defaultValue={selectedRecord?.roomId ? String(selectedRecord.roomId) : ''}
+                  onChange={(event) => {
+                    const roomId = event.target.value
+                    if (roomId) {
+                      const activeRes = reservations.find(
+                        (r) => Number(r.roomId) === Number(roomId) && ['CHECKED_IN', 'CONFIRMED'].includes(r.status)
+                      )
+                      if (activeRes?.guest) setRequestGuestName(activeRes.guest)
+                    }
+                  }}
+                >
+                  <option value="">Not assigned</option>
+                  {rooms.map((room) => <option key={room.id} value={room.id}>{room.number} · {room.type} ({room.status})</option>)}
+                </select>
+              </div>
               <div><label htmlFor="request-priority">Priority</label><select id="request-priority" name="priority" defaultValue={selectedRecord?.priority || 'STANDARD'}><option value="STANDARD">Standard</option><option value="URGENT">Urgent</option></select></div>
             </div>
             <label htmlFor="request-text">What does the guest need?</label>
@@ -1393,9 +1503,33 @@ function Modal({ modal, selectedRecord, guests, rooms, reservations, onClose, on
 
           {modal === 'invoice' && <>
             <label htmlFor="invoice-guest">Guest account</label>
-            <select id="invoice-guest" name="guestId" required defaultValue={selectedRecord?.guestId ? String(selectedRecord.guestId) : ''}><option value="" disabled>Select a guest</option>{guests.map((guest) => <option key={guest.id} value={guest.id}>{guest.name}</option>)}</select>
+            <select
+              id="invoice-guest"
+              name="guestId"
+              required
+              value={selectedInvoiceGuestId}
+              onChange={(event) => setSelectedInvoiceGuestId(event.target.value)}
+            >
+              <option value="" disabled>Select a guest</option>
+              {guests.map((guest) => <option key={guest.id} value={guest.id}>{guest.name}</option>)}
+            </select>
             <label htmlFor="invoice-reservation">Reservation (optional)</label>
-            <select id="invoice-reservation" name="reservationId" defaultValue={selectedRecord?.reservationId ? String(selectedRecord.reservationId) : ''}><option value="">No reservation linked</option>{reservations.map((reservation) => <option key={reservation.id} value={reservation.id}>{reservation.code} · {reservation.guest}</option>)}</select>
+            <select
+              id="invoice-reservation"
+              name="reservationId"
+              value={selectedInvoiceResId}
+              onChange={(event) => {
+                const resId = event.target.value
+                setSelectedInvoiceResId(resId)
+                if (resId) {
+                  const res = reservations.find((r) => String(r.id) === String(resId))
+                  if (res?.guestId) setSelectedInvoiceGuestId(String(res.guestId))
+                }
+              }}
+            >
+              <option value="">No reservation linked</option>
+              {reservations.map((reservation) => <option key={reservation.id} value={reservation.id}>{reservation.code} · {reservation.guest}</option>)}
+            </select>
             <label htmlFor="invoice-amount">Invoice amount</label>
             <input id="invoice-amount" name="amount" type="number" min="0.01" step="0.01" defaultValue={selectedRecord?.amount || ''} required />
             <label htmlFor="invoice-notes">Notes (optional)</label>

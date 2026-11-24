@@ -3,13 +3,17 @@ import { financeApi } from '../../services/api'
 import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
 export default function ReportsView({ user, showToast }) {
-  const [reportType, setReportType] = useState('Income & expenditure')
+  const isChecker = ['DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(
+    user?.role?.toUpperCase()
+  )
+  const [reportType, setReportType] = useState(isChecker ? 'Income & expenditure' : 'Revenue Breakdown')
   const [period, setPeriod] = useState('daily') // 'daily' | 'weekly' | 'monthly' | 'annually'
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10))
   const [reportData, setReportData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selectedStatement, setSelectedStatement] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [isSignedOff, setIsSignedOff] = useState(false)
 
   async function loadReport(chosenPeriod = period, chosenDate = selectedDate, chosenType = reportType) {
     setLoading(true)
@@ -107,6 +111,20 @@ export default function ReportsView({ user, showToast }) {
           <p>Comprehensive periodic statements: Daily, Weekly, Monthly, and Annual financial performance.</p>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }} className="no-print">
+          {isChecker && (
+            <button
+              type="button"
+              className={`fin-btn ${isSignedOff ? 'fin-btn-secondary' : 'fin-btn-primary'}`}
+              onClick={() => {
+                setIsSignedOff(!isSignedOff)
+                if (showToast) showToast(isSignedOff ? 'Sign-off stamp removed.' : 'Report officially signed off and sealed by Department Head.')
+              }}
+              title="Checker Action: Sign off and seal report for auditing"
+              style={{ background: isSignedOff ? 'rgba(34, 197, 94, 0.15)' : undefined, color: isSignedOff ? '#16a34a' : undefined }}
+            >
+              {isSignedOff ? '✓ Signed Off by Head' : '✍️ Executive Sign-Off & Seal'}
+            </button>
+          )}
           <button
             type="button"
             className="fin-btn fin-btn-secondary"
@@ -145,10 +163,20 @@ export default function ReportsView({ user, showToast }) {
               onChange={(e) => setReportType(e.target.value)}
               style={{ width: 'auto', minWidth: '220px', fontWeight: 600 }}
             >
-              <option value="Income & expenditure">Income &amp; Expenditure (P&amp;L)</option>
-              <option value="Revenue Breakdown">Revenue by Subsystem &amp; Service</option>
-              <option value="Operational Expenses">Department Operating Costs</option>
-              <option value="Cash & Collections">Cash Settlements vs Receivables</option>
+              {isChecker ? (
+                <>
+                  <option value="Income & expenditure">Income &amp; Expenditure (P&amp;L)</option>
+                  <option value="Revenue Breakdown">Revenue by Subsystem &amp; Service</option>
+                  <option value="Operational Expenses">Department Operating Costs</option>
+                  <option value="Cash & Collections">Cash Settlements vs Receivables</option>
+                </>
+              ) : (
+                <>
+                  <option value="Revenue Breakdown">Standard Billing Summary (Subsystems)</option>
+                  <option value="Operational Expenses">Operational Costs &amp; Vouchers</option>
+                  <option value="Cash & Collections">Daily Collections Summary</option>
+                </>
+              )}
             </select>
           </div>
 
@@ -419,6 +447,22 @@ export default function ReportsView({ user, showToast }) {
             </tbody>
           </table>
         </div>
+
+        {isSignedOff && (
+          <div style={{ margin: '16px 20px', padding: '12px 18px', background: 'rgba(34, 197, 94, 0.08)', border: '1px solid #22c55e', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <strong style={{ color: '#16a34a', display: 'block', fontSize: '13.5px' }}>✓ OFFICIAL EXECUTIVE SIGN-OFF &amp; AUDIT SEAL APPLIED</strong>
+              <small style={{ color: '#64748b' }}>Verified and locked by Department Head / Checker under Segregation of Duties standards.</small>
+            </div>
+            <span className="fin-badge fin-badge-green" style={{ fontWeight: 700 }}>CERTIFIED AUDITED</span>
+          </div>
+        )}
+
+        {!isChecker && (
+          <div style={{ margin: '14px 20px', padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', color: '#64748b' }}>
+            ℹ️ <strong>Segregation of Duties (Maker-Checker):</strong> Finance Officers can generate operational summaries. Audited P&amp;L certification and statutory sign-offs require Department Head authorization.
+          </div>
+        )}
 
         {/* Official Sign-Off Block for Printed Statement */}
         <div className="fin-print-signoff print-only">

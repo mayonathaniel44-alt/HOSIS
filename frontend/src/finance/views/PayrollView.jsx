@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
 import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
-export default function PayrollView({ showToast }) {
+export default function PayrollView({ user, showToast }) {
+  const isChecker = ['DEPARTMENT_HEAD', 'HEAD', 'FINANCE_HEAD', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'].includes(
+    user?.role?.toUpperCase()
+  )
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedEmp, setSelectedEmp] = useState(null)
@@ -407,16 +410,21 @@ export default function PayrollView({ showToast }) {
                   </td>
                   <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                     {emp.status === 'DISBURSED' ? (
-                      <span style={{ fontSize: '12px', color: '#86efac' }}>✓ Settled</span>
-                    ) : (
+                      <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600 }}>✓ Settled</span>
+                    ) : isChecker ? (
                       <button
                         type="button"
                         className="fin-btn fin-btn-secondary"
                         style={{ padding: '4px 10px', fontSize: '12px' }}
                         onClick={() => handleDisburse(emp)}
+                        title="Checker Action: Approve and disburse payroll"
                       >
                         Disburse
                       </button>
+                    ) : (
+                      <span className="fin-badge fin-badge-gold" style={{ fontSize: '11px' }}>
+                        Drafted (Pending Approval)
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -546,13 +554,19 @@ export default function PayrollView({ showToast }) {
                 🖨️ Print Payslip
               </button>
               {selectedEmp.status !== 'DISBURSED' && (
-                <button
-                  type="button"
-                  className="fin-btn fin-btn-primary"
-                  onClick={() => handleDisburse(selectedEmp)}
-                >
-                  ✓ Confirm &amp; Disburse Wage
-                </button>
+                isChecker ? (
+                  <button
+                    type="button"
+                    className="fin-btn fin-btn-primary"
+                    onClick={() => handleDisburse(selectedEmp)}
+                  >
+                    ✓ Confirm &amp; Disburse Wage
+                  </button>
+                ) : (
+                  <span style={{ fontSize: '11.5px', color: '#64748b', fontStyle: 'italic', marginRight: 'auto' }}>
+                    ℹ️ Wage disbursement authorization requires Department Head sign-off.
+                  </span>
+                )
               )}
             </div>
           </div>
