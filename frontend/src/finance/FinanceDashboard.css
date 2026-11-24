@@ -587,32 +587,54 @@
   margin-top: 2px;
 }
 
-/* Radio button toggle pill for Fully Paid / Half */
-.fin-pill-toggle {
+/* Radio button toggle pill for Fully Paid / Half & Filter Tabs */
+.fin-pill-toggle,
+.filter-tabs {
   display: inline-flex;
+  align-items: center;
   background: #f1f5f9;
   border-radius: 8px;
   padding: 3px;
   border: 1px solid #e2e8f0;
+  gap: 3px;
 }
 
-.fin-pill-toggle button {
+.fin-pill-toggle button,
+.filter-tabs button {
   padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 500;
   border-radius: 6px;
   border: none;
   background: transparent;
-  color: #475569;
+  color: #64748b;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
-.fin-pill-toggle button.active {
+.fin-pill-toggle button:hover,
+.filter-tabs button:hover {
+  color: #1e293b;
+}
+
+.fin-pill-toggle button.active,
+.filter-tabs button.tab-active,
+.filter-tabs button.active {
   background: #ffffff;
-  color: #0d1238;
-  font-weight: 700;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  color: #4334ad;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.fin-toolbar {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 /* Main Workspace - Flush against sidebar and sticky to top */

@@ -35,9 +35,6 @@ export default function HistoryView({ onNavigate, showToast }) {
         details: ev.details || {},
       }))
       setEvents(mapped)
-      if (mapped.length > 0 && !selectedTxn) {
-        setSelectedTxn(mapped[0])
-      }
     } catch (err) {
       console.error('Failed to load audit events from database:', err)
       showToast('Error connecting to audit log in database.')
@@ -106,6 +103,11 @@ export default function HistoryView({ onNavigate, showToast }) {
             onClick={handleBulkExportCsv}
             title="Bulk export financial records to CSV"
           >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
             Export CSV
           </button>
           <button
@@ -114,6 +116,11 @@ export default function HistoryView({ onNavigate, showToast }) {
             onClick={handleBulkExportJson}
             title="Bulk export financial records to JSON"
           >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
             Export JSON
           </button>
         </div>
@@ -172,7 +179,10 @@ export default function HistoryView({ onNavigate, showToast }) {
             className="fin-btn fin-btn-secondary"
             onClick={loadAudit}
           >
-            🔄 Refresh
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            Refresh
           </button>
         </div>
       </div>
@@ -329,7 +339,12 @@ export default function HistoryView({ onNavigate, showToast }) {
                 className="fin-btn fin-btn-primary"
                 onClick={() => window.print()}
               >
-                🖨️ Print Record
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9" />
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                  <rect x="6" y="14" width="12" height="8" />
+                </svg>
+                Print Record
               </button>
             </div>
           </div>

@@ -34,6 +34,77 @@ export default function IntegrationsView({ showToast }) {
   const [cityLedger, setCityLedger] = useState(null)
   const [loadingAging, setLoadingAging] = useState(false)
 
+  // 5. Master Bulk Export & Subsystem Dispatch state
+  const [showDispatchModal, setShowDispatchModal] = useState(false)
+  const [exportingMaster, setExportingMaster] = useState(false)
+  const [dispatchingMaster, setDispatchingMaster] = useState(false)
+  const [dispatchResults, setDispatchResults] = useState(null)
+  const [selectedSubsystems, setSelectedSubsystems] = useState([
+    'FRONT_OFFICE',
+    'HOUSEKEEPING',
+    'MAINTENANCE',
+    'SALES_MARKETING',
+    'HUMAN_RESOURCES',
+  ])
+  const [dispatchNotes, setDispatchNotes] = useState('Master financial ledger synchronization')
+
+  function toggleSubsystem(subId) {
+    if (selectedSubsystems.includes(subId)) {
+      setSelectedSubsystems(selectedSubsystems.filter((s) => s !== subId))
+    } else {
+      setSelectedSubsystems([...selectedSubsystems, subId])
+    }
+  }
+
+  async function handleMasterExport(format = 'json') {
+    setExportingMaster(true)
+    try {
+      const res = await financeApi.exportData('all', format)
+      if (format === 'json') {
+        const payload = res.data || res
+        exportToJson(`hosis-master-finance-${Date.now()}`, payload)
+      } else {
+        const csvData = typeof res === 'string' ? res : res.data || ''
+        const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `hosis-master-finance-ledger-${Date.now()}.csv`
+        link.click()
+        URL.revokeObjectURL(url)
+      }
+      showToast(`Master financial archive exported as ${format.toUpperCase()}.`)
+    } catch (err) {
+      console.error('Master bulk export failed:', err)
+      showToast('Error exporting master financial archive.')
+    } finally {
+      setExportingMaster(false)
+    }
+  }
+
+  async function handleDispatchToSubsystems(e) {
+    e.preventDefault()
+    if (!selectedSubsystems.length) {
+      showToast('Select at least one destination subsystem.')
+      return
+    }
+    setDispatchingMaster(true)
+    try {
+      const res = await financeApi.dispatchSubsystems({
+        targetSubsystems: selectedSubsystems,
+        notes: dispatchNotes,
+      })
+      const data = res.data || res
+      setDispatchResults(data.dispatches || [])
+      showToast(`Successfully dispatched master financial records to ${selectedSubsystems.length} subsystem(s).`)
+    } catch (err) {
+      console.error('Subsystem dispatch failed:', err)
+      showToast(err.message || 'Failed to dispatch data to subsystems.')
+    } finally {
+      setDispatchingMaster(false)
+    }
+  }
+
   async function loadData() {
     setLoading(true)
     try {
@@ -269,45 +340,60 @@ export default function IntegrationsView({ showToast }) {
           <h1>Subsystem Integrations</h1>
           <p>Direct connectivity with Housekeeping damage billing, Maintenance finance records, and Sales &amp; Marketing booking folios.</p>
         </div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="fin-btn fin-btn-primary"
+            onClick={() => {
+              setShowDispatchModal(true)
+              setDispatchResults(null)
+            }}
+            title="Export master ledger or dispatch data to all other hotel subsystems"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Master Bulk Export &amp; Subsystem Dispatch
+          </button>
+        </div>
       </header>
 
-      {/* Sub-tab Navigation */}
-      <section className="fin-toolbar" style={{ marginBottom: '20px', gap: '8px' }}>
+      {/* Sub-tab Navigation - Minimalist Segmented Tabs */}
+      <div className="filter-tabs" role="tablist" style={{ marginBottom: '20px' }}>
         <button
           type="button"
-          className={`fin-pill-btn ${activeSubTab === 'housekeeping' ? 'active' : ''}`}
-          style={{ padding: '8px 18px', fontSize: '14px' }}
+          className={activeSubTab === 'housekeeping' ? 'tab-active' : ''}
           onClick={() => setActiveSubTab('housekeeping')}
         >
-          🧹 Housekeeping Damage Billing ({hkDamages.filter((d) => d.billingStatus === 'PENDING_BILLING').length} Pending)
+          Housekeeping Damage Billing ({hkDamages.filter((d) => d.billingStatus === 'PENDING_BILLING').length} Pending)
         </button>
         <button
           type="button"
-          className={`fin-pill-btn ${activeSubTab === 'maintenance' ? 'active' : ''}`}
-          style={{ padding: '8px 18px', fontSize: '14px' }}
+          className={activeSubTab === 'maintenance' ? 'tab-active' : ''}
           onClick={() => setActiveSubTab('maintenance')}
         >
-          🛠️ Maintenance Finance Records ({maintenanceData?.records?.length || 0})
+          Maintenance Finance Records ({maintenanceData?.records?.length || 0})
         </button>
         <button
           type="button"
-          className={`fin-pill-btn ${activeSubTab === 'sales' ? 'active' : ''}`}
-          style={{ padding: '8px 18px', fontSize: '14px' }}
+          className={activeSubTab === 'sales' ? 'tab-active' : ''}
           onClick={() => setActiveSubTab('sales')}
         >
-          📈 Marketing &amp; Sales Connection ({salesRecords.length})
+          Marketing &amp; Sales Connection ({salesRecords.length})
         </button>
-      </section>
+      </div>
 
       {/* TAB 1: Housekeeping Damage Billing from Guest */}
       {activeSubTab === 'housekeeping' && (
         <section>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             <div>
-              <h2 style={{ fontSize: '18px', margin: 0, color: '#f8fafc' }}>
+              <h2 style={{ fontSize: '18px', margin: 0, color: 'var(--fin-text-heading, #0f172a)' }}>
                 Housekeeping Inventory Damage Billed to Guest
               </h2>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
                 Inspect damaged inventory reported by Housekeeping and generate official billing charges linked to active Front Office guest stay folios.
               </p>
             </div>
@@ -317,6 +403,11 @@ export default function IntegrationsView({ showToast }) {
                 className="fin-btn fin-btn-secondary"
                 onClick={handleExportHkCsv}
               >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
                 Export CSV
               </button>
               <button
@@ -324,6 +415,11 @@ export default function IntegrationsView({ showToast }) {
                 className="fin-btn fin-btn-secondary"
                 onClick={() => exportToJson('hosis-hk-damages', hkDamages)}
               >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
                 Export JSON
               </button>
             </div>
@@ -406,15 +502,15 @@ export default function IntegrationsView({ showToast }) {
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         {dmg.billingStatus === 'BILLED' ? (
-                          <span style={{ fontSize: '12px', color: '#86efac' }}>✓ Invoiced</span>
+                          <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600 }}>✓ Invoiced</span>
                         ) : (
                           <button
                             type="button"
                             className="fin-btn fin-btn-primary"
-                            style={{ padding: '4px 10px', fontSize: '12px' }}
+                            style={{ padding: '5px 12px', fontSize: '11px' }}
                             onClick={() => openBillDamageModal(dmg)}
                           >
-                            💳 Bill to Guest Folio
+                            Bill to Guest Folio
                           </button>
                         )}
                       </td>
@@ -432,10 +528,10 @@ export default function IntegrationsView({ showToast }) {
         <section>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             <div>
-              <h2 style={{ fontSize: '18px', margin: 0, color: '#f8fafc' }}>
+              <h2 style={{ fontSize: '18px', margin: 0, color: 'var(--fin-text-heading, #0f172a)' }}>
                 Engineering &amp; Maintenance Financial Records
               </h2>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
                 Maintenance records: OpEx vs CapEx asset tracking, tiered approvals, and facility budget allocations.
               </p>
             </div>
@@ -446,13 +542,23 @@ export default function IntegrationsView({ showToast }) {
                 onClick={handleExportMaintCsv}
                 title="Export finance records for the Maintenance team"
               >
-                📥 Export for Maintenance (CSV)
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Export Maintenance CSV
               </button>
               <button
                 type="button"
                 className="fin-btn fin-btn-secondary"
                 onClick={() => exportToJson('hosis-maintenance-finance', maintenanceData)}
               >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
                 Export JSON
               </button>
               <button
@@ -460,7 +566,11 @@ export default function IntegrationsView({ showToast }) {
                 className="fin-btn fin-btn-primary"
                 onClick={() => setShowMaintModal(true)}
               >
-                ➕ Record Maintenance Expense
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Record Maintenance Expense
               </button>
             </div>
           </div>
@@ -585,10 +695,10 @@ export default function IntegrationsView({ showToast }) {
         <section>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             <div>
-              <h2 style={{ fontSize: '18px', margin: 0, color: '#f8fafc' }}>
+              <h2 style={{ fontSize: '18px', margin: 0, color: 'var(--fin-text-heading, #0f172a)' }}>
                 Marketing &amp; Sales Revenue &amp; Corporate City Ledger
               </h2>
-              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
                 Milestone contract invoicing (20% deposit, 50% prep, 30% balance, or full) and Corporate Accounts Receivable Aging.
               </p>
             </div>
@@ -598,23 +708,33 @@ export default function IntegrationsView({ showToast }) {
                 className="fin-btn fin-btn-secondary"
                 onClick={handleExportSalesCsv}
               >
-                📥 Export Deals CSV
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Export Deals CSV
               </button>
               <button
                 type="button"
                 className="fin-btn fin-btn-secondary"
                 onClick={handleExportCityLedgerCsv}
               >
-                📊 Export City Ledger CSV
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Export City Ledger CSV
               </button>
             </div>
           </div>
 
           {/* Sales Deals Table */}
           <div className="fin-surface" style={{ marginBottom: '24px' }}>
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(212, 175, 55, 0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', color: '#f8fafc' }}>Confirmed Sales Deals &amp; Banquet Contracts</h3>
-              <span style={{ fontSize: '12px', color: '#94a3b8' }}>Select deal to invoice by milestone</span>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--fin-text-heading, #0f172a)' }}>Confirmed Sales Deals &amp; Banquet Contracts</h3>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>Select deal to invoice by milestone</span>
             </div>
             <div className="fin-table-scroll">
               <table className="fin-table">
@@ -680,16 +800,16 @@ export default function IntegrationsView({ showToast }) {
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         {deal.status === 'INVOICED' ? (
-                          <span style={{ fontSize: '12px', color: '#86efac' }}>✓ Connected</span>
+                          <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600 }}>✓ Connected</span>
                         ) : (
                           <button
                             type="button"
                             className="fin-btn fin-btn-primary"
-                            style={{ padding: '4px 10px', fontSize: '12px' }}
+                            style={{ padding: '5px 12px', fontSize: '11px' }}
                             disabled={syncingDeal}
                             onClick={() => openMilestoneModal(deal)}
                           >
-                            🔗 Milestone Invoice
+                            Milestone Invoice
                           </button>
                         )}
                       </td>
@@ -704,20 +824,23 @@ export default function IntegrationsView({ showToast }) {
           <div style={{ marginTop: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <div>
-                <h3 style={{ fontSize: '16px', margin: 0, color: '#f8fafc' }}>
+                <h3 style={{ fontSize: '16px', margin: 0, color: 'var(--fin-text-heading, #0f172a)' }}>
                   City Ledger Accounts Receivable (A/R) Aging Analysis
                 </h3>
-                <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#64748b' }}>
                   Aging buckets for corporate clients, travel agents, and banquets to minimize default risk.
                 </p>
               </div>
               <button
                 type="button"
                 className="fin-btn fin-btn-secondary"
-                style={{ fontSize: '12px', padding: '5px 12px' }}
+                style={{ fontSize: '11.5px', padding: '6px 14px' }}
                 onClick={loadCityLedgerAging}
               >
-                🔄 Refresh Aging
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+                Refresh Aging
               </button>
             </div>
 
@@ -927,7 +1050,7 @@ export default function IntegrationsView({ showToast }) {
                   className="fin-btn fin-btn-primary"
                   disabled={billingDamage}
                 >
-                  {billingDamage ? 'Invoicing…' : '💳 Generate & Issue Damage Invoice'}
+                  {billingDamage ? 'Invoicing…' : 'Generate & Issue Damage Invoice'}
                 </button>
               </div>
             </form>
@@ -1128,10 +1251,180 @@ export default function IntegrationsView({ showToast }) {
                   className="fin-btn fin-btn-primary"
                   disabled={syncingDeal}
                 >
-                  {syncingDeal ? 'Invoicing…' : '🔗 Generate Milestone Invoice'}
+                  {syncingDeal ? 'Invoicing…' : 'Generate Milestone Invoice'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Master Bulk Export & Subsystem Dispatch Hub */}
+      {showDispatchModal && (
+        <div className="fin-modal-overlay" onClick={() => setShowDispatchModal(false)}>
+          <div className="fin-modal-window" style={{ maxWidth: '680px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="fin-modal-header">
+              <h3 className="fin-modal-title">Master Bulk Export &amp; Subsystem Dispatch Hub</h3>
+              <button
+                type="button"
+                className="fin-modal-close-btn"
+                onClick={() => setShowDispatchModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="fin-modal-body">
+              <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#64748b' }}>
+                Generate a complete financial archive of all records across the hotel subsystem or dispatch synchronized records directly to recipient departments.
+              </p>
+
+              {/* SECTION 1: MANUAL BULK EXPORT */}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginBottom: '18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
+                    1. Manual Master Bulk Export
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#4334ad', fontWeight: 600 }}>
+                    Includes 100% of Financial Ledgers
+                  </span>
+                </div>
+                <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#64748b' }}>
+                  Download consolidated folios, payments, expense vouchers, payroll disbursements, damage billings, banquet contracts, and immutable audit logs.
+                </p>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="fin-btn fin-btn-secondary"
+                    disabled={exportingMaster}
+                    onClick={() => handleMasterExport('csv')}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    {exportingMaster ? 'Generating CSV...' : 'Download Master CSV'}
+                  </button>
+                  <button
+                    type="button"
+                    className="fin-btn fin-btn-secondary"
+                    disabled={exportingMaster}
+                    onClick={() => handleMasterExport('json')}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    {exportingMaster ? 'Packaging JSON...' : 'Download Master JSON'}
+                  </button>
+                </div>
+              </div>
+
+              {/* SECTION 2: DISPATCH TO SUBSYSTEMS */}
+              <form onSubmit={handleDispatchToSubsystems}>
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+                    2. Synchronize &amp; Send to Recipient Subsystems
+                  </span>
+                  <p style={{ margin: '0 0 14px 0', fontSize: '12px', color: '#64748b' }}>
+                    Select hotel departments to push reconciled financial records and create verified audit trail records:
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+                    {[
+                      { id: 'FRONT_OFFICE', label: 'Front Office PMS', desc: 'Guest folios, payments, billing status' },
+                      { id: 'HOUSEKEEPING', label: 'Housekeeping', desc: 'Room damage recovery & restocking release' },
+                      { id: 'MAINTENANCE', label: 'Maintenance & Engineering', desc: 'OpEx/CapEx work order vouchers & budget' },
+                      { id: 'SALES_MARKETING', label: 'Sales & Marketing', desc: 'Corporate contracts & city ledger aging' },
+                      { id: 'HUMAN_RESOURCES', label: 'Human Resources (HR)', desc: 'Payroll compensation & approved leave' },
+                    ].map((target) => (
+                      <label
+                        key={target.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '10px',
+                          padding: '10px 12px',
+                          borderRadius: '6px',
+                          border: selectedSubsystems.includes(target.id) ? '1.5px solid #4334ad' : '1px solid #e2e8f0',
+                          background: selectedSubsystems.includes(target.id) ? '#f5f3ff' : '#fafafa',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSubsystems.includes(target.id)}
+                          onChange={() => toggleSubsystem(target.id)}
+                          style={{ marginTop: '3px' }}
+                        />
+                        <div>
+                          <strong style={{ fontSize: '12px', color: '#0f172a', display: 'block' }}>{target.label}</strong>
+                          <span style={{ fontSize: '11px', color: '#64748b' }}>{target.desc}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '4px' }}>
+                      DISPATCH MEMO / AUDIT REASON
+                    </label>
+                    <input
+                      type="text"
+                      className="fin-input"
+                      value={dispatchNotes}
+                      onChange={(e) => setDispatchNotes(e.target.value)}
+                      placeholder="e.g., Periodic financial subsystem reconciliation"
+                      style={{ padding: '8px 12px', fontSize: '12px' }}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="fin-btn fin-btn-primary"
+                    disabled={dispatchingMaster}
+                    style={{ width: '100%', minHeight: '38px', fontSize: '12px' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="22" y1="2" x2="11" y2="13" />
+                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                    {dispatchingMaster ? 'Dispatching Records to Subsystems...' : `Send Records to ${selectedSubsystems.length} Subsystem(s)`}
+                  </button>
+                </div>
+              </form>
+
+              {/* DISPATCH CONFIRMATION FEEDBACK */}
+              {dispatchResults && dispatchResults.length > 0 && (
+                <div style={{ marginTop: '16px', background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '8px', padding: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{ color: '#16a34a', fontWeight: 700, fontSize: '13px' }}>
+                      ✓ Subsystem Synchronization Completed
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {dispatchResults.map((r, i) => (
+                      <div key={i} style={{ fontSize: '12px', color: '#1e293b', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '4px' }}>
+                        <span><strong>{r.subsystem}</strong>: Status {r.status}</span>
+                        <span style={{ color: '#64748b' }}>
+                          {Object.entries(r.summary || {}).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="fin-modal-footer">
+              <button
+                type="button"
+                className="fin-btn fin-btn-secondary"
+                onClick={() => setShowDispatchModal(false)}
+              >
+                Close Hub
+              </button>
+            </div>
           </div>
         </div>
       )}

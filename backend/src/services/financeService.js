@@ -80,6 +80,10 @@ async function exportData(entity = 'invoices', format = 'csv', period = 'all') {
   return model.exportData(entity, format, period)
 }
 
+async function dispatchToSubsystems(payload, userId, userName) {
+  return model.dispatchToSubsystems(payload, userId, userName)
+}
+
 // Integrations
 async function listHousekeepingDamages(status) {
   return model.listHousekeepingDamages(status)
@@ -163,6 +167,7 @@ module.exports = {
   revenueReconciliation,
   generateReport,
   exportData,
+  dispatchToSubsystems,
   listHousekeepingDamages,
   billHousekeepingDamage,
   listMaintenanceRecords,

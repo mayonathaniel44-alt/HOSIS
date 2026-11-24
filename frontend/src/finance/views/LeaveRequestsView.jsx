@@ -334,7 +334,7 @@ export default function LeaveRequestsView({ user, showToast }) {
             onClick={() => setShowPolicyDrawer(!showPolicyDrawer)}
             title="View all 12 leave types and rules"
           >
-            📖 Leave Types Policy ({LEAVE_TYPES.length})
+            Leave Types Policy ({LEAVE_TYPES.length})
           </button>
           <button
             type="button"

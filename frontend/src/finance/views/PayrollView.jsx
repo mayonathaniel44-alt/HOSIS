@@ -551,7 +551,12 @@ export default function PayrollView({ user, showToast }) {
                 className="fin-btn fin-btn-secondary"
                 onClick={() => window.print()}
               >
-                🖨️ Print Payslip
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9" />
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                  <rect x="6" y="14" width="12" height="8" />
+                </svg>
+                Print Payslip
               </button>
               {selectedEmp.status !== 'DISBURSED' && (
                 isChecker ? (
@@ -560,7 +565,7 @@ export default function PayrollView({ user, showToast }) {
                     className="fin-btn fin-btn-primary"
                     onClick={() => handleDisburse(selectedEmp)}
                   >
-                    ✓ Confirm &amp; Disburse Wage
+                    Confirm &amp; Disburse Wage
                   </button>
                 ) : (
                   <span style={{ fontSize: '11.5px', color: '#64748b', fontStyle: 'italic', marginRight: 'auto' }}>
@@ -606,7 +611,12 @@ export default function PayrollView({ user, showToast }) {
                           disabled={loadingHr}
                           onClick={loadHrTimesheets}
                         >
-                          {loadingHr ? 'Syncing HR...' : '📥 Ingest HR Attendance'}
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                          </svg>
+                          {loadingHr ? 'Syncing HR...' : 'Ingest HR Attendance'}
                         </button>
                       ) : (
                         <select

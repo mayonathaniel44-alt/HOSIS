@@ -149,6 +149,8 @@ export const financeApi = {
     `/api/v1/finance/export?entity=${encodeURIComponent(entity)}&format=${encodeURIComponent(format)}&period=${encodeURIComponent(period)}`,
   exportData: (entity = 'invoices', format = 'csv', period = 'all') =>
     request(`/finance/export?entity=${encodeURIComponent(entity)}&format=${encodeURIComponent(format)}&period=${encodeURIComponent(period)}`),
+  dispatchSubsystems: (payload) =>
+    request('/finance/subsystems/dispatch', json('POST', payload)),
 
   // Subsystem Integrations
   hkDamages: (status = '') =>

@@ -951,6 +951,109 @@ async function exportData(entity = 'invoices', format = 'csv', period = 'all') {
   let records = []
   let filename = `hosis-${entity}-${Date.now()}`
 
+  if (entity === 'all' || entity === 'master') {
+    const [invoices, payments, payroll, expenses, audit, hkDamages, sales, leave, maint] = await Promise.all([
+      listInvoices(),
+      listPayments(),
+      listPayroll(),
+      listExpenses(),
+      listAuditLog(),
+      listHousekeepingDamages(),
+      listSalesRecords(),
+      listLeaveRequests({}),
+      listMaintenanceRecords(),
+    ])
+    filename = `hosis-master-finance-archive-${Date.now()}`
+
+    if (format === 'json') {
+      return {
+        filename: `${filename}.json`,
+        contentType: 'application/json',
+        data: {
+          subsystem: 'FINANCE_AND_ACCOUNTING',
+          exportedAt: new Date().toISOString(),
+          recordCounts: {
+            invoices: invoices.length,
+            payments: payments.length,
+            expenses: expenses.length,
+            payroll: payroll.length,
+            hkDamages: hkDamages.length,
+            salesRecords: sales.length,
+            leaveRequests: leave.length,
+            maintenanceRecords: (maint.records || []).length,
+            auditLogs: audit.length,
+          },
+          invoices,
+          payments,
+          expenses,
+          payroll,
+          housekeepingDamages: hkDamages,
+          salesMarketingDeals: sales,
+          leaveRequests: leave,
+          maintenanceFinance: maint,
+          auditLog: audit,
+        },
+      }
+    }
+
+    // Comprehensive Consolidated Ledger CSV
+    const consolidatedRows = [
+      'Record Type,Entity ID,Reference Code,Subsystem / Department,Subject / Party,Amount,Status,Date / Created,Notes / Details',
+    ]
+
+    invoices.forEach((i) => {
+      consolidatedRows.push(
+        `"Invoice","${i.id}","${i.bookingRef || ''}","Front Office","${i.guest || ''}","${i.total || 0}","${i.status || ''}","${i.dueDate || i.issuedDate || ''}","Balance: ${i.balance || 0}"`
+      )
+    })
+    payments.forEach((p) => {
+      consolidatedRows.push(
+        `"Payment","${p.id}","${p.ref || ''}","Front Office / Cashier","${p.guest || ''}","${p.amount || 0}","${p.status || ''}","${p.date || ''}","Method: ${p.method || ''}"`
+      )
+    })
+    expenses.forEach((e) => {
+      consolidatedRows.push(
+        `"Expense","${e.voucherCode || e.id}","${e.reference || ''}","${e.department || ''}","${e.payee || ''}","${e.amount || 0}","${e.status || ''}","${e.expenseDate || ''}","${(e.category || '').replace(/"/g, '""')}"`
+      )
+    })
+    payroll.forEach((pr) => {
+      consolidatedRows.push(
+        `"Payroll","${pr.code || pr.id}","${pr.employeeId || ''}","${pr.department || ''}","${pr.employeeName || ''}","${pr.netSalary || 0}","${pr.status || ''}","${pr.period || ''}","Gross: ${pr.grossSalary || 0}"`
+      )
+    })
+    hkDamages.forEach((hk) => {
+      consolidatedRows.push(
+        `"Housekeeping Damage","${hk.incidentCode || hk.id}","Room ${hk.roomNumber || ''}","Housekeeping","${hk.guestName || ''}","${hk.estimatedCost || 0}","${hk.billingStatus || ''}","${hk.reportDate || ''}","${(hk.damagedItem || '').replace(/"/g, '""')}"`
+      )
+    })
+    sales.forEach((s) => {
+      consolidatedRows.push(
+        `"Sales Deal","${s.dealCode || s.id}","${s.milestoneStage || ''}","Sales & Marketing","${s.clientName || ''}","${s.contractAmount || 0}","${s.status || ''}","${s.eventDate || ''}","${(s.packageName || '').replace(/"/g, '""')}"`
+      )
+    })
+    leave.forEach((lv) => {
+      consolidatedRows.push(
+        `"Leave Request","${lv.requestCode || lv.id}","${lv.leaveType || ''}","${lv.department || ''}","${lv.employeeName || ''}","${lv.totalDays || 0} days","${lv.status || ''}","${lv.startDate || ''}","Compensation: ${lv.compensationImpact || 'PAID'}"`
+      )
+    })
+    ;(maint.records || []).forEach((m) => {
+      consolidatedRows.push(
+        `"Maintenance Record","${m.voucherCode || m.id}","${m.workOrderId || ''}","Engineering","${m.vendor || 'Engineering'}","${m.amount || 0}","${m.status || ''}","${m.expenseDate || ''}","${(m.category || '').replace(/"/g, '""')}"`
+      )
+    })
+    audit.forEach((a) => {
+      consolidatedRows.push(
+        `"Audit Log","${a.transactionCode || a.id}","${a.referenceCode || ''}","${a.source || ''}","${a.userName || ''}","${a.amount || 0}","AUDITED","${a.createdAt || ''}","${(a.activity || '').replace(/"/g, '""')}"`
+      )
+    })
+
+    return {
+      filename: `${filename}.csv`,
+      contentType: 'text/csv',
+      data: consolidatedRows.join('\n'),
+    }
+  }
+
   if (entity === 'invoices') {
     records = await listInvoices()
     filename = `hosis-invoices-bulk-${Date.now()}`
@@ -1769,6 +1872,100 @@ async function getLeaveRequestSummary() {
   }
 }
 
+async function dispatchToSubsystems({ targetSubsystems = [], notes = '' }, userId, userName) {
+  const [invoices, payments, expenses, payroll, hkDamages, sales, leave, maint] = await Promise.all([
+    listInvoices(),
+    listPayments(),
+    listExpenses(),
+    listPayroll(),
+    listHousekeepingDamages(),
+    listSalesRecords(),
+    listLeaveRequests({}),
+    listMaintenanceRecords(),
+  ])
+
+  const timestamp = new Date().toISOString()
+  const results = []
+
+  for (const sub of targetSubsystems) {
+    let summary = {}
+    let activityName = ''
+
+    if (sub === 'FRONT_OFFICE') {
+      summary = {
+        invoicesTransmitted: invoices.length,
+        paymentsPosted: payments.length,
+        receivableBalanceTotal: invoices.reduce((s, i) => s + (Number(i.balance) || 0), 0),
+      }
+      activityName = 'Master Financial Sync: Front Office Folios & Collections'
+    } else if (sub === 'HOUSEKEEPING') {
+      summary = {
+        damagesBilledToGuests: hkDamages.filter((d) => d.billingStatus === 'BILLED').length,
+        pendingDamages: hkDamages.filter((d) => d.billingStatus === 'PENDING_BILLING').length,
+        totalRestitutionAmount: hkDamages.reduce((s, d) => s + (Number(d.estimatedCost) || 0), 0),
+      }
+      activityName = 'Master Financial Sync: Housekeeping Damage Restitution'
+    } else if (sub === 'MAINTENANCE') {
+      summary = {
+        recordsCount: (maint.records || []).length,
+        totalApprovedCost: maint.totalApproved || 0,
+        remainingMaintenanceBudget: maint.remainingBudget || 0,
+      }
+      activityName = 'Master Financial Sync: Engineering & Maintenance Vouchers'
+    } else if (sub === 'SALES_MARKETING') {
+      summary = {
+        dealsCount: sales.length,
+        invoicedDeals: sales.filter((s) => s.status === 'INVOICED').length,
+        totalContractValue: sales.reduce((s, d) => s + (Number(d.contractAmount) || 0), 0),
+      }
+      activityName = 'Master Financial Sync: Corporate Sales & City Ledger'
+    } else if (sub === 'HUMAN_RESOURCES') {
+      summary = {
+        payrollRecordsCount: payroll.length,
+        leaveRequestsCount: leave.length,
+        disbursedSalaries: payroll.reduce((s, p) => s + (Number(p.netSalary) || 0), 0),
+      }
+      activityName = 'Master Financial Sync: HR Payroll & Leave Compensation'
+    } else {
+      summary = { recordCount: invoices.length + payments.length + expenses.length }
+      activityName = `Master Financial Sync: ${sub}`
+    }
+
+    const txCode = `TXN-DSP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 900 + 100)}`
+    await recordAudit(
+      null,
+      txCode,
+      activityName,
+      `DISPATCH-${sub}`,
+      null,
+      `${Object.values(summary)[0] || 0} records`,
+      'Finance & Accounting',
+      userName || 'Finance Officer',
+      {
+        destinationSubsystem: sub,
+        dispatchedBy: userName || 'Finance Officer',
+        dispatchedAt: timestamp,
+        notes: notes || 'Manual master subsystem dispatch from Finance',
+        summary,
+      }
+    )
+
+    results.push({
+      subsystem: sub,
+      status: 'SYNCHRONIZED',
+      dispatchedAt: timestamp,
+      summary,
+    })
+  }
+
+  return {
+    success: true,
+    totalSubsystemsDispatched: results.length,
+    timestamp,
+    dispatches: results,
+  }
+}
+
 module.exports = {
   dashboard,
   listInvoices,
@@ -1787,6 +1984,7 @@ module.exports = {
   revenueReconciliation,
   generateReport,
   exportData,
+  dispatchToSubsystems,
   listHousekeepingDamages,
   billHousekeepingDamage,
   listMaintenanceRecords,

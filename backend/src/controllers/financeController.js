@@ -50,6 +50,7 @@ module.exports = {
   revenueMonitoring: controller((req) => service.revenueReconciliation(req.query.period, req.query.date)),
   generateReport: controller((req) => service.generateReport(req.query.reportType, req.query.period, req.query.date)),
   exportData,
+  dispatchToSubsystems: controller((req) => service.dispatchToSubsystems(req.body, userId(req), userName(req)), 200),
 
   // Subsystem Integrations
   listHousekeepingDamages: controller((req) => service.listHousekeepingDamages(req.query.status)),

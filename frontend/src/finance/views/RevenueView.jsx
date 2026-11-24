@@ -142,7 +142,12 @@ export default function RevenueView({ user, onOpenReport, onNavigate, showToast 
             className="fin-btn fin-btn-primary"
             onClick={onOpenReport}
           >
-            📈 View Periodic Statement
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+            View Periodic Statement
           </button>
         </div>
       </header>
@@ -205,10 +210,13 @@ export default function RevenueView({ user, onOpenReport, onNavigate, showToast 
           <button
             type="button"
             className="fin-btn fin-btn-secondary"
-            style={{ padding: '6px 12px', fontSize: '13px' }}
+            style={{ padding: '6px 14px', fontSize: '12px' }}
             onClick={() => loadRevenue(period, selectedDate)}
           >
-            🔄 Sync
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            Sync
           </button>
         </div>
       </section>
@@ -398,7 +406,10 @@ export default function RevenueView({ user, onOpenReport, onNavigate, showToast 
               onClick={loadNightAuditHistory}
               disabled={loadingAudit}
             >
-              🔄 Refresh Closes
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+              </svg>
+              Refresh Closes
             </button>
             {isChecker ? (
               <button

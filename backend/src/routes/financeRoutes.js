@@ -50,8 +50,9 @@ router.get('/reports', controller.generateReport)
 // Audit Log & Financial Records (Checker full access)
 router.get('/audit', checkerGuard, controller.listAuditLog)
 
-// Bulk Exporter
+// Bulk Exporter & Subsystem Dispatch
 router.get('/export', controller.exportData)
+router.post('/subsystems/dispatch', requireBody, controller.dispatchToSubsystems)
 
 // Subsystem Integrations:
 // 1. Housekeeping: Inventory damage billing from guest

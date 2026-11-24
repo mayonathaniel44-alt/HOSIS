@@ -273,6 +273,11 @@ export default function PaymentsView({ user, showToast }) {
             onClick={handleBulkExportCsv}
             title="Bulk export payment records to CSV spreadsheet"
           >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
             Export CSV
           </button>
           <button
@@ -281,6 +286,11 @@ export default function PaymentsView({ user, showToast }) {
             onClick={handleBulkExportJson}
             title="Bulk export payment records to JSON"
           >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
             Export JSON
           </button>
         </div>
@@ -486,24 +496,24 @@ export default function PaymentsView({ user, showToast }) {
               {/* Settlement Options */}
               <div style={{ marginBottom: '14px' }}>
                 <label className="fin-label">Settlement Amount Option</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                <div className="filter-tabs" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
                   <button
                     type="button"
-                    className={`fin-pill-btn ${paymentOption === 'full' ? 'active' : ''}`}
+                    className={paymentOption === 'full' ? 'tab-active' : ''}
                     onClick={() => handlePaymentOptionChange('full')}
                   >
                     Full Balance
                   </button>
                   <button
                     type="button"
-                    className={`fin-pill-btn ${paymentOption === 'half' ? 'active' : ''}`}
+                    className={paymentOption === 'half' ? 'tab-active' : ''}
                     onClick={() => handlePaymentOptionChange('half')}
                   >
                     50% Partial
                   </button>
                   <button
                     type="button"
-                    className={`fin-pill-btn ${paymentOption === 'custom' ? 'active' : ''}`}
+                    className={paymentOption === 'custom' ? 'tab-active' : ''}
                     onClick={() => handlePaymentOptionChange('custom')}
                   >
                     Custom
@@ -581,7 +591,7 @@ export default function PaymentsView({ user, showToast }) {
                 style={{ width: '100%', padding: '12px', fontSize: '14px', justifyContent: 'center' }}
                 disabled={submitting}
               >
-                {submitting ? 'Recording…' : '💳 Post Customer Payment'}
+                {submitting ? 'Recording…' : 'Post Customer Payment'}
               </button>
             </form>
           </div>
@@ -678,7 +688,12 @@ export default function PaymentsView({ user, showToast }) {
                 className="fin-btn fin-btn-primary"
                 onClick={() => window.print()}
               >
-                🖨️ Print Receipt
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 6 2 18 2 18 9" />
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                  <rect x="6" y="14" width="12" height="8" />
+                </svg>
+                Print Receipt
               </button>
             </div>
           </div>

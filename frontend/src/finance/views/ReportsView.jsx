@@ -122,7 +122,17 @@ export default function ReportsView({ user, showToast }) {
               title="Checker Action: Sign off and seal report for auditing"
               style={{ background: isSignedOff ? 'rgba(34, 197, 94, 0.15)' : undefined, color: isSignedOff ? '#16a34a' : undefined }}
             >
-              {isSignedOff ? '✓ Signed Off by Head' : '✍️ Executive Sign-Off & Seal'}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {isSignedOff ? (
+                  <path d="M20 6L9 17l-5-5" />
+                ) : (
+                  <>
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  </>
+                )}
+              </svg>
+              {isSignedOff ? 'Signed Off by Head' : 'Executive Sign-Off & Seal'}
             </button>
           )}
           <button
@@ -131,6 +141,11 @@ export default function ReportsView({ user, showToast }) {
             onClick={handleBulkExportCsv}
             title="Export full statement as CSV spreadsheet"
           >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
             Export CSV
           </button>
           <button
@@ -139,6 +154,11 @@ export default function ReportsView({ user, showToast }) {
             onClick={handleBulkExportJson}
             title="Export full statement as structured JSON"
           >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
             Export JSON
           </button>
           <button
@@ -147,7 +167,12 @@ export default function ReportsView({ user, showToast }) {
             onClick={handlePrint}
             title="Print or save PDF of current report"
           >
-            🖨️ Print Statement
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 6 2 18 2 18 9" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <rect x="6" y="14" width="12" height="8" />
+            </svg>
+            Print Statement
           </button>
         </div>
       </header>
@@ -181,59 +206,62 @@ export default function ReportsView({ user, showToast }) {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fin-text-dim, #94a3b8)' }}>TIMEFRAME:</span>
-            <div className="fin-pill-toggle" role="tablist">
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fin-text-dim, #64748b)', letterSpacing: '0.04em' }}>TIMEFRAME:</span>
+            <div className="filter-tabs" role="tablist">
               <button
                 type="button"
-                className={`fin-pill-btn ${period === 'daily' ? 'active' : ''}`}
+                className={period === 'daily' ? 'tab-active' : ''}
                 onClick={() => handlePeriodChange('daily')}
               >
-                📅 Daily
+                Daily
               </button>
               <button
                 type="button"
-                className={`fin-pill-btn ${period === 'weekly' ? 'active' : ''}`}
+                className={period === 'weekly' ? 'tab-active' : ''}
                 onClick={() => handlePeriodChange('weekly')}
               >
-                📆 Weekly
+                Weekly
               </button>
               <button
                 type="button"
-                className={`fin-pill-btn ${period === 'monthly' ? 'active' : ''}`}
+                className={period === 'monthly' ? 'tab-active' : ''}
                 onClick={() => handlePeriodChange('monthly')}
               >
-                📊 Monthly
+                Monthly
               </button>
               <button
                 type="button"
-                className={`fin-pill-btn ${period === 'annually' ? 'active' : ''}`}
+                className={period === 'annually' ? 'tab-active' : ''}
                 onClick={() => handlePeriodChange('annually')}
               >
-                📈 Annually
+                Annually
               </button>
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <label htmlFor="reportDate" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fin-text-dim, #94a3b8)' }}>
+          <label htmlFor="reportDate" style={{ fontSize: '11px', fontWeight: 600, color: 'var(--fin-text-dim, #64748b)', letterSpacing: '0.04em' }}>
             TARGET DATE:
           </label>
           <input
             id="reportDate"
             type="date"
             className="fin-input"
-            style={{ padding: '6px 12px', fontSize: '13px', width: '160px' }}
+            style={{ padding: '6px 12px', fontSize: '12px', width: '150px' }}
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
           />
           <button
             type="button"
             className="fin-btn fin-btn-secondary"
-            style={{ padding: '6px 12px', fontSize: '13px' }}
+            style={{ padding: '6px 14px', fontSize: '11.5px' }}
             onClick={() => loadReport(period, selectedDate, reportType)}
           >
-            🔄 Refresh
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            Refresh
           </button>
         </div>
       </section>
