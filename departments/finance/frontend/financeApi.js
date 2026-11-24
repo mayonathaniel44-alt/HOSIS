@@ -20,4 +20,8 @@ export const financeApi = {
   payroll: () => get('payroll'),
   report: () => get('reports'),
   audit: () => get('audit'),
+  housekeepingFindings: () => request('/housekeeping/integrations/finance/charge-findings'),
+  decideHousekeepingFinding: (id, decision) => request(`/housekeeping/integrations/finance/charge-findings/${id}`, {
+    method: 'PATCH', body: JSON.stringify(decision),
+  }),
 }

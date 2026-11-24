@@ -13,8 +13,8 @@ Express routes.
 | Supervisor | Create and assign tasks and schedules; make documented DIRTY/CLEAN corrections; manage inventory receipts/counts; verify lost-item claims and disposal; manage Housekeeping accounts and temporary passwords; release repaired rooms; access the audit report. |
 | Front Office | Read the scoped room projection and Housekeeping notices; submit and track guest requests; release an INSPECTED room as AVAILABLE. It cannot use Housekeeping mutation routes. |
 | Engineering | Receive Housekeeping repair requests and update repair progress. It cannot release a room back into cleaning or availability. |
-| HR | Read privacy-limited workload totals. Housekeeping reads approved leave only for scheduling. |
-| Finance | Read inventory quantities and movement totals without guest or claimant data. |
+| HR | Read privacy-limited workload totals and decide Housekeeping leave requests. Employees can read only their own leave reasons and decisions. |
+| Finance | Read inventory totals and Front Office-validated charge findings; approve or reject the final guest charge without receiving guest contact or claimant data. |
 | Administrator | May open an explicitly scoped department session. The session keeps that selected scope and does not silently retain administrator endpoint access. |
 
 ## Workflow safeguards
@@ -26,6 +26,8 @@ Express routes.
 - Out-of-order rooms remain unavailable until Engineering marks the repair complete, a supervisor releases it, post-repair cleaning is completed, and inspection passes.
 - Lost-item release and disposal require a supervisor. Claimant contact and ID suffixes are excluded from public QR records and ordinary exports.
 - Inventory receipts and count corrections require a supervisor. Normal issued stock remains traceable to the acting staff member and room/request.
+- Charge findings use enforced states (`REPORTED -> FOR_FINANCE -> APPROVED/REJECTED`), required decision notes, row locks, optimistic versions and a unique invoice link. Housekeeping cannot set the final amount.
+- Leave requests reject past, reversed, excessive and overlapping date ranges. Only the requesting employee can withdraw a pending request; only HR or an administrator can decide it.
 
 ## Technical safeguards
 
@@ -41,7 +43,7 @@ Express routes.
 
 ## Deployment rule
 
-Do not expose the Vite development server or accounts with demo passwords to
-the public internet. Public demonstrations should use synthetic data, rotated
+Do not expose the Vite development server or accounts with development passwords to
+the public internet. Public reviews should use synthetic data, rotated
 strong passwords, HTTPS, an allow-listed origin and a controlled deployment.
 Temporary tunnels must be stopped immediately after the demonstration.

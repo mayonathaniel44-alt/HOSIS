@@ -2636,3 +2636,7 @@ tbody tr:last-child td {
 .dialog-note { margin: 0; color: #62566f; line-height: 1.5; }
 
 .login-error { margin: 0 0 12px; padding: 10px 12px; color: #862424; background: #fff1f1; border: 1px solid #edcccc; border-radius: 6px; line-height: 1.5; }
+.record-subtext { display:block; color:var(--muted, #6b7280); margin-top:4px; max-width:320px; white-space:normal; }
+.finding-review { display:grid; gap:7px; min-width:230px; }
+.finding-review input { border:1px solid #d8d8e2; border-radius:8px; padding:8px 10px; }
+.finding-review > div { display:flex; gap:6px; flex-wrap:wrap; }

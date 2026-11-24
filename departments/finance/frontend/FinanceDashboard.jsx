@@ -9,6 +9,7 @@ import RevenueView from './views/RevenueView'
 import PayrollView from './views/PayrollView'
 import ReportsView from './views/ReportsView'
 import HistoryView from './views/HistoryView'
+import HousekeepingChargesView from './views/HousekeepingChargesView'
 import './FinanceDashboard.css'
 
 function HotelCrest() {
@@ -183,6 +184,7 @@ export default function FinanceDashboard({ onOpenFrontOffice, onOpenAdmin, onSig
     { id: 'invoices', label: 'Invoices' },
     { id: 'payments', label: 'Payments' },
     { id: 'expenses', label: 'Expenses' },
+    { id: 'housekeeping-charges', label: 'Housekeeping Charges' },
     { id: 'revenue', label: 'Revenue' },
     { id: 'payroll', label: 'Payroll' },
     { id: 'reports', label: 'Reports' },
@@ -309,6 +311,10 @@ export default function FinanceDashboard({ onOpenFrontOffice, onOpenAdmin, onSig
 
         {activeTab === 'expenses' && (
           <ExpensesView showToast={showToast} />
+        )}
+
+        {activeTab === 'housekeeping-charges' && (
+          <HousekeepingChargesView showToast={showToast} />
         )}
 
         {activeTab === 'revenue' && (

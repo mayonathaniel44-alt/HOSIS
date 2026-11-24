@@ -33,9 +33,15 @@ router.patch('/leaves/:id', async (req, res) => {
   if (!['Approved', 'Rejected'].includes(status)) {
     throw appError(400, 'INVALID_LEAVE_STATUS', 'Choose Approved or Rejected.')
   }
+  const decisionNotes = typeof req.body.decisionNotes === 'string' ? req.body.decisionNotes.trim() : ''
+  if (decisionNotes.length > 500) {
+    throw appError(400, 'INVALID_DECISION_NOTES', 'Decision notes must be 500 characters or fewer.')
+  }
   const result = await db.query(
-    "UPDATE hr_leave_requests SET status = $1 WHERE id = $2 AND status = 'Pending'",
-    [status, req.params.id],
+    `UPDATE hr_leave_requests SET status = $1, decided_at = NOW(), decided_by = $2,
+       decision_notes = NULLIF($3, ''), version = version + 1
+     WHERE id = $4 AND status = 'Pending'`,
+    [status, req.user.userId, decisionNotes, req.params.id],
   )
   if (!result.rowCount) throw appError(409, 'LEAVE_ALREADY_DECIDED', 'The request is missing or has already been reviewed.')
   res.json({ ok: true })

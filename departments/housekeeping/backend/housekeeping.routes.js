@@ -43,6 +43,7 @@ router.use(requirePasswordChanged);
 // role, so these are mounted before the HOUSEKEEPING-only gate below.
 router.use(require('./frontOffice.routes.js'));
 router.use(require('./integrationReports.routes.js'));
+router.use(require('./workflows.routes.js'));
 
 // Front Office can view the room board and details through a scoped session.
 // Keep that session outside all other Housekeeping routes.
@@ -213,6 +214,20 @@ router.get('/audit', requirePosition('SUPERVISOR'), async (req, res) => {
               CONCAT(u.first_name, ' ', u.last_name), m.moved_at
          FROM hk_inventory_movements m JOIN hk_inventory_items i ON i.inv_item_id = m.inv_item_id
          JOIN hk_users u ON u.user_id = m.staff_id
+       UNION ALL
+       SELECT CONCAT('FINDING-', f.finding_id), 'CHARGE_FINDING',
+              CONCAT('Room ', r.room_number, ' / ', f.public_reference),
+              CONCAT(REPLACE(f.category, '_', ' '), ' - ', f.status, ' - ', f.description,
+                     CASE WHEN f.final_amount IS NULL THEN '' ELSE CONCAT(' - PHP ', f.final_amount) END),
+              CONCAT(u.first_name, ' ', u.last_name), f.reported_at
+         FROM hk_charge_findings f JOIN hk_rooms r ON r.room_id=f.room_id
+         JOIN hk_users u ON u.user_id=f.reported_by
+       UNION ALL
+       SELECT CONCAT('LEAVE-', l.id), 'LEAVE_REQUEST', l.id,
+              CONCAT(l.type, ' - ', l.status, ' - ', l.start_date, ' to ', l.end_date),
+              e.name, l.submitted_at
+         FROM hr_leave_requests l JOIN hr_employees e ON e.id=l.emp
+        WHERE e.dept='housekeeping'
        UNION ALL
        SELECT CONCAT('SCHEDULE-', s.schedule_id), 'SCHEDULE', CONCAT('Shift #', s.schedule_id, ' / ', s.assigned_area),
               CONCAT(s.shift, ' shift, ', s.start_time, ' to ', s.end_time),

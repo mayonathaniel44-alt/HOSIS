@@ -123,6 +123,8 @@ export const frontOfficeApi = {
   createPayment: (invoiceId, payment) => request(`/front-office/invoices/${invoiceId}/payments`, json('POST', payment)),
   payment: (id) => request(`/front-office/payments/${id}`),
   updatePayment: (id, fields) => request(`/front-office/payments/${id}`, json('PATCH', fields)),
+  housekeepingFindings: () => request('/housekeeping/integrations/front-office/charge-findings'),
+  reviewHousekeepingFinding: (id, decision, notes) => request(`/housekeeping/integrations/front-office/charge-findings/${id}`, json('PATCH', { decision, notes })),
 }
 
 export const adminApi = {

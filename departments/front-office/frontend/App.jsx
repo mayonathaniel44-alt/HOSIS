@@ -129,6 +129,7 @@ const navigation = [
   { id: 'Guests', icon: 'users' },
   { id: 'Rooms', icon: 'bed' },
   { id: 'Guest requests', icon: 'message' },
+  { id: 'Housekeeping findings', icon: 'alert' },
   { id: 'Billing', icon: 'receipt' },
 ]
 
@@ -157,6 +158,7 @@ function Icon({ name, size = 18, className = '' }) {
     filter: <><path d="M4 7h16M7 12h10m-7 5h4" /><circle cx="8" cy="7" r="2" fill="currentColor" /><circle cx="16" cy="12" r="2" fill="currentColor" /></>,
     close: <><path d="m18 6-12 12M6 6l12 12" /></>,
     mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+    alert: <><path d="M12 3 2 21h20L12 3z" /><path d="M12 9v5M12 18h.01" /></>,
   }
   return <svg className={className} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" {...common}>{shapes[name] || shapes.grid}</svg>
 }
@@ -242,6 +244,8 @@ function App() {
   const [requests, setRequests] = useState([])
   const [roomList, setRoomList] = useState([])
   const [invoices, setInvoices] = useState([])
+  const [chargeFindings, setChargeFindings] = useState([])
+  const [findingNotes, setFindingNotes] = useState({})
   const [arrivalFilter, setArrivalFilter] = useState('All arrivals')
   const [showEarlyDepartures, setShowEarlyDepartures] = useState(false)
   const [departureStayId, setDepartureStayId] = useState('')
@@ -276,6 +280,7 @@ function App() {
     setRoomList(data.rooms.map(mapRoom))
     setRequests(data.requests.map(mapRequest))
     setInvoices(data.invoices.map(mapInvoice))
+    setChargeFindings(data.findings || [])
     setDataError('')
   }, [])
 
@@ -933,6 +938,22 @@ function App() {
     )
   }
 
+  async function reviewFinding(item, decision) {
+    const notes = (findingNotes[item.finding_id] || '').trim()
+    if (!notes) { notify('Enter Front Office review notes first.'); return }
+    await performAction(
+      () => frontOfficeApi.reviewHousekeepingFinding(item.finding_id, decision, notes),
+      decision === 'FORWARD' ? `${item.public_reference} forwarded to Finance.` : `${item.public_reference} rejected.`,
+    )
+  }
+
+  function renderHousekeepingFindings() {
+    return <>
+      <PageIntro eyebrow="HOUSEKEEPING INTEGRATION" title="Room findings" description="Verify the stay context before sending applicable damages and fees to Finance." action={<button className="button button-secondary" onClick={() => performAction(refreshData, 'Housekeeping findings refreshed.')}><Icon name="filter" size={16} /> Refresh</button>} />
+      <section className="surface data-surface"><div className="list-heading"><div><h2>Housekeeping findings</h2><p>Front Office validates the affected reservation; Finance alone decides the final charge.</p></div></div><div className="table-scroll"><table className="full-table"><thead><tr><th>REFERENCE</th><th>ROOM / RESERVATION</th><th>FINDING</th><th>ESTIMATE</th><th>STATUS</th><th>REVIEW</th></tr></thead><tbody>{chargeFindings.map((item) => <tr key={item.finding_id}><td><strong>{item.public_reference}</strong></td><td>Room {item.room_number}<small className="record-subtext">{item.reservation_reference || 'No active/recent stay linked'}</small></td><td>{item.category.replaceAll('_', ' ')}<small className="record-subtext">{item.description}</small></td><td>{item.estimated_amount ? `PHP ${Number(item.estimated_amount).toLocaleString()}` : 'Not estimated'}</td><td>{item.status.replaceAll('_', ' ')}</td><td>{item.status === 'REPORTED' ? <div className="finding-review"><input maxLength="500" placeholder="Required review notes" value={findingNotes[item.finding_id] || ''} onChange={(event) => setFindingNotes({ ...findingNotes, [item.finding_id]: event.target.value })} /><div><button className="small-action" disabled={!item.reservation_reference} onClick={() => reviewFinding(item, 'FORWARD')}>Send to Finance</button><button className="small-action" onClick={() => reviewFinding(item, 'REJECT')}>Reject</button></div>{!item.reservation_reference && <small>Link the room to a checked-in or checked-out reservation first.</small>}</div> : <span>{item.final_amount ? `Finance: PHP ${Number(item.final_amount).toLocaleString()}` : item.front_office_notes || item.finance_notes || '-'}</span>}</td></tr>)}{!loadingWorkspace && !chargeFindings.length && <tr><td colSpan="6">No Housekeeping findings are waiting for review.</td></tr>}</tbody></table></div></section>
+    </>
+  }
+
   const pageRenderer = {
     Dashboard: renderDashboard,
     Reservations: renderReservations,
@@ -941,6 +962,7 @@ function App() {
     Guests: renderGuests,
     Rooms: renderRooms,
     'Guest requests': renderRequests,
+    'Housekeeping findings': renderHousekeepingFindings,
     Billing: renderBilling,
   }
 
