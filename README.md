@@ -1,215 +1,115 @@
-# Grand Horizon Sales & Marketing — improved copy
+# HOSIS — integrated hotel operations
 
-This is a separate application copy. The original remains in
-`../hotel-sales-marketing/hotel-sales-marketing` and keeps its existing database,
-source, login cookie, and running address `http://127.0.0.1:5173`.
+Front Office, Housekeeping, and Engineering repair handoffs now run in one React application and one Express API backed by one PostgreSQL database. Housekeeping uses updatable views of the existing user, room, and guest tables; it does not keep a second room inventory or send status-changing HTTP requests to another service.
 
-## Open this copy
+## Department development
 
-Double-click **Start Improved.bat**, then open **http://127.0.0.1:5174**.
-The launcher serves the built frontend and API in one local process. Keep its
-console open; Ctrl+C stops this copy. Node.js 24 or newer is recommended.
+Open [departments](departments/README.md) to find the source files, database migrations, and tests for your team. Start the app from the shared `frontend` and `backend` folders.
 
-This copy uses its own `database/hotel_sales.db`. The existing accounts were
-copied from the original; use your existing login. Password changes under
-**My Account** affect this copy only. No new staff accounts were created in the
-real database during development. Create your own staff and manager accounts
-under **Users**; new passwords require 12–128 characters. Change inherited demo
-passwords before using customer data.
+## Install and upgrade
 
-The old dashboard's sample business arrays were examples, not database records.
-This copy includes a separate, clearly labeled fictional example pack. Original
-sample arrays remain in the original app. Existing legacy database tables are retained; they are not silently
-imported into a new financial ledger.
+Requirements: Node.js 22.12+ and PostgreSQL 14+. From the main repository:
 
-## What changed
-
-- Permanent SQLite storage for campaigns, inquiries, leads, corporate clients,
-  promotions, quotations, confirmed sales and Finance receipt/refund entries.
-- Add, view, search and edit business records. Eligible records can be deleted to a restorable trash view or archived
-  and restored by managers. Linked and financial records cannot be archived.
-- Atomic inquiry → lead → quotation → sale workflow. Duplicate inquiry conversion,
-  duplicate sale confirmation, and duplicate Reservations/Finance references are
-  rejected. Converted/accepted records preserve their history.
-- Server-side field, date, amount, email, reference, and workflow validation.
-  Edits use versions to reject stale updates from another window.
-- Promotions require approval by a different manager. Editing an approved offer
-  returns it to Pending. Quotations retain the agreed discount and price.
-- Reservations confirmation is mandatory before recording a sale. A staff member
-  checks availability manually and supplies the Reservations confirmation reference.
-- Managers record receipts and refunds. Unique internal reference numbers are generated
-  automatically (REC-YYYYMMDD-NNNNNN / REF-YYYYMMDD-NNNNNN); an external Finance
-  reference is optional and, when supplied, must be unique. The system separates
-  booked value, receipts, refunds, current outstanding balance and refund amounts
-  still due for cancelled sales. Entries cannot be silently edited or deleted.
-- Date-filtered Excel reports, charts based on saved data, campaign attribution,
-  conversion rates and lifetime return on advertising spend (ROAS).
-- Follow-up dates and a dashboard of overdue/due inquiries and leads.
-- Sales Staff, Manager and Super Admin permissions enforced in the API. Admins
-  create staff, change roles and disable accounts, revoking their sessions.
-- Password changes require the current password and revoke other sessions.
-- Actor, UTC timestamp, before values and after values recorded for changes.
-  The audit screen displays the latest 1,000 entries in Manila time.
-- JSON business backup/restore with validation, atomic rollback on invalid input,
-  and a saved pre-restore recovery point. Restore bumps record versions.
-- Responsive navigation, keyboard-operable dialogs, visible save errors and retry.
-
-## Roles
-
-| Capability | Sales Staff | Manager | Super Admin |
-|---|---|---|---|
-| Read business records and export reports | Yes | Yes | Yes |
-| Manage inquiries, leads, clients, quotations and confirm sales | Yes | Yes | Yes |
-| Manage campaigns/promotions and approve another user's promotion | No | Yes | Yes |
-| Reconcile Finance, cancel sales, archive/restore, read audit | No | Yes | Yes |
-| Create/change/disable users, business backup/restore | No | No | Yes |
-| Change own password | Yes | Yes | Yes |
-
-## Reporting definitions
-
-- **Booked value**: confirmed, non-cancelled sales dated within the selected range.
-  This is a sales commitment, not accounting revenue recognition.
-- **Collections**: receipt and refund entries whose Finance dates fall within the
-  selected range, including payments for bookings made outside that range.
-- **Outstanding**: current unpaid balance of confirmed sales dated within range;
-  it is not a historical balance as of the range end date.
-- **Conversion**: leads created within range that also have a confirmed sale
-  within range, divided by leads created within range. A zero denominator is N/A.
-- **Campaign spend and ROAS**: lifetime actual spend and lifetime confirmed booked
-  value / spend. Period leads/bookings are separate columns. No profit ROI is
-  claimed because operating costs are not available.
-- **Refund due**: net receipts still held against cancelled sales dated in range.
-- Reports filter transaction datasets by their own business date. Campaign rows
-  use campaign start dates; attribution separately lists lifetime campaigns.
-  Client master records are exported as a current snapshot in a separate table,
-  explicitly labeled as not filtered by report dates.
-- Money is validated to two decimal places. Aggregations and payment bounds use
-  integer centavos to avoid floating-point rounding drift.
-
-## Backup and recovery
-
-Use **Backup & Restore → Download backup**. The JSON includes business records,
-archived items, record references and payment history. It contains customer data;
-store it securely. It excludes login secrets and sessions. Users and audit history
-remain in the current database when a business backup is restored.
-
-Select the file and type **RESTORE** to replace business records. A recovery point
-of the old workspace is saved inside this database first. Download it and select
-it in the same restore screen to revert. Invalid or inconsistent backups roll back
-the entire replacement. Browser uploads are limited to 9 MB.
-
-For disaster recovery including accounts and the complete audit history, stop this
-copy and copy the entire `database` directory to secure storage. Restore that
-directory while this copy is stopped. Business JSON alone is not a full system image.
-
-## Build and verify
-
-```text
+```powershell
+cd backend
 npm ci
-npm ci --prefix backend
-npm ci --prefix frontend
-npm run build
-npm test
-npm run test:ui
-npm start
+# For a new installation only:
+Copy-Item .env.example .env
 ```
 
-UI tests use installed Microsoft Edge in headless mode and a temporary SQLite
-database. Test accounts, bookings and payments never touch either real app's
-database. Screenshots and verified exports are under `test-results`.
+Set `DATABASE_URL` to the existing Front Office database, `JWT_SECRET` to a unique random secret of at least 32 characters, and `DB_TIME_ZONE` to the hotel's IANA time zone (default `Asia/Manila`). Set `FRONTEND_ORIGINS` for the frontend origin. Keep real secrets out of version control.
 
-`backend/test/business.test.js` covers persistence after reopening the database,
-role restrictions, origin/session checks through the auth suite, bad date ranges,
-approval separation, stale updates, duplicate conversion, quotation pricing,
-availability checks, overpayment/refund rejection, cancellation, linked-record
-archiving, archive restore, malformed backup rollback, recovery and user disabling.
+Back up the database before upgrading. Then run:
 
-`frontend/src/analytics.test.mjs` covers reporting dates, cancelled sales, Finance
-dates, centavo arithmetic, empty periods and campaign attribution.
+```powershell
+npm run db:migrate
+```
 
-`scripts/check-ui.cjs` tests the complete workflow through the browser, persistence
-after refresh, date-filtered Excel values, backup/restore, audit, mobile navigation
-and sign-out. See `docs/DEFENSE-GUIDE.md` for a presentation checklist.
+Migrations 14 and 15 add staff profiles, Housekeeping tables, shared views, request synchronization, login-attempt tracking, and password-change session revocation. Existing Front Office IDs and tables are preserved. The migration does not seed demo users or inventory. Run it before starting the updated backend.
 
-## Boundaries
+For a new installation, create the first administrator by setting `BOOTSTRAP_USERNAME`, `BOOTSTRAP_PASSWORD` (at least 12 characters, at most 72 UTF-8 bytes), and `BOOTSTRAP_ROLE=ADMIN` in the backend environment, then run `npm run user:create`. Remove bootstrap credentials after setup. On an existing installation, sign in with your administrator account.
 
-This is a local coursework/prototype system bound to this laptop. Reservations
-inventory and Finance systems are not connected by live APIs. Availability and
-payment references are manually verified; this app neither processes money nor
-prevents another Reservations system from assigning the same room. Campaign
-spending is entered by managers rather than imported from ad platforms.
+In **Administrator → Staff & access**, create Housekeeping accounts with position `SUPERVISOR`, `INSPECTOR`, or `HOUSEKEEPER`, and create `ENGINEERING` accounts for repairs. Existing Housekeeping-role accounts default to HOUSEKEEPER; administrators can change their position. Administrator and Front Office bootstrap roles remain supported.
 
-The SQLite database is not encrypted by this app. Anyone with filesystem access
-can alter it; the audit trail is application-level, not tamper-proof forensic
-storage. OS access controls, production hosting/security review, genuine department
-integrations and user acceptance testing are needed before a live hotel rollout.
+## Run
 
-Business data uses the `business_records` table with typed JSON payloads, versions,
-archive flags and creator/timestamps, plus `business_audit` and `business_recovery`.
-The API validates relationships and monetary constraints inside SQLite transactions.
-Legacy schema tables are preserved separately. No claim of a fully normalized
-domain schema or external reservation/payment integration is made.
+```powershell
+# Terminal 1, main repository
+cd backend
+npm run dev
 
-## Interface and examples update
+# Terminal 2, main repository
+cd frontend
+npm ci
+npm run dev
+```
 
-Add buttons and create-form Save buttons are green. The profile displays the
-actual username; the administrator role is labeled Administrator. Campaign types
-match the original exactly: Social Media, Email Marketing, Corporate, Promotional,
-and Website.
+Open the Vite URL (normally http://localhost:5173). Choose Front Office, Housekeeping, Engineering, or Administrator on the shared sign-in screen. Administrators can open Housekeeping or Front Office from the console. The frontend proxies `/api` to port 3000; `VITE_API_PROXY_TARGET` changes the development target. `VITE_API_BASE_URL` can specify another deployed `/api/v1` base URL.
 
-Each account has persistent private notifications, an unread counter, individual
-read tracking and Mark all as read. Updates poll every 15 seconds and refresh
-after your changes or when the browser regains focus. Other users cannot mark
-your notifications as read.
+Select **Housekeeping** on the shared sign-in screen and use your existing HOSIS credentials. Administrator accounts receive Housekeeping supervisor access in that session. Front Office accounts see read-only room status. Select **Front Office** to release inspected rooms, assign rooms, and manage reservations, or **Administrator** to manage accounts and settings.
 
-Excel downloads contain the hotel logo, branded headings, native filterable Excel
-tables with striped rows, frozen headers, PHP currency formatting and print setup.
+All operational endpoints are under `/api/v1`: `/front-office`, `/housekeeping`, `/admin`, and `/auth`. Main responses use `{data: ...}`; Housekeeping resources retain their named response fields for the imported UI. Both clients understand the main error envelope.
 
-The one-time example pack adds 14 fictional records: two each for campaigns,
-corporate clients, inquiries, leads, promotions and quotations, plus one confirmed
-sale and one deposit entry. Promotions remain Pending for a different manager
-to approve. The Show examples control has been removed; starter records appear automatically. Existing records
-are preserved. Example-generated leads, quotations, sales and payments retain
-the example flag. No sample login accounts or real external bookings are created.
+## Connected workflows
 
-## Original starter data
+- A Front Office checkout marks the room DIRTY and creates or reopens its CHECKOUT cleaning task in the same transaction.
+- A supervisor assigns the task; its housekeeper starts and completes it. Completion makes a vacant room CLEAN. Occupied stayover rooms keep their occupied status.
+- A different inspector or supervisor records the inspection. Failure returns the task for recleaning. Success makes the room INSPECTED. Front Office releases it from the Rooms screen, making it AVAILABLE or RESERVED if a confirmed reservation already holds it. Front Office assigns ready rooms and check-in or checkout updates occupancy automatically.
+- Room-linked Front Office guest requests appear in Housekeeping. Housekeeping owns assignment, stock approval, and completion; changes return to Front Office in the same transaction. Roomless requests remain Front Office work.
+- Room-condition reports and readiness notices appear on the Front Office Rooms page and can be acknowledged.
+- Supervisors can take an unoccupied/unreserved room out of service through maintenance. Engineering records the repair. A supervisor releases a repaired room to DIRTY and a post-repair cleaning task; another outstanding blocking repair prevents release.
 
-The standard launcher now loads the original file’s starter arrays automatically,
-once per database. Campaigns, inquiries, clients, leads, promotions and sales use
-the original names and values. Two draft quotations support the added quotation
-section. Original Paid sales produce matching receipt ledger entries. Historical
-sales without stay/quotation details are marked as legacy imports internally;
-new sales still require the normal quotation and Reservations workflow. Imported
-promotions require approval under the current workflow.
+Check-in requires an assigned, released room and the scheduled arrival date. For an early/late arrival, update the reservation dates before check-in. Password resets and logout revoke existing tokens; logout currently signs that account out on all devices. Temporary Housekeeping passwords must be changed before operational access.
 
-Untouched records from the previous generated example pack are archived, with a
-recovery snapshot saved first. User changes and records with user-added dependents
-are preserved. There is no Show examples checkbox or example banner.
+`DB_TIME_ZONE` is the authoritative server time zone. The administration settings display it read-only; change the server environment and restart to change it. Front Office date inputs use the server time zone returned with the session.
 
-## Confirmation, pagination and cancellation update
+## Secure Wi-Fi setup
 
-The existing Super Admin role is displayed as Admin. Its stored role identifier,
-permissions and the limitations of Manager and Sales Staff remain unchanged. No
-external approval integration or Manager privilege expansion was added.
+The development server on port 5173 serves HTTP. Use synthetic data when testing it over Wi-Fi. For real staff and guest data, build the frontend and configure `HOSIS_TLS_CERT` and `HOSIS_TLS_KEY` in the backend environment with paths to a certificate and private key trusted by the connecting devices. Set `API_HOST` to the host's Wi-Fi address, `PORT` to the desired HTTPS port, and `FRONTEND_ORIGINS` to the exact HTTPS origin including the port if applicable. Start the backend with `npm start`. It serves the built app and API together over HTTPS and keeps the session token in an HttpOnly cookie. Stop the development server when using this setup.
 
-Record forms now review details before Confirm, including an explicit draft
-confirmation. Delete/restore/conversion/approval/sign-out require confirmation.
-Closing a changed form asks whether to discard unsaved changes. Saved-change
-messages appear only in an Action completed popup.
+The backend binds to loopback by default. Give its `DATABASE_URL` a restricted PostgreSQL login with the necessary table, view, and sequence privileges. Provide the migration account separately through `MIGRATION_DATABASE_URL` or the ignored backend `.env.local` file. The runtime reads `.env`. An explicitly supplied `DATABASE_URL` can still be used to migrate an isolated test database.
 
-Every on-screen table, including Audit History, displays 10 rows per page, with
-Previous/Next controls. Search resets pagination. This does not truncate exports.
-Table headings, content and status badges are centered. Excel report logos and
-headings are centered above the table on every sheet.
+## Validate
 
-Phone fields accept PH mobile numbers in 09XXXXXXXXX, 639XXXXXXXXX or
-+639XXXXXXXXX format. Letters are stripped at entry; local numbers are capped at
-11 digits and international numbers at 12 digits plus an optional leading +. The
-server validates the same formats, including backup restore.
+```powershell
+# frontend
+npm run build
+npm run lint
+npm audit
 
-For new sale cancellations, the fee is 10% of the full agreed booking value,
-rounded to the nearest centavo. Existing historical cancellations are unchanged.
-Refund due = max(net payments received − cancellation fee, 0). A partially paid
-booking may leave a cancellation fee balance still due. Additional fee receipts
-are limited to that balance, and refunds cannot consume the retained fee. The
-app records the charge and reconciliation; it does not move money automatically.
+# backend: pure tests (database integration test is skipped without TEST_DATABASE_URL)
+npm test
+npm audit
+```
+
+For the full database-backed suite, provision a **separate local database named `hosis_test`**, apply the main migrations to it using an explicitly scoped `DATABASE_URL`, then set `TEST_DATABASE_URL` to that test database and run `npm test`. The suite inserts synthetic test records and never reads the normal application database URL. It checks the full room cycle, requests/stock, concurrent claims and schedules, repairs, role denial, password replacement, logout revocation, and throttling.
+
+## Existing standalone Housekeeping project
+
+The sibling `HOSIS-Housekeeping/hosis-housekeeping` is retained as a standalone project and has also received session, concurrency, validation, password-policy, and dependency fixes. Its test suite now refuses to run without an explicit local `TEST_DATABASE_URL` whose database name begins with `hosis_test`. Its demo credential is `password12345` for synthetic development data only.
+
+### Shared Housekeeping classroom credentials
+
+The integrated and standalone classroom/demo installations use the same three role accounts:
+
+| Username | Position | Demo password |
+| --- | --- | --- |
+| `hk.supervisor` | Supervisor | `password12345` |
+| `hk.inspector` | Inspector | `password12345` |
+| `hk.housekeeper` | Housekeeper | `password12345` |
+
+These credentials are for local classroom demonstrations only. Replace them before publishing a deployment to the internet.
+
+Historical records from that separate database are **not automatically copied** into the canonical HOSIS database. Importing real standalone staff, room, and guest data needs explicit ID mapping and duplicate review. Do not load its standalone shared-table SQL or demo seed into the main database.
+
+The old `integrations/housekeeping/backend` server/app/migration entry points delegate to the main backend. Its separate bootstrap/demo commands are disabled. The old HTTP connector helpers remain as reference-only code and isolated tests; `HOSIS_API_BASE_URL` and `HOSIS_INTEGRATION_TOKEN` are no longer used by the running app.
+
+## Administrator credentials at Front Office sign-in
+
+An administrator may select Front Office at sign-in using the same configured username and password. This creates a Front Office-scoped session; administrator endpoints remain forbidden for that session, including after refresh or password replacement. Select Administrator to open the administrator console. Department-only accounts cannot elevate their role.
+
+## Local demo data
+
+From the `backend` folder, run `npm run db:migrate` and then `npm run db:seed-demo`. The seed only runs against a local HOSIS development database. It adds rooms, a checked-in guest, cleaning and repair work, sales records, HR records, and linked invoices and charges. Run it again to check setup without duplicating or resetting data.
+
+The seed creates local staff accounts including `fo.sofia`, `hk.leah`, `eng.roberto`, `fin.bianca`, `hr.patricia`, and `sm.camille`. Open the ignored `backend/.env.demo` file for the generated passwords. Use the password under `demo_front_office` for `fo.sofia` and the matching department key for the other accounts. The demo technician uses Engineering & Maintenance.
