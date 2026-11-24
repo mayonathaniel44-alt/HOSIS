@@ -13,7 +13,12 @@ export async function loadWorkspace(api = frontOfficeApi) {
         .notifications()
         .then((data) => ({ data, error: null }))
         .catch((error) => ({ data: null, error: error.message })),
-      api.housekeepingFindings(),
+      (typeof api.housekeepingFindings === 'function'
+        ? api.housekeepingFindings()
+        : Promise.resolve({ findings: [] })
+      )
+        .then((data) => ({ data, error: null }))
+        .catch((error) => ({ data: null, error: error.message })),
     ])
   return {
     dashboard,
@@ -24,6 +29,7 @@ export async function loadWorkspace(api = frontOfficeApi) {
     invoices,
     notices: notices.data?.notifications || [],
     noticeError: notices.error,
-    findings: findings.findings || [],
+    findings: findings.data?.findings || [],
+    findingsError: findings.error,
   }
 }

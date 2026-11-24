@@ -42,6 +42,16 @@ test('successful notifications are included in the workspace', async () => {
   assert.equal(data.notices[0].id, 3)
   assert.equal(data.noticeError, null)
 })
+test('Housekeeping findings failing does not hide Front Office records', async () => {
+  const api = resources()
+  api.housekeepingFindings = async () => {
+    throw new Error('Housekeeping unavailable')
+  }
+  const data = await loadWorkspace(api)
+  assert.equal(data.guests[0].id, 1)
+  assert.deepEqual(data.findings, [])
+  assert.equal(data.findingsError, 'Housekeeping unavailable')
+})
 test('a failure loading core records remains a visible load failure', async () => {
   const api = resources()
   api.reservations = async () => {
