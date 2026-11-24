@@ -720,7 +720,7 @@ export default function LeaveRequestsView({ user, showToast }) {
             </div>
 
             <form onSubmit={handleSubmit}>
-              <div className="fin-modal-body" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
+              <div className="fin-modal-body">
                 {/* Quick Staff Selection */}
                 {hrStaff.length > 0 && (
                   <div className="fin-form-group">
@@ -758,20 +758,6 @@ export default function LeaveRequestsView({ user, showToast }) {
                       onChange={(e) => setEmployeeId(e.target.value)}
                     />
                   </div>
-                </div>
-
-                <div className="fin-form-group">
-                  <label className="fin-label">Hotel Department *</label>
-                  <select
-                    className="fin-input"
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    required
-                  >
-                    {DEPARTMENTS.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
                 </div>
 
                 {/* TYPE OF LEAVE SELECTION */}
@@ -885,7 +871,7 @@ export default function LeaveRequestsView({ user, showToast }) {
                   className="fin-btn fin-btn-primary"
                   disabled={submitting}
                 >
-                  {submitting ? 'Submitting Leave Request…' : '✓ Submit Leave Request'}
+                  {submitting ? 'Submitting Leave Request…' : 'Submit Leave Request'}
                 </button>
               </div>
             </form>

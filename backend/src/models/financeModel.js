@@ -1891,7 +1891,20 @@ async function dispatchToSubsystems({ targetSubsystems = [], notes = '' }, userI
     let summary = {}
     let activityName = ''
 
-    if (sub === 'FRONT_OFFICE') {
+    if (sub === 'SUPER_ADMIN') {
+      summary = {
+        totalInvoices: invoices.length,
+        totalPayments: payments.length,
+        totalExpenses: expenses.length,
+        totalPayroll: payroll.length,
+        totalHkDamages: hkDamages.length,
+        totalSalesDeals: sales.length,
+        totalLeaveRequests: leave.length,
+        totalMaintenanceRecords: (maint.records || []).length,
+        auditLogsCount: (await listAuditLog()).length,
+      }
+      activityName = 'Master Financial Sync: Project Manager & Superadmin Central Console'
+    } else if (sub === 'FRONT_OFFICE') {
       summary = {
         invoicesTransmitted: invoices.length,
         paymentsPosted: payments.length,
