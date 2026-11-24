@@ -213,3 +213,4 @@ Refund due = max(net payments received − cancellation fee, 0). A partially pai
 booking may leave a cancellation fee balance still due. Additional fee receipts
 are limited to that balance, and refunds cannot consume the retained fee. The
 app records the charge and reconciliation; it does not move money automatically.
+ 
