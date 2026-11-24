@@ -52,6 +52,22 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenFina
   const [staffStatusFilter, setStaffStatusFilter] = useState('ALL')
   const [passwordResetId, setPasswordResetId] = useState(null)
   const [newPassword, setNewPassword] = useState('')
+  const [adminSearch, setAdminSearch] = useState('')
+
+  const today = new Date()
+  const dayCaption = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(today).toUpperCase()
+  const dateLabel = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(today)
 
   useEffect(() => {
     let active = true

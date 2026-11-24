@@ -62,6 +62,16 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
   const [toastMessage, setToastMessage] = useState('')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [globalSearch, setGlobalSearch] = useState('')
+
+  const today = new Date()
+  const dateLabel = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(today)
 
   const roleDisplay = {
     ADMIN: 'SUPER ADMIN',
@@ -178,6 +188,23 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
           </nav>
         </div>
 
+        {/* Help Card & Sidebar Bottom */}
+        {!sidebarCollapsed && (
+          <div style={{ padding: '0 12px 14px' }}>
+            <div className="help-card">
+              <span className="help-icon" aria-hidden="true">✦</span>
+              <strong>Here to help</strong>
+              <p>Need a hand? Your hotel admin is one message away.</p>
+              <button
+                type="button"
+                onClick={() => showToast('Hotel administration desk alerted.')}
+              >
+                Get support →
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Sidebar Footer: User Info, Role Badge & Switcher Actions */}
         <div className="finance-sidebar-footer">
           {!sidebarCollapsed ? (
@@ -230,7 +257,7 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
 
       {/* Main Work Surface */}
       <main className="finance-fullscreen-main">
-        {/* Top Header Strip with Hide/Show Menu Toggle Button */}
+        {/* Top Header Strip with Breadcrumb, Search, Date, Bell, and Profile */}
         <header className="finance-top-strip no-print">
           <div className="finance-strip-left">
             <button
@@ -256,12 +283,71 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
               </span>
             </button>
 
-            <div className="finance-strip-breadcrumb">
-              <span className="finance-strip-hotel-badge">GH</span>
+            <div className="breadcrumb finance-breadcrumb-bar">
+              <span>Workspace</span>
+              <span style={{ opacity: 0.35, margin: '0 2px' }}>›</span>
               <span>Finance</span>
-              <span className="finance-strip-sep">/</span>
+              <span style={{ opacity: 0.35, margin: '0 2px' }}>›</span>
               <strong>{financialTasks.find((t) => t.id === activeTab)?.label || 'Overview'}</strong>
             </div>
+          </div>
+
+          <div className="topbar-tools finance-topbar-tools">
+            <div className="global-search">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-4-4" />
+              </svg>
+              <input
+                type="search"
+                aria-label="Search finance records"
+                placeholder="Search anything..."
+                value={globalSearch}
+                onChange={(e) => setGlobalSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="topbar-date">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c89b3b" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2m0 16v2m10-10h-2M4 12H2m17.07 7.07-1.42-1.42M6.35 6.35 4.93 4.93m14.14 0-1.42 1.42M6.35 17.65l-1.42 1.42" />
+              </svg>
+              <span>{dateLabel}</span>
+            </div>
+
+            <button
+              type="button"
+              className="notification-button"
+              aria-label="Notifications"
+              title="Pending approvals and alerts"
+              onClick={() => showToast('🔔 3 leave requests & 2 expense vouchers awaiting review.')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+                <path d="M10 21h4" />
+              </svg>
+              <i />
+            </button>
+
+            <div className="topbar-divider" />
+
+            <button
+              type="button"
+              className="topbar-profile"
+              onClick={onSignOut}
+              title={`Sign out ${userDisplayName}`}
+              aria-label="Sign out"
+            >
+              <span className="avatar avatar-small">{userInitials}</span>
+              <span>
+                <strong>{userDisplayName}</strong>
+                <small>{roleDisplay}</small>
+              </span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 17l5-5-5-5M15 12H3" />
+                <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
+              </svg>
+            </button>
           </div>
         </header>
 
