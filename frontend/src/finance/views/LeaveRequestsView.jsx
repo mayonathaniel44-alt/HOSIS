@@ -321,17 +321,16 @@ export default function LeaveRequestsView({ user, showToast }) {
 
   return (
     <>
-      <div className="finance-breadcrumb">Finance &amp; Accounting / Staff Leave Requests</div>
-
-      <header className="finance-header">
-        <div className="finance-header-titles">
-          <h1>Staff Leave Requests &amp; Entitlement Management</h1>
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">STAFF ENTITLEMENTS &amp; ATTENDANCE</span>
+          <h1>Staff Leave Requests <span className="wave">✦</span></h1>
           <p>Official hotel leave filings, attendance synchronization, and statutory leave categorization.</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             type="button"
-            className="fin-btn fin-btn-secondary"
+            className="button button-secondary"
             onClick={() => setShowPolicyDrawer(!showPolicyDrawer)}
             title="View all 12 leave types and rules"
           >
@@ -339,46 +338,63 @@ export default function LeaveRequestsView({ user, showToast }) {
           </button>
           <button
             type="button"
-            className="fin-btn fin-btn-primary"
+            className="button button-primary"
             onClick={() => setShowSubmitModal(true)}
-            style={{ padding: '9px 18px', fontSize: '13px', fontWeight: 700 }}
             title="File a new staff leave request"
           >
-            ➕ File Leave Request
+            + File Leave Request
           </button>
         </div>
-      </header>
+      </div>
 
       {/* KPI Cards */}
-      <section className="fin-kpi-grid">
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">TOTAL LEAVE FILED</span>
-          <div className="fin-kpi-val">{summary?.totalRequests || requests.length || 0}</div>
-          <span className="fin-kpi-note positive">Across all hotel departments</span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">PENDING APPROVAL</span>
-          <div className="fin-kpi-val" style={{ color: '#d97706' }}>
+      <section className="stats-grid fin-kpi-grid">
+        <article className="surface stat-card fin-kpi-card">
+          <div className="stat-top">
+            <span>TOTAL LEAVE FILED</span>
+            <span className="stat-icon stat-gold">📅</span>
+          </div>
+          <div className="stat-value">{summary?.totalRequests || requests.length || 0}</div>
+          <span className="stat-note" style={{ color: '#16a34a', fontWeight: 600 }}>
+            Across all hotel departments
+          </span>
+        </article>
+        <article className="surface stat-card fin-kpi-card">
+          <div className="stat-top">
+            <span>PENDING APPROVAL</span>
+            <span className="stat-icon stat-peach">⏰</span>
+          </div>
+          <div className="stat-value" style={{ color: '#d97706' }}>
             {summary?.pendingCount ?? requests.filter((r) => r.status === 'PENDING').length}
           </div>
-          <span className="fin-kpi-note warning">Awaiting manager review</span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">ON LEAVE TODAY</span>
-          <div className="fin-kpi-val" style={{ color: '#16a34a' }}>
+          <span className="stat-note" style={{ color: '#d97706', fontWeight: 600 }}>
+            Awaiting manager review
+          </span>
+        </article>
+        <article className="surface stat-card fin-kpi-card">
+          <div className="stat-top">
+            <span>ON LEAVE TODAY</span>
+            <span className="stat-icon stat-mint">✓</span>
+          </div>
+          <div className="stat-value" style={{ color: '#16a34a' }}>
             {summary?.onLeaveToday ?? 0}
           </div>
-          <span className="fin-kpi-note positive">Active approved staff leaves</span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">APPROVED DAYS (YTD)</span>
-          <div className="fin-kpi-val" style={{ color: '#2563eb' }}>
+          <span className="stat-note" style={{ color: '#16a34a', fontWeight: 600 }}>
+            Active approved staff leaves
+          </span>
+        </article>
+        <article className="surface stat-card fin-kpi-card">
+          <div className="stat-top">
+            <span>APPROVED DAYS (YTD)</span>
+            <span className="stat-icon stat-lavender">📊</span>
+          </div>
+          <div className="stat-value" style={{ color: '#2563eb' }}>
             {summary?.totalApprovedDays ?? 0}
           </div>
-          <span className="fin-kpi-note neutral">
+          <span className="stat-note">
             {summary?.totalUnpaidDays ? `${summary.totalUnpaidDays} Unpaid (LWOP)` : 'All statutory & company entitlements'}
           </span>
-        </div>
+        </article>
       </section>
 
       {/* Main Surface */}

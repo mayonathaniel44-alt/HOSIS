@@ -270,64 +270,78 @@ export default function InvoicesView({ user, showToast }) {
 
   return (
     <>
-      <div className="finance-breadcrumb">Finance &amp; Accounting / Invoices &amp; Billing</div>
-
-      <header className="finance-header">
-        <div className="finance-header-titles">
-          <h1>Invoices &amp; Billing Folios</h1>
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">GUEST &amp; CORPORATE BILLING</span>
+          <h1>Invoices &amp; Billing Folios <span className="wave">✦</span></h1>
           <p>Issue guest folios, manage corporate event accounts, and monitor accounts receivable balances.</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             type="button"
-            className="fin-btn fin-btn-secondary"
+            className="button button-secondary"
             onClick={handleBulkExportCsv}
             title="Bulk export all invoices to CSV spreadsheet"
           >
-            📥 Bulk Export CSV
+            📥 Export CSV
           </button>
           <button
             type="button"
-            className="fin-btn fin-btn-secondary"
+            className="button button-secondary"
             onClick={handleBulkExportJson}
             title="Bulk export invoices to JSON"
           >
-            📋 Bulk Export JSON
+            📋 Export JSON
           </button>
           <button
             type="button"
-            className="fin-btn fin-btn-primary"
+            className="button button-primary"
             onClick={() => setShowCreateModal(true)}
             title="Create a new customer or corporate invoice"
           >
-            ➕ Create New Invoice
+            + Create New Invoice
           </button>
         </div>
-      </header>
+      </div>
 
       {/* KPI Cards */}
-      <section className="fin-kpi-grid fin-kpi-grid-3">
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Total Invoiced Billed</span>
-          <div className="fin-kpi-val" style={{ color: '#38bdf8' }}>
+      <section className="stats-grid fin-kpi-grid fin-kpi-grid-3">
+        <article className="surface stat-card fin-kpi-card">
+          <div className="stat-top">
+            <span>TOTAL INVOICED BILLED</span>
+            <span className="stat-icon stat-gold">📑</span>
+          </div>
+          <div className="stat-value" style={{ color: '#0d1238' }}>
             ₱{totalBilled.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </div>
-          <span className="fin-kpi-note positive">{invoices.length} total billing records</span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Total Collections Realized</span>
-          <div className="fin-kpi-val" style={{ color: '#22c55e' }}>
+          <span className="stat-note" style={{ color: '#16a34a', fontWeight: 600 }}>
+            {invoices.length} total billing records
+          </span>
+        </article>
+        <article className="surface stat-card fin-kpi-card">
+          <div className="stat-top">
+            <span>TOTAL COLLECTIONS REALIZED</span>
+            <span className="stat-icon stat-mint">✓</span>
+          </div>
+          <div className="stat-value" style={{ color: '#16a34a' }}>
             ₱{totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </div>
-          <span className="fin-kpi-note positive">Settled guest &amp; client payments</span>
-        </div>
-        <div className="fin-kpi-card">
-          <span className="fin-kpi-label">Outstanding Receivables Due</span>
-          <div className="fin-kpi-val" style={{ color: '#f59e0b' }}>
+          <span className="stat-note" style={{ color: '#16a34a', fontWeight: 600 }}>
+            Settled guest &amp; client payments
+          </span>
+        </article>
+        <article className="surface stat-card fin-kpi-card">
+          <div className="stat-top">
+            <span>OUTSTANDING RECEIVABLES DUE</span>
+            <span className="stat-icon stat-peach">⏳</span>
+          </div>
+          <div className="stat-value" style={{ color: '#d97706' }}>
             ₱{totalReceivables.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </div>
-          <span className="fin-kpi-note warning">Pending collection balance</span>
-        </div>
+          <span className="stat-note" style={{ color: '#d97706', fontWeight: 600 }}>
+            Pending collection balance
+          </span>
+        </article>
       </section>
 
       {/* Filters Toolbar */}
