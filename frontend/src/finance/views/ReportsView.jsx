@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { financeApi } from '../../services/api'
 import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
-export default function ReportsView({ showToast }) {
+export default function ReportsView({ user, showToast }) {
   const [reportType, setReportType] = useState('Income & expenditure')
   const [period, setPeriod] = useState('daily') // 'daily' | 'weekly' | 'monthly' | 'annually'
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10))
@@ -19,7 +19,7 @@ export default function ReportsView({ showToast }) {
       setReportData(data)
     } catch (err) {
       console.error('Failed to load financial report:', err)
-      showToast('Error loading report data. Please retry.')
+      if (showToast) showToast('Error loading report data. Please retry.')
     } finally {
       setLoading(false)
     }
@@ -34,8 +34,8 @@ export default function ReportsView({ showToast }) {
   }
 
   function handleBulkExportCsv() {
-    if (!reportData || !reportData.statementLines) {
-      showToast('No report data available to export.')
+    if (!reportData || !reportData.statementLines || !reportData.statementLines.length) {
+      if (showToast) showToast('No report data available to export.')
       return
     }
     const headers = [
@@ -45,16 +45,16 @@ export default function ReportsView({ showToast }) {
       { key: 'amount', label: 'Amount (PHP)' },
     ]
     exportToCsv(`hosis-${period}-financial-report`, reportData.statementLines, headers)
-    showToast(`Exported ${period.toUpperCase()} financial report to CSV.`)
+    if (showToast) showToast(`Exported ${period.toUpperCase()} financial report to CSV.`)
   }
 
   function handleBulkExportJson() {
     if (!reportData) {
-      showToast('No report data available to export.')
+      if (showToast) showToast('No report data available to export.')
       return
     }
     exportToJson(`hosis-${period}-financial-report`, reportData)
-    showToast(`Exported ${period.toUpperCase()} financial report to JSON.`)
+    if (showToast) showToast(`Exported ${period.toUpperCase()} financial report to JSON.`)
   }
 
   function handlePrint() {
@@ -71,9 +71,9 @@ export default function ReportsView({ showToast }) {
   const filteredLines = statementLines.filter((line) => {
     const q = searchTerm.toLowerCase()
     return (
-      line.category.toLowerCase().includes(q) ||
-      line.source.toLowerCase().includes(q) ||
-      line.type.toLowerCase().includes(q)
+      (line.category && line.category.toLowerCase().includes(q)) ||
+      (line.source && line.source.toLowerCase().includes(q)) ||
+      (line.type && line.type.toLowerCase().includes(q))
     )
   })
 
@@ -95,7 +95,7 @@ export default function ReportsView({ showToast }) {
         </div>
         <div className="fin-print-meta-bar">
           <div><strong>Period:</strong> {reportData?.periodLabel || period.toUpperCase()}</div>
-          <div><strong>Target Date:</strong> {targetDate}</div>
+          <div><strong>Target Date:</strong> {selectedDate}</div>
           <div><strong>Currency:</strong> Philippine Peso (PHP ₱)</div>
           <div><strong>Accounting Basis:</strong> Accrual &amp; Cash Combined</div>
         </div>
@@ -134,39 +134,56 @@ export default function ReportsView({ showToast }) {
         </div>
       </header>
 
-      {/* Period Selection Controls */}
+      {/* Period and Report Type Selection Controls */}
       <section className="fin-toolbar no-print" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fin-text-dim, #94a3b8)' }}>REPORTING PERIOD:</span>
-          <div className="fin-pill-toggle" role="tablist">
-            <button
-              type="button"
-              className={`fin-pill-btn ${period === 'daily' ? 'active' : ''}`}
-              onClick={() => handlePeriodChange('daily')}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fin-text-dim, #94a3b8)' }}>REPORT TYPE:</span>
+            <select
+              className="fin-input"
+              value={reportType}
+              onChange={(e) => setReportType(e.target.value)}
+              style={{ width: 'auto', minWidth: '220px', fontWeight: 600 }}
             >
-              📅 Daily
-            </button>
-            <button
-              type="button"
-              className={`fin-pill-btn ${period === 'weekly' ? 'active' : ''}`}
-              onClick={() => handlePeriodChange('weekly')}
-            >
-              📆 Weekly
-            </button>
-            <button
-              type="button"
-              className={`fin-pill-btn ${period === 'monthly' ? 'active' : ''}`}
-              onClick={() => handlePeriodChange('monthly')}
-            >
-              📊 Monthly
-            </button>
-            <button
-              type="button"
-              className={`fin-pill-btn ${period === 'annually' ? 'active' : ''}`}
-              onClick={() => handlePeriodChange('annually')}
-            >
-              📈 Annually
-            </button>
+              <option value="Income & expenditure">Income &amp; Expenditure (P&amp;L)</option>
+              <option value="Revenue Breakdown">Revenue by Subsystem &amp; Service</option>
+              <option value="Operational Expenses">Department Operating Costs</option>
+              <option value="Cash & Collections">Cash Settlements vs Receivables</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fin-text-dim, #94a3b8)' }}>TIMEFRAME:</span>
+            <div className="fin-pill-toggle" role="tablist">
+              <button
+                type="button"
+                className={`fin-pill-btn ${period === 'daily' ? 'active' : ''}`}
+                onClick={() => handlePeriodChange('daily')}
+              >
+                📅 Daily
+              </button>
+              <button
+                type="button"
+                className={`fin-pill-btn ${period === 'weekly' ? 'active' : ''}`}
+                onClick={() => handlePeriodChange('weekly')}
+              >
+                📆 Weekly
+              </button>
+              <button
+                type="button"
+                className={`fin-pill-btn ${period === 'monthly' ? 'active' : ''}`}
+                onClick={() => handlePeriodChange('monthly')}
+              >
+                📊 Monthly
+              </button>
+              <button
+                type="button"
+                className={`fin-pill-btn ${period === 'annually' ? 'active' : ''}`}
+                onClick={() => handlePeriodChange('annually')}
+              >
+                📈 Annually
+              </button>
+            </div>
           </div>
         </div>
 

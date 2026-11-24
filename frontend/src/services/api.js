@@ -172,4 +172,22 @@ export const financeApi = {
     request(`/finance/night-audit?limit=${limit}`),
   runNightAudit: (auditDate = '') =>
     request('/finance/night-audit/run', json('POST', { auditDate })),
+
+  // Staff Leave Requests & Entitlement Management
+  leaveRequests: (params = {}) => {
+    const q = new URLSearchParams()
+    if (params.status && params.status !== 'All') q.set('status', params.status)
+    if (params.department && params.department !== 'All') q.set('department', params.department)
+    if (params.leaveType && params.leaveType !== 'All') q.set('leaveType', params.leaveType)
+    if (params.search) q.set('search', params.search)
+    if (params.period && params.period !== 'all') q.set('period', params.period)
+    const qs = q.toString()
+    return request(`/finance/leave-requests${qs ? `?${qs}` : ''}`)
+  },
+  createLeaveRequest: (payload) =>
+    request('/finance/leave-requests', json('POST', payload)),
+  updateLeaveRequestStatus: (id, payload) =>
+    request(`/finance/leave-requests/${id}/status`, json('PATCH', payload)),
+  leaveSummary: () =>
+    request('/finance/leave-requests/summary'),
 }

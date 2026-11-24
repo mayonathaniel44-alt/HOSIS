@@ -5,6 +5,7 @@ import PaymentsView from './views/PaymentsView'
 import ExpensesView from './views/ExpensesView'
 import RevenueView from './views/RevenueView'
 import PayrollView from './views/PayrollView'
+import LeaveRequestsView from './views/LeaveRequestsView'
 import ReportsView from './views/ReportsView'
 import IntegrationsView from './views/IntegrationsView'
 import HistoryView from './views/HistoryView'
@@ -107,6 +108,7 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
     { id: 'payments', label: 'Payments', icon: '💳' },
     { id: 'expenses', label: 'Expenses', icon: '💸' },
     { id: 'payroll', label: 'Payroll', icon: '👥' },
+    { id: 'leave', label: 'Leave Requests', icon: '📅' },
     { id: 'reports', label: 'Financial Reports', icon: '📈' },
     { id: 'revenue', label: 'Revenue', icon: '🏨' },
     { id: 'integrations', label: 'Integrations', icon: '🔗' },
@@ -278,6 +280,10 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
 
           {activeTab === 'payroll' && (
             <PayrollView user={user} showToast={showToast} />
+          )}
+
+          {activeTab === 'leave' && (
+            <LeaveRequestsView user={user} showToast={showToast} />
           )}
 
           {activeTab === 'reports' && (

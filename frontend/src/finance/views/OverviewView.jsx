@@ -70,6 +70,7 @@ export default function OverviewView({
     { id: 'payments', label: 'Payments', title: 'Payment Settlements & Receipts', counts: tasks?.payments || { received: 3, pending: 0, refunded: 0, disputed: 0 } },
     { id: 'expenses', label: 'Expenses', title: 'Operational Expenses Verification', counts: tasks?.expenses || { approved: 3, pending: 2, reimbursed: 0, draft: 0 } },
     { id: 'payroll', label: 'Payroll', title: 'Personnel Compensation Processing', counts: tasks?.payroll || { verified: 3, pending: 0, calculated: 3, disbursed: 3 } },
+    { id: 'leave', label: 'Leave Requests', title: 'Staff Leave Filings & Entitlements', counts: { filed: 6, pending: 3, approved: 3, types: 12 } },
     { id: 'reports', label: 'Reports', title: 'General Ledger Financial Statements', counts: { generated: 4, verified: 4, reconciled: 4, pending: 0 } },
   ]
 
@@ -196,10 +197,10 @@ export default function OverviewView({
         <div className="fin-surface" style={{ marginBottom: 0 }}>
           <div className="fin-surface-header">
             <h3 className="fin-surface-title">Financial Tasks &amp; Modules</h3>
-            <span className="fin-badge fin-badge-gray">5 active modules</span>
+            <span className="fin-badge fin-badge-gray">6 active modules</span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', marginTop: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px', marginTop: '12px' }}>
             {taskOptions.map((t) => (
               <button
                 key={t.id}

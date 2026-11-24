@@ -72,4 +72,12 @@ router.get('/statutory-rates', controller.getStatutoryRates)
 router.get('/night-audit', controller.getNightAuditHistory)
 router.post('/night-audit/run', controller.runNightAudit)
 
+// 6. Staff Leave Requests & Entitlement Management
+router.route('/leave-requests')
+  .get(controller.listLeaveRequests)
+  .post(requireBody, controller.createLeaveRequest)
+
+router.patch('/leave-requests/:id/status', requireId, requireBody, controller.updateLeaveRequestStatus)
+router.get('/leave-requests/summary', controller.getLeaveSummary)
+
 module.exports = router

@@ -63,4 +63,14 @@ module.exports = {
   getStatutoryRates: controller(() => service.getStatutoryRates()),
   runNightAudit: controller((req) => service.runNightAudit(req.body, userName(req)), 201),
   getNightAuditHistory: controller((req) => service.getNightAuditHistory(req.query.limit)),
+  listLeaveRequests: controller((req) => service.listLeaveRequests({
+    status: req.query.status,
+    department: req.query.department,
+    leaveType: req.query.leaveType,
+    search: req.query.search,
+    period: req.query.period,
+  })),
+  createLeaveRequest: controller((req) => service.createLeaveRequest(req.body, userName(req)), 201),
+  updateLeaveRequestStatus: controller((req) => service.updateLeaveRequestStatus(id(req), req.body, userName(req))),
+  getLeaveSummary: controller(() => service.getLeaveRequestSummary()),
 }

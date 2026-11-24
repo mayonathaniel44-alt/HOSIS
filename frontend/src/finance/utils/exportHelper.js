@@ -1,4 +1,8 @@
-export function exportToCsv(filename, data, headers) {
+export function exportToCsv(arg1, arg2, arg3) {
+  let filename = typeof arg1 === 'string' ? arg1 : (typeof arg2 === 'string' ? arg2 : 'hosis-export')
+  let data = Array.isArray(arg1) ? arg1 : (Array.isArray(arg2) ? arg2 : [])
+  let headers = Array.isArray(arg3) ? arg3 : (Array.isArray(arg2) && typeof arg1 === 'string' && Array.isArray(arg3) ? arg3 : null)
+
   if (!data || !data.length) {
     alert('No data to export.')
     return
@@ -31,7 +35,10 @@ export function exportToCsv(filename, data, headers) {
   URL.revokeObjectURL(url)
 }
 
-export function exportToJson(filename, data) {
+export function exportToJson(arg1, arg2) {
+  let filename = typeof arg1 === 'string' ? arg1 : (typeof arg2 === 'string' ? arg2 : 'hosis-export')
+  let data = typeof arg1 === 'string' ? arg2 : arg1
+
   if (!data) {
     alert('No data to export.')
     return

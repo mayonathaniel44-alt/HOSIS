@@ -65,7 +65,7 @@ function getPeriodBounds(period = 'daily', dateStr = null) {
     }
   }
 
-  if (period === 'annually') {
+  if (period === 'annually' || period === 'annual' || period === 'yearly') {
     const start = `${y}-01-01`
     const end = `${y}-12-31`
     return {
@@ -972,6 +972,9 @@ async function exportData(entity = 'invoices', format = 'csv', period = 'all') {
   } else if (entity === 'sales') {
     records = await listSalesRecords()
     filename = `hosis-sales-records-bulk-${Date.now()}`
+  } else if (entity === 'leave') {
+    records = await listLeaveRequests({ period: period !== 'all' ? period : undefined })
+    filename = `hosis-leave-requests-${period}-${Date.now()}`
   } else {
     records = await listInvoices()
   }
@@ -1533,6 +1536,239 @@ async function getNightAuditHistory(limit = 15) {
   return rows
 }
 
+async function listLeaveRequests({ status, department, leaveType, search, period } = {}) {
+  const conditions = []
+  const params = []
+  let index = 1
+
+  if (status && status !== 'All') {
+    conditions.push(`status = $${index++}`)
+    params.push(status.toUpperCase())
+  }
+  if (department && department !== 'All') {
+    conditions.push(`department = $${index++}`)
+    params.push(department)
+  }
+  if (leaveType && leaveType !== 'All') {
+    conditions.push(`leave_type = $${index++}`)
+    params.push(leaveType)
+  }
+  if (search && search.trim()) {
+    conditions.push(`(employee_name ILIKE $${index} OR request_code ILIKE $${index} OR reason ILIKE $${index} OR employee_id ILIKE $${index})`)
+    params.push(`%${search.trim()}%`)
+    index++
+  }
+  if (period) {
+    if (period === 'daily') {
+      conditions.push(`(start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE)`)
+    } else if (period === 'weekly') {
+      conditions.push(`start_date >= (CURRENT_DATE - INTERVAL '7 days')`)
+    } else if (period === 'monthly') {
+      conditions.push(`start_date >= (CURRENT_DATE - INTERVAL '30 days')`)
+    } else if (period === 'annual') {
+      conditions.push(`start_date >= (CURRENT_DATE - INTERVAL '365 days')`)
+    }
+  }
+
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const { rows } = await pool.query(`
+    SELECT
+      id,
+      request_code AS "requestCode",
+      employee_id AS "employeeId",
+      employee_name AS "employeeName",
+      department,
+      leave_type AS "leaveType",
+      start_date AS "startDate",
+      end_date AS "endDate",
+      total_days AS "totalDays",
+      reason,
+      contact_info AS "contactInfo",
+      is_paid AS "isPaid",
+      status,
+      approved_by AS "approvedBy",
+      approved_at AS "approvedAt",
+      rejection_reason AS "rejectionReason",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt"
+    FROM finance_leave_requests
+    ${whereClause}
+    ORDER BY created_at DESC
+  `, params)
+  return rows
+}
+
+async function createLeaveRequest(data, submitterName = 'Staff') {
+  const {
+    employeeId,
+    employeeName,
+    department,
+    leaveType,
+    startDate,
+    endDate,
+    totalDays,
+    reason,
+    contactInfo,
+  } = data || {}
+
+  if (!employeeName || !employeeName.trim()) {
+    throw appError(400, 'INVALID_NAME', 'Employee name is required.')
+  }
+  if (!department || !department.trim()) {
+    throw appError(400, 'INVALID_DEPARTMENT', 'Department is required.')
+  }
+  if (!leaveType || !leaveType.trim()) {
+    throw appError(400, 'INVALID_LEAVE_TYPE', 'Leave type is required.')
+  }
+  if (!startDate || !endDate) {
+    throw appError(400, 'INVALID_DATES', 'Start date and end date are required.')
+  }
+  if (!reason || !reason.trim()) {
+    throw appError(400, 'INVALID_REASON', 'Reason for leave is required.')
+  }
+
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  let calculatedDays = Number(totalDays)
+  if (!calculatedDays || calculatedDays <= 0) {
+    const diffTime = Math.abs(end - start)
+    calculatedDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1)
+  }
+
+  const isUnpaid = leaveType.includes('Unpaid') || leaveType.includes('Without Notice')
+  const isPaid = !isUnpaid
+
+  const empCode = employeeId?.trim() || `EMP-${Math.floor(10000 + Math.random() * 90000)}`
+
+  const { rows: seqRows } = await pool.query("SELECT nextval('seq_finance_leave_num') AS num")
+  const requestCode = `LV-${seqRows[0].num}`
+
+  const { rows } = await pool.query(`
+    INSERT INTO finance_leave_requests (
+      request_code, employee_id, employee_name, department, leave_type,
+      start_date, end_date, total_days, reason, contact_info, is_paid, status
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'PENDING')
+    RETURNING
+      id,
+      request_code AS "requestCode",
+      employee_id AS "employeeId",
+      employee_name AS "employeeName",
+      department,
+      leave_type AS "leaveType",
+      start_date AS "startDate",
+      end_date AS "endDate",
+      total_days AS "totalDays",
+      reason,
+      contact_info AS "contactInfo",
+      is_paid AS "isPaid",
+      status,
+      created_at AS "createdAt"
+  `, [
+    requestCode,
+    empCode,
+    employeeName.trim(),
+    department.trim(),
+    leaveType.trim(),
+    startDate,
+    endDate,
+    calculatedDays,
+    reason.trim(),
+    contactInfo?.trim() || null,
+    isPaid,
+  ])
+
+  const txnCode = `TXN-261${String(Date.now()).slice(-3)}`
+  await recordAudit(
+    null,
+    txnCode,
+    'Leave request submitted',
+    requestCode,
+    null,
+    `${calculatedDays} day(s) ${leaveType}`,
+    'Finance & HR',
+    submitterName,
+    { employeeName, department, leaveType, startDate, endDate, totalDays: calculatedDays }
+  )
+
+  return rows[0]
+}
+
+async function updateLeaveRequestStatus(id, { status, rejectionReason } = {}, reviewerName = 'Department Head') {
+  if (!['APPROVED', 'REJECTED', 'CANCELLED'].includes(status)) {
+    throw appError(400, 'INVALID_STATUS', 'Status must be APPROVED, REJECTED, or CANCELLED.')
+  }
+
+  const isApproved = status === 'APPROVED'
+  const approvedBy = isApproved ? (reviewerName || 'Department Head') : null
+
+  const { rows } = await pool.query(`
+    UPDATE finance_leave_requests
+    SET
+      status = $1,
+      approved_by = COALESCE($2, approved_by),
+      approved_at = ${isApproved ? 'NOW()' : 'approved_at'},
+      rejection_reason = $3,
+      updated_at = NOW()
+    WHERE id = $4
+    RETURNING
+      id,
+      request_code AS "requestCode",
+      employee_name AS "employeeName",
+      department,
+      leave_type AS "leaveType",
+      start_date AS "startDate",
+      end_date AS "endDate",
+      total_days AS "totalDays",
+      status,
+      approved_by AS "approvedBy",
+      approved_at AS "approvedAt",
+      rejection_reason AS "rejectionReason"
+  `, [status, approvedBy, rejectionReason?.trim() || null, id])
+
+  if (!rows.length) {
+    throw notFound('Leave request')
+  }
+
+  const req = rows[0]
+  const txnCode = `TXN-261${String(Date.now()).slice(-3)}`
+  await recordAudit(
+    null,
+    txnCode,
+    `Leave request ${status.toLowerCase()}`,
+    req.requestCode,
+    null,
+    status,
+    'Finance & HR',
+    reviewerName,
+    { status, reviewer: reviewerName, rejectionReason }
+  )
+
+  return req
+}
+
+async function getLeaveRequestSummary() {
+  const { rows } = await pool.query(`
+    SELECT
+      COUNT(*)::int AS "totalRequests",
+      COUNT(*) FILTER (WHERE status = 'PENDING')::int AS "pendingCount",
+      COUNT(*) FILTER (WHERE status = 'APPROVED')::int AS "approvedCount",
+      COUNT(*) FILTER (WHERE status = 'REJECTED')::int AS "rejectedCount",
+      COUNT(*) FILTER (WHERE status = 'APPROVED' AND CURRENT_DATE BETWEEN start_date AND end_date)::int AS "onLeaveToday",
+      COALESCE(SUM(total_days) FILTER (WHERE status = 'APPROVED'), 0)::int AS "totalApprovedDays",
+      COALESCE(SUM(total_days) FILTER (WHERE is_paid = FALSE AND status = 'APPROVED'), 0)::int AS "totalUnpaidDays"
+    FROM finance_leave_requests
+  `)
+  return rows[0] || {
+    totalRequests: 0,
+    pendingCount: 0,
+    approvedCount: 0,
+    rejectedCount: 0,
+    onLeaveToday: 0,
+    totalApprovedDays: 0,
+    totalUnpaidDays: 0,
+  }
+}
+
 module.exports = {
   dashboard,
   listInvoices,
@@ -1562,4 +1798,8 @@ module.exports = {
   getStatutoryRates,
   runNightAudit,
   getNightAuditHistory,
+  listLeaveRequests,
+  createLeaveRequest,
+  updateLeaveRequestStatus,
+  getLeaveRequestSummary,
 }

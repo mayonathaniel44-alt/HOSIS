@@ -129,6 +129,22 @@ async function getNightAuditHistory(limit) {
   return model.getNightAuditHistory(limit ? Number(limit) : 15)
 }
 
+async function listLeaveRequests(filters) {
+  return model.listLeaveRequests(filters)
+}
+
+async function createLeaveRequest(data, submitterName) {
+  return model.createLeaveRequest(data, submitterName)
+}
+
+async function updateLeaveRequestStatus(id, body, reviewerName) {
+  return model.updateLeaveRequestStatus(id, body, reviewerName)
+}
+
+async function getLeaveRequestSummary() {
+  return model.getLeaveRequestSummary()
+}
+
 module.exports = {
   dashboard,
   listInvoices,
@@ -158,4 +174,8 @@ module.exports = {
   getStatutoryRates,
   runNightAudit,
   getNightAuditHistory,
+  listLeaveRequests,
+  createLeaveRequest,
+  updateLeaveRequestStatus,
+  getLeaveRequestSummary,
 }
