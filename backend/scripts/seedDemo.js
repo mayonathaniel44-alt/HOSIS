@@ -199,35 +199,35 @@ async function seedDeskScenarios(db) {
   const { rowCount } = await db.query("SELECT 1 FROM front_office_activity WHERE action='DEMO_DESK_SCENARIOS_SEEDED'")
   if (rowCount) return
 
-  for (const [number, status] of [['MOCK-201', 'RESERVED'], ['MOCK-202', 'INSPECTED'], ['MOCK-203', 'OCCUPIED']]) {
+  for (const [number, status] of [['201', 'RESERVED'], ['202', 'INSPECTED'], ['203', 'OCCUPIED']]) {
     await db.query("INSERT INTO rooms(room_number,room_type,floor,status) VALUES($1,'Deluxe','2',$2)", [number, status])
   }
   const { rows: [arrival] } = await db.query("INSERT INTO guests(first_name,last_name,email,loyalty_tier) VALUES('Maya','Santos','maya.santos@example.test','Gold') RETURNING id")
   const { rows: [overstay] } = await db.query("INSERT INTO guests(first_name,last_name,email) VALUES('Noah','Reyes','noah.reyes@example.test') RETURNING id")
   await db.query(`INSERT INTO reservations(confirmation_code,guest_id,room_id,room_type,check_in,check_out,created_by)
-                  SELECT 'MOCK-ARRIVAL-201',$1,id,room_type,CURRENT_DATE,CURRENT_DATE+2,$2 FROM rooms WHERE room_number='MOCK-201'`,
+                  SELECT 'GH-ARRIVAL-201',$1,id,room_type,CURRENT_DATE,CURRENT_DATE+2,$2 FROM rooms WHERE room_number='201'`,
   [arrival.id, staff.front])
   const { rows: [stay] } = await db.query(`INSERT INTO reservations(confirmation_code,guest_id,room_id,room_type,check_in,check_out,status,created_by)
-       SELECT 'MOCK-OVERDUE-203',$1,id,room_type,CURRENT_DATE-3,CURRENT_DATE-1,'CHECKED_IN',$2
-       FROM rooms WHERE room_number='MOCK-203' RETURNING id,room_id`, [overstay.id, staff.front])
+       SELECT 'GH-OVERDUE-203',$1,id,room_type,CURRENT_DATE-3,CURRENT_DATE-1,'CHECKED_IN',$2
+       FROM rooms WHERE room_number='203' RETURNING id,room_id`, [overstay.id, staff.front])
   await db.query(`INSERT INTO guest_requests(guest_id, guest_name, room_id, reservation_id, request_text, priority, created_by)
                   VALUES($1,'Noah Reyes',$2,$3,'Deliver an extra pillow','STANDARD',$4)`,
   [overstay.id, stay.room_id, stay.id, staff.front])
   await db.query(`INSERT INTO hk_front_office_notifications(room_id,notice_type,message,created_by)
-                  SELECT id,'ROOM_READY','Room MOCK-202 passed inspection and can be released.', $1
-                  FROM rooms WHERE room_number='MOCK-202'`, [staff.housekeeping])
+                  SELECT id,'ROOM_READY','Room 202 passed inspection and can be released.', $1
+                  FROM rooms WHERE room_number='202'`, [staff.housekeeping])
   const { rows: [task] } = await db.query(`INSERT INTO hk_cleaning_tasks(room_id,task_type,task_status,staff_id,notes)
-                    SELECT id,'CHECKOUT','INSPECTED',$1,'Mock inspected room' FROM rooms WHERE room_number='MOCK-202' RETURNING task_id`, [staff.housekeeping])
+                    SELECT id,'CHECKOUT','INSPECTED',$1,'Checkout cleaning passed inspection' FROM rooms WHERE room_number='202' RETURNING task_id`, [staff.housekeeping])
   await db.query("INSERT INTO hk_inspections(task_id,inspected_by,inspection_result,remarks) VALUES($1,$2,'PASSED','Ready for release')", [task.task_id, staff.housekeeping])
   await db.query(`INSERT INTO hk_schedules(staff_id,shift_date,shift,start_time,end_time,assigned_area)
                   VALUES($1,CURRENT_DATE,'MORNING','07:00','15:00','Second floor')
                   ON CONFLICT (staff_id,shift_date,shift) DO NOTHING`, [staff.housekeeping])
   await db.query(`INSERT INTO hk_lost_found_items(found_by,item_description,found_location,storage_label,storage_location)
-                  VALUES($1,'Mock blue travel umbrella','Lobby','MOCK-LF-01','Cabinet A')
+                  VALUES($1,'Blue travel umbrella','Lobby','LF-2026-001','Cabinet A')
                   ON CONFLICT(storage_label) DO NOTHING`, [staff.housekeeping])
   await db.query(`INSERT INTO hk_maintenance_requests(room_id,reported_by,issue_category,issue_description,priority,report_source)
-                  SELECT id,$1,'ELECTRICAL','Mock bedside lamp flickers','HIGH','Front Office'
-                  FROM rooms WHERE room_number='MOCK-203'`, [staff.front])
+                  SELECT id,$1,'ELECTRICAL','Bedside lamp flickers','HIGH','Front Office'
+                  FROM rooms WHERE room_number='203'`, [staff.front])
   await db.query("INSERT INTO front_office_activity(user_id,action,description) VALUES($1,'DEMO_DESK_SCENARIOS_SEEDED','Added local synthetic desk scenarios')", [staff.front])
 }
 
