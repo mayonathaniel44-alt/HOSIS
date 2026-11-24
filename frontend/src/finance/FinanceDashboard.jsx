@@ -9,6 +9,7 @@ import LeaveRequestsView from './views/LeaveRequestsView'
 import ReportsView from './views/ReportsView'
 import IntegrationsView from './views/IntegrationsView'
 import HistoryView from './views/HistoryView'
+import MasterDispatchModal from './views/MasterDispatchModal'
 import './FinanceDashboard.css'
 
 function Icon({ name, size = 18, className = '' }) {
@@ -55,6 +56,7 @@ function Avatar({ initials, small = false }) {
 export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice, onSignOut }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [toastMessage, setToastMessage] = useState('')
+  const [showGlobalDispatch, setShowGlobalDispatch] = useState(false)
 
   const today = new Date()
   const dateLabel = new Intl.DateTimeFormat('en-US', {
@@ -210,6 +212,21 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
           </div>
 
           <div className="topbar-tools">
+            <button
+              type="button"
+              className="button button-secondary"
+              style={{ minHeight: '34px', fontSize: '11px', padding: '0 12px', gap: '6px' }}
+              onClick={() => setShowGlobalDispatch(true)}
+              title="Mass bulk export and send financial records to other subsystems or super admin"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Bulk Export &amp; Dispatch
+            </button>
+
             <span className="topbar-date">
               <Icon name="sun" size={17} />
               {dateLabel}
@@ -308,6 +325,13 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
           <span><i /> Connected to HOSIS Finance API</span>
         </footer>
       </main>
+
+      {/* Global Mass Bulk Export & Subsystem Dispatch Hub */}
+      <MasterDispatchModal
+        isOpen={showGlobalDispatch}
+        onClose={() => setShowGlobalDispatch(false)}
+        showToast={showToast}
+      />
 
       {/* Toast Notification */}
       {toastMessage && (
