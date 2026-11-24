@@ -1,0 +1,12 @@
+{
+  "name": "hosis-sales-marketing-improved",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/start.cjs",
+    "build": "npm --prefix frontend run build",
+    "test": "node --test backend/test/auth.test.js backend/test/login-limits.test.js backend/test/business.test.js frontend/src/analytics.test.mjs",
+    "test:ui": "node scripts/check-ui.cjs"
+  },
+  "devDependencies": { "@playwright/test": "1.56.1" }
+}

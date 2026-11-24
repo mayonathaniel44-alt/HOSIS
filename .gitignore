@@ -1,9 +1,9 @@
 node_modules/
-.env
-.env.local
-dist/
-build/
+frontend/node_modules/
+backend/node_modules/
+frontend/dist/
+test-results/
+database/*.db
+database/*.db-*
 *.log
-exports/
-
-.env.demo
+.env
