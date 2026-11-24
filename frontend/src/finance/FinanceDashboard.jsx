@@ -182,26 +182,6 @@ export default function FinanceDashboard({ user, onOpenAdmin, onOpenFrontOffice,
               </div>
 
               <div className="finance-sidebar-actions">
-                {onOpenFrontOffice && (user?.role === 'ADMIN' || user?.role === 'FRONT_OFFICE') && (
-                  <button
-                    type="button"
-                    className="finance-switch-btn finance-switch-fo"
-                    onClick={onOpenFrontOffice}
-                    title="Open Front Office Workspace"
-                  >
-                    ← Front Office
-                  </button>
-                )}
-                {onOpenAdmin && (['ADMIN', 'SUPER_ADMIN', 'FINANCE_ADMIN'].includes(user?.role?.toUpperCase())) && (
-                  <button
-                    type="button"
-                    className="finance-switch-btn finance-switch-admin"
-                    onClick={onOpenAdmin}
-                    title="Open Admin Console"
-                  >
-                    ⚙ Admin Console
-                  </button>
-                )}
                 {onSignOut && (
                   <button
                     type="button"
