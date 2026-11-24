@@ -857,6 +857,38 @@
   color: #64748b;
 }
 
+/* Stat card aliases */
+.fin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.fin-stat-card {
+  background: var(--fin-card-bg);
+  border: 1px solid var(--fin-border);
+  border-radius: var(--fin-radius);
+  padding: 15px 18px;
+  box-shadow: var(--fin-shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.fin-stat-title {
+  font-size: 12px;
+  color: var(--fin-muted);
+  font-weight: 600;
+}
+
+.fin-stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--fin-navy);
+  margin: 8px 0 3px;
+  letter-spacing: -0.02em;
+}
+
 /* Card Surface */
 .fin-surface {
   background: var(--fin-card-bg);
@@ -989,6 +1021,7 @@
   font-weight: 600;
   color: var(--fin-muted);
   border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
 }
 
 .fin-table td {

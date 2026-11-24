@@ -318,65 +318,78 @@ export default function LeaveRequestsView({ user, showToast }) {
 
   return (
     <>
-      {/* Top Banner and Summary Stats */}
-      <div className="fin-stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
-        <div className="fin-stat-card">
-          <span className="fin-stat-title">TOTAL LEAVE FILED</span>
-          <div className="fin-stat-value">{summary?.totalRequests || requests.length || 0}</div>
-          <small style={{ color: '#64748b' }}>Across all departments</small>
+      <div className="finance-breadcrumb">Finance &amp; Accounting / Staff Leave Requests</div>
+
+      <header className="finance-header">
+        <div className="finance-header-titles">
+          <h1>Staff Leave Requests &amp; Entitlement Management</h1>
+          <p>Official hotel leave filings, attendance synchronization, and statutory leave categorization.</p>
         </div>
-        <div className="fin-stat-card">
-          <span className="fin-stat-title">PENDING APPROVAL</span>
-          <div className="fin-stat-value" style={{ color: '#d4af37' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="fin-btn fin-btn-secondary"
+            onClick={() => setShowPolicyDrawer(!showPolicyDrawer)}
+            title="View all 12 leave types and rules"
+          >
+            📖 Leave Types Policy ({LEAVE_TYPES.length})
+          </button>
+          <button
+            type="button"
+            className="fin-btn fin-btn-primary"
+            onClick={() => setShowSubmitModal(true)}
+            style={{ padding: '9px 18px', fontSize: '13px', fontWeight: 700 }}
+            title="File a new staff leave request"
+          >
+            ➕ File Leave Request
+          </button>
+        </div>
+      </header>
+
+      {/* KPI Cards */}
+      <section className="fin-kpi-grid">
+        <div className="fin-kpi-card">
+          <span className="fin-kpi-label">TOTAL LEAVE FILED</span>
+          <div className="fin-kpi-val">{summary?.totalRequests || requests.length || 0}</div>
+          <span className="fin-kpi-note positive">Across all hotel departments</span>
+        </div>
+        <div className="fin-kpi-card">
+          <span className="fin-kpi-label">PENDING APPROVAL</span>
+          <div className="fin-kpi-val" style={{ color: '#d97706' }}>
             {summary?.pendingCount ?? requests.filter((r) => r.status === 'PENDING').length}
           </div>
-          <small style={{ color: '#d4af37', fontWeight: 600 }}>Awaiting manager action</small>
+          <span className="fin-kpi-note warning">Awaiting manager review</span>
         </div>
-        <div className="fin-stat-card">
-          <span className="fin-stat-title">ON LEAVE TODAY</span>
-          <div className="fin-stat-value" style={{ color: '#22c55e' }}>
+        <div className="fin-kpi-card">
+          <span className="fin-kpi-label">ON LEAVE TODAY</span>
+          <div className="fin-kpi-val" style={{ color: '#16a34a' }}>
             {summary?.onLeaveToday ?? 0}
           </div>
-          <small style={{ color: '#22c55e' }}>Active approved staff leaves</small>
+          <span className="fin-kpi-note positive">Active approved staff leaves</span>
         </div>
-        <div className="fin-stat-card">
-          <span className="fin-stat-title">APPROVED DAYS (YTD)</span>
-          <div className="fin-stat-value" style={{ color: '#38bdf8' }}>
+        <div className="fin-kpi-card">
+          <span className="fin-kpi-label">APPROVED DAYS (YTD)</span>
+          <div className="fin-kpi-val" style={{ color: '#2563eb' }}>
             {summary?.totalApprovedDays ?? 0}
           </div>
-          <small style={{ color: '#94a3b8' }}>
+          <span className="fin-kpi-note neutral">
             {summary?.totalUnpaidDays ? `${summary.totalUnpaidDays} Unpaid (LWOP)` : 'All statutory & company entitlements'}
-          </small>
+          </span>
         </div>
-      </div>
+      </section>
 
       {/* Main Surface */}
       <div className="fin-surface">
         <div className="fin-surface-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h3 className="fin-surface-title">Staff Leave Requests &amp; Entitlement Management</h3>
+            <h3 className="fin-surface-title">Official Staff Leave Filings</h3>
             <p className="fin-surface-subtitle">
-              Official hotel leave filings, attendance synchronization, and statutory leave categorization.
+              Review, approve, or export staff leave filings across all hotel divisions.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button
-              type="button"
-              className="fin-btn fin-btn-secondary"
-              onClick={() => setShowPolicyDrawer(!showPolicyDrawer)}
-              title="View all 12 leave types and rules"
-            >
-              📖 Leave Types Policy ({LEAVE_TYPES.length})
-            </button>
-            <button
-              type="button"
-              className="fin-btn fin-btn-primary"
-              onClick={() => setShowSubmitModal(true)}
-              title="File a new staff leave request"
-            >
-              ➕ File Leave Request
-            </button>
-          </div>
+          <span className="fin-badge fin-badge-blue">
+            {loading ? 'Loading...' : `${filteredRequests.length} Leave Filings`}
+          </span>
         </div>
 
         {/* Collapsible Leave Types Policy Reference */}
@@ -518,18 +531,18 @@ export default function LeaveRequestsView({ user, showToast }) {
 
         {/* Requests Table */}
         <div className="fin-table-scroll">
-          <table className="fin-table">
+          <table className="fin-table" style={{ width: '100%', minWidth: '980px' }}>
             <thead>
               <tr>
-                <th>REQUEST CODE</th>
-                <th>EMPLOYEE</th>
-                <th>DEPARTMENT</th>
-                <th>TYPE OF LEAVE</th>
-                <th>PERIOD / DATES</th>
-                <th style={{ textAlign: 'center' }}>DAYS</th>
-                <th>REASON</th>
-                <th>STATUS</th>
-                <th style={{ textAlign: 'center' }}>ACTIONS</th>
+                <th style={{ width: '130px', minWidth: '125px', whiteSpace: 'nowrap' }}>REQUEST CODE</th>
+                <th style={{ minWidth: '160px', whiteSpace: 'nowrap' }}>EMPLOYEE</th>
+                <th style={{ minWidth: '130px', whiteSpace: 'nowrap' }}>DEPARTMENT</th>
+                <th style={{ minWidth: '180px', whiteSpace: 'nowrap' }}>TYPE OF LEAVE</th>
+                <th style={{ minWidth: '180px', whiteSpace: 'nowrap' }}>PERIOD / DATES</th>
+                <th style={{ textAlign: 'center', width: '60px', whiteSpace: 'nowrap' }}>DAYS</th>
+                <th style={{ minWidth: '180px', maxWidth: '240px' }}>REASON</th>
+                <th style={{ width: '130px', whiteSpace: 'nowrap' }}>STATUS</th>
+                <th style={{ textAlign: 'center', width: '130px', whiteSpace: 'nowrap' }}>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
@@ -543,7 +556,7 @@ export default function LeaveRequestsView({ user, showToast }) {
               {!loading && filteredRequests.length === 0 && (
                 <tr>
                   <td colSpan="9" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
-                    No leave requests match the current filters. Click "File Leave Request" to submit one.
+                    No leave requests match the current filters. Click &quot;File Leave Request&quot; to submit one.
                   </td>
                 </tr>
               )}
@@ -552,19 +565,19 @@ export default function LeaveRequestsView({ user, showToast }) {
                   const typeObj = LEAVE_TYPES.find((t) => t.type === req.leaveType)
                   return (
                     <tr key={req.id}>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         <strong style={{ color: '#d4af37', fontFamily: 'monospace', fontSize: '13px' }}>
                           {req.requestCode}
                         </strong>
                       </td>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         <div style={{ fontWeight: 600, color: '#0f172a' }}>{req.employeeName}</div>
                         <small style={{ color: '#64748b' }}>{req.employeeId}</small>
                       </td>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         <span className="fin-badge fin-badge-blue">{req.department}</span>
                       </td>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span
                             style={{
@@ -581,14 +594,14 @@ export default function LeaveRequestsView({ user, showToast }) {
                           {req.isPaid ? '• Paid Entitlement' : '• Unpaid (LWOP)'}
                         </small>
                       </td>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         <div style={{ fontSize: '12.5px', color: '#1e293b' }}>
                           {req.startDate ? new Date(req.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                           {' → '}
                           {req.endDate ? new Date(req.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                         </div>
                       </td>
-                      <td style={{ textAlign: 'center' }}>
+                      <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <span
                           style={{
                             fontWeight: 700,
@@ -615,7 +628,7 @@ export default function LeaveRequestsView({ user, showToast }) {
                           {req.reason}
                         </div>
                       </td>
-                      <td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
                         <span
                           className={`fin-badge ${
                             req.status === 'APPROVED'
@@ -633,7 +646,7 @@ export default function LeaveRequestsView({ user, showToast }) {
                           </div>
                         )}
                       </td>
-                      <td style={{ textAlign: 'center' }}>
+                      <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', gap: '6px' }}>
                           <button
                             type="button"

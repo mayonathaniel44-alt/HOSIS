@@ -174,7 +174,6 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenFina
             </button>
           ))}
           <button className="nav-item admin-front-office-link" onClick={onOpenFrontOffice}><i className="admin-nav-mark" aria-hidden="true">↗</i><span>Front Office</span></button>
-          <button className="nav-item" onClick={onOpenFinance}><i className="admin-nav-mark" aria-hidden="true">↗</i><span>Finance</span></button>
         </nav>
         <div className="sidebar-bottom admin-sidebar-bottom">
           <div className="help-card"><span className="help-icon" aria-hidden="true">✦</span><strong>Administration</strong><p>Manage staff access and connected hotel operations.</p></div>
