@@ -203,11 +203,60 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenFina
 
       <main className="main-panel admin-main">
         <header className="topbar admin-topbar">
-          <div className="breadcrumb"><span>Administration</span><strong>{activeSection}</strong></div>
+          <div className="breadcrumb">
+            <span>Workspace</span>
+            <span style={{ opacity: 0.35, margin: '0 2px' }}>›</span>
+            <span>Administration</span>
+            <span style={{ opacity: 0.35, margin: '0 2px' }}>›</span>
+            <strong>{activeSection}</strong>
+          </div>
           <div className="topbar-tools admin-topbar-actions">
+            <div className="global-search">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" />
+              </svg>
+              <input
+                type="search"
+                aria-label="Search administration"
+                placeholder="Search anything..."
+                value={adminSearch}
+                onChange={(e) => setAdminSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="topbar-date">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c89b3b" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2m0 16v2m10-10h-2M4 12H2m17.07 7.07-1.42-1.42M6.35 6.35 4.93 4.93m14.14 0-1.42 1.42M6.35 17.65l-1.42 1.42" />
+              </svg>
+              <span>{dateLabel}</span>
+            </div>
+
+            <button
+              type="button"
+              className="notification-button"
+              aria-label="Notifications"
+              title="System status normal"
+              onClick={() => setNotice('Hotel admin console secure · All systems operational.')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+                <path d="M10 21h4" />
+              </svg>
+              <i />
+            </button>
+
             <span className="admin-secure"><i /> ADMIN ACCESS</span>
             <button className="button button-secondary" onClick={() => setRefreshKey((value) => value + 1)} disabled={loading || section === 'Integrations'}>Refresh</button>
-            <button className="topbar-profile admin-signout" onClick={onSignOut} aria-label="Sign out"><span className="avatar avatar-small admin-avatar">{username.slice(0, 2).toUpperCase()}</span><span><strong>{username}</strong><small>Administrator</small></span></button>
+            <div className="topbar-divider" />
+            <button className="topbar-profile admin-signout" onClick={onSignOut} aria-label="Sign out">
+              <span className="avatar avatar-small admin-avatar">{username.slice(0, 2).toUpperCase()}</span>
+              <span><strong>{username}</strong><small>Administrator</small></span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 17l5-5-5-5M15 12H3" />
+                <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
+              </svg>
+            </button>
           </div>
         </header>
 
@@ -219,7 +268,11 @@ export default function AdminDashboard({ username, onOpenFrontOffice, onOpenFina
           {section === 'Overview' && (
             <>
               <div className="page-heading admin-page-heading">
-                <div><span className="eyebrow">HOTEL OPERATIONS</span><h1>Administrator overview</h1><p>Monitor connected operations, staff access, and system activity.</p></div>
+                <div>
+                  <span className="eyebrow">{dayCaption}</span>
+                  <h1>Good afternoon, {username} <span className="wave">✦</span></h1>
+                  <p>Monitor connected operations, staff access, and system activity.</p>
+                </div>
                 <span className="admin-property-name">{settings?.hotelName || 'Grand Horizon Hotel'}</span>
               </div>
               <div className="stats-grid admin-stat-grid">
