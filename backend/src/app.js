@@ -51,9 +51,14 @@ api.get('/health', async (req, res, next) => {
     await pool.query(`SELECT
       (SELECT attempts FROM auth_attempts LIMIT 0),
       (SELECT user_id FROM hk_password_must_change LIMIT 0),
-      (SELECT session_version FROM users LIMIT 0),
+      (SELECT login_locked_at FROM users LIMIT 0),
       (SELECT promotion FROM invoices LIMIT 0),
-      (SELECT report_source FROM hk_maintenance_requests LIMIT 0)`)
+      (SELECT report_source FROM hk_maintenance_requests LIMIT 0),
+      (SELECT reservation_id FROM finance_invoices LIMIT 0),
+      (SELECT period_start FROM hr_attendance_periods LIMIT 0),
+      (SELECT collection FROM engineering.engineering_records LIMIT 0),
+      (SELECT sale_id FROM sales_stay_handoffs LIMIT 0),
+      (SELECT module FROM admin_activity_events LIMIT 0)`)
     res.json({ data: { status: 'ok' } })
   } catch (error) {
     const unavailable = new Error('The database is not available.')

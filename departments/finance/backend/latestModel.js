@@ -1674,111 +1674,97 @@ async function getLeaveRequestSummary() {
   }
 }
 
-async function dispatchToSubsystems({ targetSubsystems = [], notes = '' }, userId, userName) {
-  const [invoices, payments, expenses, payroll, hkDamages, sales, leave, maint] = await Promise.all([
-    listInvoices(),
-    listPayments(),
-    listExpenses(),
+const dispatchRoles = {
+  SUPER_ADMIN: 'ADMIN', FRONT_OFFICE: 'FRONT_OFFICE', HOUSEKEEPING: 'HOUSEKEEPING',
+  MAINTENANCE: 'ENGINEERING', SALES_MARKETING: 'SALES_MARKETING', HUMAN_RESOURCES: 'HR',
+}
+
+const dispatchFields = {
+  invoices: ['totalInvoices', 'invoicesTransmitted', 'receivableBalanceTotal'],
+  payments: ['totalPayments', 'paymentsPosted'],
+  expenses: ['totalExpenses'],
+  payroll: ['totalPayroll', 'payrollRecordsCount', 'disbursedSalaries'],
+  leave: ['totalLeaveRequests', 'leaveRequestsCount'],
+  hkDamages: ['totalHkDamages', 'damagesBilledToGuests', 'pendingDamages', 'totalRestitutionAmount'],
+  sales: ['totalSalesDeals', 'dealsCount', 'invoicedDeals', 'totalContractValue'],
+  maintenance: ['totalMaintenanceRecords', 'recordsCount', 'totalApprovedCost', 'remainingMaintenanceBudget'],
+  audit: ['auditLogsCount'],
+}
+
+async function dispatchToSubsystems({ targetSubsystems, includedEntities = Object.keys(dispatchFields), notes = '' }, _userId, userName) {
+  if (!Array.isArray(targetSubsystems) || !targetSubsystems.length || targetSubsystems.some((target) => !Object.hasOwn(dispatchRoles, target))
+    || !Array.isArray(includedEntities) || !includedEntities.length || includedEntities.some((entity) => !Object.hasOwn(dispatchFields, entity))
+    || typeof notes !== 'string' || notes.length > 500) {
+    throw appError(400, 'INVALID_FINANCE_DISPATCH', 'Choose valid departments and data categories. Notes may contain up to 500 characters.')
+  }
+  const [invoices, payments, expenses, payroll, hkDamages, sales, leave, maint, frontDesk, audit] = await Promise.all([
+    listInvoices(undefined, undefined, undefined, { all: true }),
+    listPayments(undefined, undefined, undefined, { all: true }),
+    listExpenses(undefined, undefined, { all: true }),
     listPayroll(),
     listHousekeepingDamages(),
     listSalesRecords(),
     listLeaveRequests({}),
-    listMaintenanceRecords(),
+    listMaintenanceRecords(undefined, { all: true }),
+    pool.query(`SELECT COUNT(*)::int AS "invoicesTransmitted",
+      COALESCE(SUM(b.count),0)::int AS "paymentsPosted",
+      COALESCE(SUM(GREATEST(i.amount-COALESCE(b.total,0),0)),0) AS "receivableBalanceTotal"
+      FROM invoices i LEFT JOIN LATERAL (
+        SELECT COUNT(*) AS count,SUM(amount) AS total FROM payments WHERE invoice_id=i.id
+      ) b ON TRUE WHERE i.status<>'VOID'`),
+    pool.query('SELECT COUNT(*)::int AS count FROM finance_audit_log'),
   ])
 
+  const summaries = {
+    SUPER_ADMIN: {
+      totalInvoices: invoices.length, totalPayments: payments.length, totalExpenses: expenses.length,
+      totalPayroll: payroll.length, totalHkDamages: hkDamages.length, totalSalesDeals: sales.length,
+      totalLeaveRequests: leave.length, totalMaintenanceRecords: maint.records.length, auditLogsCount: audit.rows[0].count,
+    },
+    FRONT_OFFICE: { ...frontDesk.rows[0], receivableBalanceTotal: Number(frontDesk.rows[0].receivableBalanceTotal) },
+    HOUSEKEEPING: {
+      damagesBilledToGuests: hkDamages.filter((entry) => entry.billingStatus === 'BILLED').length,
+      pendingDamages: hkDamages.filter((entry) => entry.billingStatus === 'PENDING_BILLING').length,
+      totalRestitutionAmount: hkDamages.reduce((sum, entry) => sum + (Number(entry.billedAmount) || 0), 0),
+    },
+    MAINTENANCE: { recordsCount: maint.records.length, totalApprovedCost: maint.totalApproved, remainingMaintenanceBudget: maint.remainingBudget },
+    SALES_MARKETING: {
+      dealsCount: sales.length, invoicedDeals: sales.filter((entry) => entry.status === 'INVOICED').length,
+      totalContractValue: sales.reduce((sum, entry) => sum + (Number(entry.contractAmount) || 0), 0),
+    },
+    HUMAN_RESOURCES: {
+      payrollRecordsCount: payroll.length, leaveRequestsCount: leave.length,
+      disbursedSalaries: payroll.filter((entry) => entry.status === 'DISBURSED').reduce((sum, entry) => sum + (Number(entry.netPayable) || 0), 0),
+    },
+  }
+  const allowedFields = new Set(includedEntities.flatMap((entity) => dispatchFields[entity]))
   const timestamp = new Date().toISOString()
-  const results = []
+  const destinations = [...new Set(targetSubsystems)].map((subsystem) => ({
+    subsystem,
+    status: 'RECORDED',
+    dispatchedAt: timestamp,
+    summary: Object.fromEntries(Object.entries(summaries[subsystem]).filter(([key]) => allowedFields.has(key))),
+  })).filter((item) => Object.keys(item.summary).length)
+  if (!destinations.length) throw appError(400, 'EMPTY_FINANCE_DISPATCH', 'None of the selected categories apply to the selected departments.')
 
-  for (const sub of targetSubsystems) {
-    let summary = {}
-    let activityName = ''
-
-    if (sub === 'SUPER_ADMIN') {
-      summary = {
-        totalInvoices: invoices.length,
-        totalPayments: payments.length,
-        totalExpenses: expenses.length,
-        totalPayroll: payroll.length,
-        totalHkDamages: hkDamages.length,
-        totalSalesDeals: sales.length,
-        totalLeaveRequests: leave.length,
-        totalMaintenanceRecords: (maint.records || []).length,
-        auditLogsCount: (await listAuditLog()).length,
-      }
-      activityName = 'Master Financial Sync: Project Manager & Superadmin Central Console'
-    } else if (sub === 'FRONT_OFFICE') {
-      summary = {
-        invoicesTransmitted: invoices.length,
-        paymentsPosted: payments.length,
-        receivableBalanceTotal: invoices.reduce((s, i) => s + (Number(i.balance) || 0), 0),
-      }
-      activityName = 'Master Financial Sync: Front Office Folios & Collections'
-    } else if (sub === 'HOUSEKEEPING') {
-      summary = {
-        damagesBilledToGuests: hkDamages.filter((d) => d.billingStatus === 'BILLED').length,
-        pendingDamages: hkDamages.filter((d) => d.billingStatus === 'PENDING_BILLING').length,
-        totalRestitutionAmount: hkDamages.reduce((s, d) => s + (Number(d.estimatedCost) || 0), 0),
-      }
-      activityName = 'Master Financial Sync: Housekeeping Damage Restitution'
-    } else if (sub === 'MAINTENANCE') {
-      summary = {
-        recordsCount: (maint.records || []).length,
-        totalApprovedCost: maint.totalApproved || 0,
-        remainingMaintenanceBudget: maint.remainingBudget || 0,
-      }
-      activityName = 'Master Financial Sync: Engineering & Maintenance Vouchers'
-    } else if (sub === 'SALES_MARKETING') {
-      summary = {
-        dealsCount: sales.length,
-        invoicedDeals: sales.filter((s) => s.status === 'INVOICED').length,
-        totalContractValue: sales.reduce((s, d) => s + (Number(d.contractAmount) || 0), 0),
-      }
-      activityName = 'Master Financial Sync: Corporate Sales & City Ledger'
-    } else if (sub === 'HUMAN_RESOURCES') {
-      summary = {
-        payrollRecordsCount: payroll.length,
-        leaveRequestsCount: leave.length,
-        disbursedSalaries: payroll.reduce((s, p) => s + (Number(p.netSalary) || 0), 0),
-      }
-      activityName = 'Master Financial Sync: HR Payroll & Leave Compensation'
-    } else {
-      summary = { recordCount: invoices.length + payments.length + expenses.length }
-      activityName = `Master Financial Sync: ${sub}`
+  await transaction(async (client) => {
+    for (const item of destinations) {
+      const code = await nextCode(client, 'seq_finance_txn_num', 'FIN-DSP', 4)
+      await recordAudit(client, code, 'Finance department summary recorded', 'DISPATCH-' + item.subsystem, null,
+        null, 'Finance & Accounting', userName, { destinationSubsystem: item.subsystem, dispatchedAt: timestamp, notes, summary: item.summary })
     }
+  })
+  return { success: true, totalSubsystemsDispatched: destinations.length, timestamp, dispatches: destinations }
+}
 
-    const txCode = `TXN-DSP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 900 + 100)}`
-    await recordAudit(
-      null,
-      txCode,
-      activityName,
-      `DISPATCH-${sub}`,
-      null,
-      `${Object.values(summary)[0] || 0} records`,
-      'Finance & Accounting',
-      userName || 'Finance Officer',
-      {
-        destinationSubsystem: sub,
-        dispatchedBy: userName || 'Finance Officer',
-        dispatchedAt: timestamp,
-        notes: notes || 'Manual master subsystem dispatch from Finance',
-        summary,
-      }
-    )
-
-    results.push({
-      subsystem: sub,
-      status: 'RECORDED',
-      dispatchedAt: timestamp,
-      summary,
-    })
-  }
-
-  return {
-    success: true,
-    totalSubsystemsDispatched: results.length,
-    timestamp,
-    dispatches: results,
-  }
+async function listDepartmentDispatches(role) {
+  const department = Object.keys(dispatchRoles).find((key) => dispatchRoles[key] === role)
+  if (!department) throw appError(403, 'FORBIDDEN', 'Finance summaries are scoped to the receiving department.')
+  const { rows } = await pool.query(`SELECT transaction_code AS "reference", created_at AS "dispatchedAt",
+      details->'summary' AS summary
+    FROM finance_audit_log WHERE reference_code=$1 AND details->>'destinationSubsystem'=$2
+    ORDER BY created_at DESC,id DESC LIMIT 25`, ['DISPATCH-' + department, department])
+  return rows
 }
 
 module.exports = {
@@ -1798,6 +1784,7 @@ module.exports = {
   signReport,
   exportData,
   dispatchToSubsystems,
+  listDepartmentDispatches,
   listHousekeepingDamages,
   listMaintenanceRecords,
   createMaintenanceExpense,

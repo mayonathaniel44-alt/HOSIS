@@ -4,9 +4,14 @@ const authenticate = require('../../../backend/src/middleware/authenticate.js')
 const { requireBody, requireId } = require('../../../backend/src/middleware/validate.js')
 const frontOffice = require('../../front-office/backend/frontOfficeService.js')
 const authorize = require('../../../backend/src/middleware/authorize.js')
+const { listDepartmentDispatches } = require('./latestModel.js')
 
 const router = express.Router()
-router.use(authenticate, authorize('FINANCE', 'ADMIN'))
+router.use(authenticate)
+router.get('/subsystems/updates', async (req, res) => {
+  res.json({ data: { updates: await listDepartmentDispatches(req.user.role) } })
+})
+router.use(authorize('FINANCE', 'ADMIN'))
 
 router.get('/overview', async (req, res) => {
   const [invoices, totals, expenses, staffing, sales] = await Promise.all([

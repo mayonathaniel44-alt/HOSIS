@@ -150,7 +150,7 @@ export default function MasterDispatchModal({ isOpen, onClose, showToast }) {
       })
       const data = res.data || res
       setDispatchResults(data.dispatches || [])
-      showToast?.(`Recorded summaries for ${selectedDestinations.length} destination(s) in Finance Audit Trail.`)
+      showToast?.(`Shared Finance summaries with ${data.totalSubsystemsDispatched} department(s).`)
     } catch (err) {
       console.error('Dispatch failed:', err)
       showToast?.(err.message || 'Error dispatching data to subsystems.')

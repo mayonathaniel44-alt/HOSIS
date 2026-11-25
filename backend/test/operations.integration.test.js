@@ -367,6 +367,16 @@ test(
         assert.ok(csv.includes('Test Payroll'))
         const dispatch = await api('POST', path + '/subsystems/dispatch', 'admin', { targetSubsystems: ['SUPER_ADMIN'] })
         assert.equal(dispatch.totalSubsystemsDispatched, 1)
+        const targeted = await api('POST', path + '/subsystems/dispatch', 'finance', {
+          targetSubsystems: ['FRONT_OFFICE', 'HUMAN_RESOURCES', 'HOUSEKEEPING'],
+          includedEntities: ['invoices', 'payroll'],
+        })
+        assert.equal(targeted.totalSubsystemsDispatched, 2)
+        assert.ok(targeted.dispatches.find(item => item.subsystem === 'HUMAN_RESOURCES').summary.disbursedSalaries > 0)
+        const frontDeskUpdates = await api('GET', '/finance/subsystems/updates', 'fo')
+        assert.deepEqual(Object.keys(frontDeskUpdates.updates[0].summary).sort(), ['invoicesTransmitted', 'receivableBalanceTotal'])
+        assert.equal((await api('GET', '/finance/subsystems/updates', 'sup')).updates.length, 0)
+        await api('GET', '/finance/subsystems/updates', 'technician', undefined, 403)
       })
       await t.test('Finance reports and exports include expenses beyond the screen limit', async () => {
         await pool.query(`INSERT INTO finance_expenses (voucher_code,department,category,amount,status,expense_date)
