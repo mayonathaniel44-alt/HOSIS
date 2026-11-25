@@ -138,6 +138,17 @@ test(
         assert.ok(audit.rows.some(row => row.action === 'HR_ATTENDANCE_UPDATED' && row.actor === prefix + '.hr'))
       })
       await t.test('HR department handoffs scope staffing, accounts and leave to the appropriate users', async () => {
+        for (const role of ['admin', 'hr']) {
+          const { employee: personal } = await api('POST', '/hr/employees', 'hr', {
+            name: `Personal Leave ${role}`, pos: 'Staff', dept: 'hr', status: 'Regular',
+          }, 201)
+          await api('PATCH', '/hr/account-links/' + personal.id, 'admin', { staffUserId: accounts[role] })
+          const { request } = await api('POST', '/hr/department-leave', role, {
+            type: 'Vacation', startDate: dates.tomorrow, endDate: dates.tomorrow, reason: 'Personal leave test',
+          }, 201)
+          await api('PATCH', '/hr/leaves/' + request.id, 'hr', { status: 'Approved' })
+          assert.ok((await api('GET', '/hr/department-leave', role)).requests.some(row => row.id === request.id && row.status === 'Approved'))
+        }
         const employee = await api('POST', '/hr/employees', 'hr', {
           name: 'Sales Coordinator', pos: 'Coordinator', dept: 'sales', status: 'Regular',
         }, 201)

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { exportCsv, exportExcel } from '@housekeeping/exportReport.js'
 import HR from './data.js'
 
 const departments = ['frontdesk', 'housekeeping', 'finance', 'maintenance', 'sales', 'hr']
@@ -124,20 +123,6 @@ export default function HrManagement({ page, query, refresh }) {
     void run(() => HR.api('/' + kind + '/' + encodeURIComponent(record.id), { method: 'DELETE' }), titles[kind] + ' deleted.')
   }
 
-  function report(exporter) {
-    const employees = HR.E.filter((e) => matches(e.id, e.name, e.pos, e.dept))
-    void run(() => exporter({
-      title: 'HR employee and attendance records', fileName: 'hr-employee-attendance-' + HR.TODAY,
-      columns: [
-        { title: 'Employee ID', value: (e) => e.id }, { title: 'Employee', value: (e) => e.name },
-        { title: 'Department', value: (e) => e.dept }, { title: 'Position', value: (e) => e.pos },
-        { title: 'Employment status', value: (e) => e.status }, { title: 'Days worked', value: (e) => e.days },
-        { title: 'Absences', value: (e) => e.abs }, { title: 'Overtime hours', value: (e) => e.ot },
-      ],
-      rows: employees,
-    }), 'HR report exported.')
-  }
-
   const matches = (...values) => values.join(' ').toLowerCase().includes(query.trim().toLowerCase())
   const vacancies = recruitment?.vacancies ?? []
   const candidates = (recruitment?.candidates ?? []).filter((c) =>
@@ -213,10 +198,5 @@ export default function HrManagement({ page, query, refresh }) {
         })}>Edit attendance</button>}</td></tr>)}</tbody>
     </table></div>}
     {page === 'leave' && <button className="btn gold" onClick={() => edit('leaves')} disabled={busy || !HR.E.length}>File leave for employee</button>}
-    {page === 'reports' && <div className="actions">
-      <button className="btn" onClick={() => report(exportCsv)} disabled={busy}>Export CSV</button>
-      <button className="btn" onClick={() => report(exportExcel)} disabled={busy}>Export Excel</button>
-      <button className="btn" onClick={() => window.print()}>Print report</button>
-    </div>}
   </section>
 }

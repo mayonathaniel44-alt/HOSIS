@@ -1,7 +1,9 @@
 import AdminReportsPage from './AdminReportsPage.jsx'
 import AdminAuditLog from './AdminAuditLog.jsx'
+import StaffLeavePage from '../../front-office/frontend/StaffLeavePage.jsx'
+import useHotelToday from '../../../frontend/src/useHotelToday.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { adminApi, authApi } from '../../../frontend/src/services/api.js'
+import { adminApi, authApi, departmentLeaveApi } from '../../../frontend/src/services/api.js'
 import useVisibleRefresh from '../../../frontend/src/useVisibleRefresh.js'
 import './AdminDashboard.css'
 
@@ -40,6 +42,7 @@ function StatusTag({ tone, children }) {
 }
 
 export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, timeZone, initialSection = 'Overview' }) {
+  const today = useHotelToday(timeZone)
   const [section, setSection] = useState(initialSection)
   const [overview, setOverview] = useState(null)
   const [staff, setStaff] = useState([])
@@ -205,7 +208,7 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
         </div>
         <div className="sidebar-label">ADMINISTRATION</div>
         <nav className="side-nav admin-nav" aria-label="Administrator navigation">
-          {['Overview', 'Staff & access', 'Audit log', 'Reports', 'Hotel settings', 'Integrations'].map((item) => (
+          {['Overview', 'Staff & access', 'Audit log', 'Reports', 'My leave', 'Hotel settings', 'Integrations'].map((item) => (
             <button key={item} className={`nav-item ${section === item ? 'nav-active' : ''}`} aria-current={section === item ? 'page' : undefined} onClick={() => { setSection(item); setError(''); setNotice('') }}>
               <i className="admin-nav-mark" aria-hidden="true">{item === 'Overview' ? '⌂' : item === 'Staff & access' ? '♙' : item === 'Audit log' ? '≡' : item === 'Hotel settings' ? '⚙' : '◇'}</i>
               <span>{item}</span>
@@ -383,6 +386,8 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
           )}
 
           {section === 'Audit log' && <AdminAuditLog timeZone={timeZone} refreshKey={refreshKey} />}
+          {section === 'My leave' && <StaffLeavePage today={today} search="" api={departmentLeaveApi} />}
+
           {section === 'Reports' && <AdminReportsPage timeZone={timeZone} refreshKey={refreshKey} />}
 
           {section === 'Hotel settings' && (

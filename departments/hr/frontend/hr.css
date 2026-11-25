@@ -198,3 +198,17 @@ tr:last-child td{border-bottom:0}
 }
 .hr-workspace .hr-management-form label { display: grid; gap: 4px; }
 .hr-workspace .hr-management-form h3, .hr-workspace .hr-management-form .actions { grid-column: 1 / -1; }
+.hr-workspace .hr-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-block: 16px;
+}
+.hr-workspace .hr-dashboard-chart { min-width: 0; margin-block: 12px; }
+.hr-workspace .hr-dashboard-plot { min-width: 0; margin-top: 12px; }
+.hr-workspace .hr-dashboard-grid .hr-dashboard-chart { margin: 0; }
+.hr-workspace .hr-dashboard-actions { display: grid; gap: 8px; }
+.hr-workspace .hr-dashboard-actions button { text-align: left; }
+@media (max-width: 780px) {
+  .hr-workspace .hr-dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+}

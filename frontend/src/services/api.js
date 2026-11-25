@@ -103,6 +103,11 @@ export const authApi = {
   getSavedUser: savedUser,
 }
 
+export const departmentLeaveApi = {
+  myLeave: () => request('/hr/department-leave'),
+  fileLeave: (body) => request('/hr/department-leave', json('POST', body)),
+}
+
 export const hrApi = {
   request: (path, options) => request(`/hr${path}`, options),
 }

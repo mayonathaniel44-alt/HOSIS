@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 
 import HrHandoffs from './HrHandoffs.jsx';
 import HrManagement from './HrManagement.jsx';
+import HrDashboard from './HrDashboard.jsx';
+import HrReportExports from './HrReportExports.jsx';
+import StaffLeavePage from '../../front-office/frontend/StaffLeavePage.jsx';
+import { departmentLeaveApi } from '../../../frontend/src/services/api.js';
 import HR from './data.js';
 import './tabs.js';
 import './finance.js';
@@ -211,10 +215,13 @@ export default function HumanResourcesApp({ user, onSignOut }) {
           </div>
         </header>
         <main className="content" id="view" aria-busy={!ready}>
-          {ready && !['recruitment', 'activity', 'handoffs'].includes(HR.state?.page) && HR.currentView &&
+          {ready && HR.state?.page === 'dashboard' && <HrDashboard />}
+          {ready && !['dashboard', 'recruitment', 'activity', 'handoffs'].includes(HR.state?.page) && HR.currentView &&
             <div dangerouslySetInnerHTML={{ __html: sanitizeHrHtml(HR.currentView) }} />}
+          {ready && HR.state?.page === 'reports' && <HrReportExports />}
+          {ready && HR.state?.page === 'leave' && <StaffLeavePage today={HR.TODAY} search={query} api={departmentLeaveApi} embedded />}
           {ready && HR.state?.page === 'handoffs' && <HrHandoffs administrator={user.role === 'ADMIN'} />}
-          {ready && ['recruitment', 'records', 'attendance', 'leave', 'reports', 'activity'].includes(HR.state?.page) &&
+          {ready && ['recruitment', 'records', 'attendance', 'leave', 'activity'].includes(HR.state?.page) &&
             <HrManagement key={HR.state.page} page={HR.state.page} query={query}
               refresh={async () => { await hydrateHr(); if (!HR.signal?.aborted) HR.render(); }} />}
         </main>

@@ -7,10 +7,10 @@ const { listLeave, fileLeave } = require('../../front-office/backend/staffLeave'
 
 const roleDepartments = {
   FRONT_OFFICE: 'frontdesk', HOUSEKEEPING: 'housekeeping', FINANCE: 'finance',
-  ENGINEERING: 'maintenance', TECHNICIAN: 'maintenance', SALES_MARKETING: 'sales', HR: 'hr',
+  ENGINEERING: 'maintenance', TECHNICIAN: 'maintenance', SALES_MARKETING: 'sales', HR: 'hr', ADMIN: 'hr',
 }
 const departments = new Set(Object.values(roleDepartments))
-const departmentAccess = [authenticate, authorize('ADMIN', ...Object.keys(roleDepartments))]
+const departmentAccess = [authenticate, authorize(...Object.keys(roleDepartments))]
 const hrAccess = [authenticate, authorize('HR', 'ADMIN')]
 const adminAccess = [authenticate, authorize('ADMIN')]
 const router = express.Router()

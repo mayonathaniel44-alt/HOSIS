@@ -5,7 +5,7 @@ import PaymentsView from './views/PaymentsView'
 import ExpensesView from './views/ExpensesView'
 import RevenueView from './views/RevenueView'
 import PayrollView from './views/PayrollView'
-import { hrApi } from '../../../frontend/src/services/api.js'
+import { departmentLeaveApi } from '../../../frontend/src/services/api.js'
 import useHotelToday from '../../../frontend/src/useHotelToday.js'
 import StaffLeavePage from '../../front-office/frontend/StaffLeavePage.jsx'
 import LeaveRequestsView from './views/LeaveRequestsView'
@@ -57,11 +57,6 @@ function Avatar({ initials, small = false }) {
   return <span className={`avatar ${small ? 'avatar-small' : ''}`}>{initials}</span>
 }
 
-const personalLeaveApi = {
-  myLeave: () => hrApi.request('/department-leave'),
-  fileLeave: (body) => hrApi.request('/department-leave', { method: 'POST', body: JSON.stringify(body) }),
-}
-
 function FinanceLeave({ user, showToast }) {
   const [view, setView] = useState('personal')
   const today = useHotelToday(user?.timeZone)
@@ -77,7 +72,7 @@ function FinanceLeave({ user, showToast }) {
       ? 'Use My leave to request time off for yourself. HR reviews your request.'
       : 'Use this register for employee leave that Finance records for payroll. Approved entries for linked employees appear in HR.'}</p>
     {view === 'personal'
-      ? <StaffLeavePage today={today} search="" api={personalLeaveApi} />
+      ? <StaffLeavePage today={today} search="" api={departmentLeaveApi} />
       : <LeaveRequestsView user={user} showToast={showToast} />}
   </>
 }

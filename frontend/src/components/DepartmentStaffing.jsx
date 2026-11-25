@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react'
-import { request } from '../services/api.js'
+import { departmentLeaveApi, request } from '../services/api.js'
 import StaffLeavePage from '../../../departments/front-office/frontend/StaffLeavePage.jsx'
 
-const leaveApi = {
-  myLeave: () => request('/hr/department-leave'),
-  fileLeave: (body) => request('/hr/department-leave', { method: 'POST', body: JSON.stringify(body) }),
-}
 const shifts = { AM: 'Morning', PM: 'Afternoon', NT: 'Night', DAY: 'Day', OFF: 'Off' }
 
 export default function DepartmentStaffing({ department, canRequest = true, showLeave = false }) {
@@ -80,7 +76,7 @@ export default function DepartmentStaffing({ department, canRequest = true, show
         </tr>)}</tbody>
       </table></div>}
       {showLeave && <details><summary>My leave requests</summary>
-        <StaffLeavePage today={data.today} search="" api={leaveApi} />
+        <StaffLeavePage today={data.today} search="" api={departmentLeaveApi} embedded />
       </details>}
     </>}
   </section>
