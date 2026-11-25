@@ -15,7 +15,6 @@ import HistoryView from './views/HistoryView'
 import MasterDispatchModal from './views/MasterDispatchModal'
 import CustomerPayments from './views/CustomerPayments.jsx'
 import FinanceApp from './FinanceApp.jsx'
-import './FinanceDashboard.css'
 
 function Icon({ name, size = 18, className = '' }) {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' }

@@ -3,6 +3,7 @@ import { findingLabel } from '@housekeeping/format.js'
 import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { authApi, frontOfficeApi } from '../../../frontend/src/services/api.js'
 import './App.css'
+import '../../finance/frontend/FinanceDashboard.css'
 import useHotelToday from '../../../frontend/src/useHotelToday.js'
 import useVisibleRefresh from '../../../frontend/src/useVisibleRefresh.js'
 import {loadWorkspace} from './workspace.js'
@@ -204,7 +205,7 @@ function replaceWorkspaceHash(hash = '') {
   window.history.replaceState(window.history.state, '', pathname + search + hash)
 }
 
-class HousekeepingErrorBoundary extends Component {
+class WorkspaceErrorBoundary extends Component {
   state = { failed: false }
 
   static getDerivedStateFromError() {
@@ -215,7 +216,7 @@ class HousekeepingErrorBoundary extends Component {
     if (!this.state.failed) return this.props.children
     return (
       <main className="surface">
-        <h1>Housekeeping couldn’t load</h1>
+        <h1>{this.props.name} couldn’t load</h1>
         <p role="alert">Reload the page to try again.</p>
         <button type="button" className="button" onClick={() => window.location.reload()}>Reload page</button>
         <button type="button" className="button button-secondary" onClick={this.props.onSignOut}>Sign out</button>
@@ -757,16 +758,16 @@ function App() {
   if (signedIn && (['HOUSEKEEPING', 'HOUSEKEEPING_VIEWER'].includes(user?.role) || user?.mustChangePassword || showHousekeeping)) {
     return withLogout(<>
       {user?.role === 'ADMIN' && !user.mustChangePassword && <BackToAdmin onClick={returnToAdmin} />}
-      <HousekeepingErrorBoundary onSignOut={askToSignOut}>
+      <WorkspaceErrorBoundary name="Housekeeping" onSignOut={askToSignOut}>
         <HousekeepingApp session={{token:authApi.getToken(),user}} onLogout={askToSignOut} onSessionChange={replaceSession} />
-      </HousekeepingErrorBoundary>
+      </WorkspaceErrorBoundary>
     </>)
   }
   if (signedIn && ['FINANCE', 'HR', 'SALES_MARKETING'].includes(adminDepartment)) {
     return withLogout(<>
       <BackToAdmin onClick={returnToAdmin} />
       <Suspense fallback={<p>Loading department workspace</p>}>
-        {adminDepartment === 'FINANCE' && <FinanceApp user={user} onSignOut={askToSignOut} />}
+        {adminDepartment === 'FINANCE' && <WorkspaceErrorBoundary name="Finance" onSignOut={askToSignOut}><FinanceApp user={user} onSignOut={askToSignOut} /></WorkspaceErrorBoundary>}
         {adminDepartment === 'HR' && <HumanResourcesApp user={user} onSignOut={askToSignOut} />}
         {adminDepartment === 'SALES_MARKETING' && <SalesMarketingApp user={user} onSignOut={askToSignOut} onSessionChange={replaceSession} />}
       </Suspense>
@@ -783,7 +784,7 @@ function App() {
   }
   if (signedIn && user?.role === 'FINANCE') {
     return withLogout(<Suspense fallback={<p>Loading department workspace…</p>}>
-      <FinanceApp user={user} onSignOut={askToSignOut} />
+      <WorkspaceErrorBoundary name="Finance" onSignOut={askToSignOut}><FinanceApp user={user} onSignOut={askToSignOut} /></WorkspaceErrorBoundary>
     </Suspense>)
   }
   if (signedIn && user?.role === 'SALES_MARKETING') {
