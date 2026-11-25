@@ -159,6 +159,7 @@ export const adminApi = {
   createStaff: (staff) => request('/admin/staff', json('POST', staff)),
   updateStaff: (id, fields) => request(`/admin/staff/${id}`, json('PATCH', fields)),
   deleteStaff: (id) => request(`/admin/staff/${id}`, { method: 'DELETE' }),
+  unlockStaff: (id) => request(`/admin/staff/${id}/unlock`, { method: 'POST' }),
   reportCatalog: () => request('/admin/reports'),
   engineeringArchives: () => request('/engineering/reports/archive'),
   engineeringArchiveFile: (id) => request(`/engineering/reports/archive/${encodeURIComponent(id)}/download`, { responseType: 'blob' }),

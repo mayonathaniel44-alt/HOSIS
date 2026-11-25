@@ -190,7 +190,7 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
     [member.username, member.firstName, member.lastName, member.email].filter(Boolean)
       .join(' ').toLowerCase().includes(staffSearch.trim().toLowerCase())
     && (staffRoleFilter === 'ALL' || member.role === staffRoleFilter)
-    && (staffStatusFilter === 'ALL' || member.isActive === (staffStatusFilter === 'ACTIVE'))
+    && (staffStatusFilter === 'ALL' || staffStatusFilter === (member.loginLockedAt ? 'LOCKED' : member.isActive ? 'ACTIVE' : 'INACTIVE'))
   )
 
   return (
@@ -339,7 +339,7 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
                   <div className="admin-staff-filters">
                     <input type="search" aria-label="Search staff" placeholder="Name, username or email" value={staffSearch} onChange={(event) => setStaffSearch(event.target.value)} />
                     <select aria-label="Filter by department role" value={staffRoleFilter} onChange={(event) => setStaffRoleFilter(event.target.value)}><option value="ALL">All roles</option>{staffRoles.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-                    <select aria-label="Filter by account status" value={staffStatusFilter} onChange={(event) => setStaffStatusFilter(event.target.value)}><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select>
+                    <select aria-label="Filter by account status" value={staffStatusFilter} onChange={(event) => setStaffStatusFilter(event.target.value)}><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option><option value="LOCKED">Locked</option></select>
                   </div>
                 </div>
                 <div className="admin-table-scroll"><table className="full-table"><thead><tr><th>USERNAME</th><th>ROLE</th><th>STATUS</th><th>CREATED</th><th>ACTIONS</th></tr></thead><tbody>
@@ -349,9 +349,10 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
                       <tr key={member.id}>
                         <td><strong>{member.username}</strong><small className="record-subtext">{[member.firstName, member.lastName].filter(Boolean).join(' ')}</small><small className="record-subtext">{member.email}</small>{isSelf && <small className="admin-self-label">You</small>}</td>
                         <td>{staffRoles.find(([role]) => role === member.role)?.[1] || 'Retired role'}{member.role === 'HOUSEKEEPING' && <small className="record-subtext">{member.position}</small>}{member.role === 'SALES_MARKETING' && <small className="record-subtext">{salesPositions[member.position] || 'Sales Staff'}</small>}</td>
-                        <td><span className={member.isActive ? 'admin-account-active' : 'admin-account-inactive'}>{member.isActive ? 'Active' : 'Inactive'}</span></td>
+                        <td><span className={member.isActive && !member.loginLockedAt ? 'admin-account-active' : 'admin-account-inactive'}>{member.loginLockedAt ? 'Locked' : member.isActive ? 'Active' : 'Inactive'}</span></td>
                         <td>{dateTime(member.createdAt, settings?.timeZone || timeZone)}</td>
                         <td className="admin-actions-cell">
+                          {member.loginLockedAt && <button type="button" className="small-action" disabled={busy} onClick={() => runAction(() => adminApi.unlockStaff(member.id), 'Staff account unlocked.')}>Unlock account</button>}
                           <button className="small-action" disabled={busy} onClick={() => setStaffEdit({ ...member, original: member, isSelf, role: staffRoles.some(([role]) => role === member.role) ? member.role : '' })}>Edit profile</button>
                           <button className="small-action" disabled={busy || isSelf || (!member.isActive && !staffRoles.some(([role]) => role === member.role))} onClick={() => runAction(() => adminApi.updateStaff(member.id, { isActive: !member.isActive }), member.isActive ? 'Staff account deactivated.' : 'Staff account activated.')}>{member.isActive ? 'Deactivate' : 'Activate'}</button>
                           <button className="small-action small-action-quiet" disabled={busy} onClick={() => { setPasswordResetId(passwordResetId === member.id ? null : member.id); setNewPassword('') }}>Reset password</button>

@@ -3,9 +3,10 @@ const jwt = require('jsonwebtoken')
 const env = require('../config/env')
 const userModel = require('../models/userModel')
 const { accessRole } = require('../lib/accessRole')
+const { appError } = require('../lib/errors')
 
 const invalidCredentials = () => {
-  const error = new Error('Username or password is incorrect.')
+  const error = new Error('Username or password is incorrect. Contact an administrator if your account is locked.')
   error.status = 401
   error.codeName = 'INVALID_CREDENTIALS'
   return error
@@ -24,8 +25,15 @@ async function login(username, password, requestedRole) {
   }
 
   const matches = await bcrypt.compare(password, user.password_hash)
+  if (!matches) {
+    if (!user.loginLockedAt) await userModel.recordFailedLogin(user)
+    throw invalidCredentials()
+  }
+  if (user.loginLockedAt) {
+    throw appError(423, 'ACCOUNT_LOCKED', 'Your account is locked after five failed sign-in attempts. Contact an administrator to unlock it.')
+  }
   const effectiveRole = accessRole(user.role, requestedRole || user.role)
-  if (!matches || !effectiveRole) throw invalidCredentials()
+  if (!effectiveRole || !await userModel.recordSuccessfulLogin(user)) throw invalidCredentials()
 
   return sessionFor(user, effectiveRole)
 }

@@ -69,7 +69,8 @@ async function dashboard() {
 async function listStaff() {
   const { rows } = await pool.query(
     `SELECT id, username, role, position, first_name AS "firstName", last_name AS "lastName", email, is_active AS "isActive",
-            created_at AS "createdAt", updated_at AS "updatedAt"
+            created_at AS "createdAt", updated_at AS "updatedAt",
+            login_locked_at AS "loginLockedAt", failed_logins AS "failedLogins"
      FROM users WHERE deleted_at IS NULL
      ORDER BY is_active DESC, role, username`,
   )
@@ -212,6 +213,17 @@ function deleteStaff(id, userId) {
   return updateStaff(id, { isActive: false }, userId, { deleting: true })
 }
 
+async function unlockStaff(id, userId) {
+  return transaction(async (client) => {
+    const { rows: [account] } = await client.query(`SELECT username, login_locked_at
+      FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [id])
+    if (!account) throw appError(404, 'NOT_FOUND', 'Staff account was not found.')
+    if (!account.login_locked_at) return
+    await client.query('UPDATE users SET failed_logins=0, login_locked_at=NULL, session_version=session_version+1, updated_at=NOW() WHERE id=$1', [id])
+    await recordActivity(client, userId, 'ADMIN_STAFF_UNLOCKED', `Unlocked staff account "${account.username}".`)
+  })
+}
+
 async function listActivity(limit) {
   const { rows } = await pool.query(
     `SELECT id, action, description, module, created_at AS "createdAt", actor
@@ -284,6 +296,7 @@ module.exports = {
   createStaff,
   updateStaff,
   deleteStaff,
+  unlockStaff,
   listActivity,
   auditReport,
   getSettings,

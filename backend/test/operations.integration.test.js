@@ -1726,6 +1726,27 @@ test(
           )
         },
       )
+      await t.test('five failed passwords lock the account until an administrator unlocks it', async () => {
+        const username = prefix + '.lock-test'
+        const { rows: [account] } = await pool.query(
+          "INSERT INTO users(username,password_hash,role) VALUES($1,$2,'FRONT_OFFICE') RETURNING id",
+          [username, hash],
+        )
+        const credentials = { username, password, role: 'FRONT_OFFICE' }
+        const failed = () => api('POST', '/auth/login', null, { ...credentials, password: 'wrong-password' }, 401)
+        await failed()
+        const activeSession = await api('POST', '/auth/login', null, credentials)
+        await Promise.all(Array.from({ length: 5 }, failed))
+        assert.equal((await api('POST', '/auth/login', null, credentials, 423)).error.code, 'ACCOUNT_LOCKED')
+        await api('GET', '/auth/me', activeSession, undefined, 401)
+        const staff = (await api('GET', '/admin/staff', 'admin')).find(row => row.id === account.id)
+        assert.equal(staff.failedLogins, 5)
+        assert.ok(staff.loginLockedAt)
+        const unlock = '/admin/staff/' + account.id + '/unlock'
+        await api('POST', unlock, 'fo', undefined, 403)
+        await api('POST', unlock, 'admin', undefined, 204)
+        await api('POST', '/auth/login', null, credentials)
+      })
     } finally {
       await new Promise((resolve) => server.close(resolve))
       await pool.end()
