@@ -10,9 +10,10 @@ const adminRoutes = require('../../departments/admin/backend/adminRoutes.js')
 const app = express()
 const api = express.Router()
 const tlsEnabled = Boolean(process.env.HOSIS_TLS_CERT && process.env.HOSIS_TLS_KEY)
+const renderOrigin = process.env.RENDER === 'true' ? process.env.RENDER_EXTERNAL_URL : null
 
 app.disable('x-powered-by')
-app.set('trust proxy', 'loopback')
+app.set('trust proxy', renderOrigin ? 1 : 'loopback')
 app.use((req, res, next) => {
   res.set('X-Content-Type-Options', 'nosniff')
   res.set('X-Frame-Options', 'DENY')
@@ -25,7 +26,7 @@ app.use((req, res, next) => {
 })
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || env.frontendOrigins.includes(origin)) return callback(null, true)
+    if (!origin || origin === renderOrigin || env.frontendOrigins.includes(origin)) return callback(null, true)
     const error = new Error('Origin is not allowed by CORS.')
     error.status = 403
     error.codeName = 'CORS_ORIGIN_DENIED'
@@ -76,7 +77,7 @@ api.use('/sales-marketing', require('../../departments/sales-marketing/backend/r
 api.use('/finance', require('../../departments/finance/backend/routes.js'))
 app.use('/api/v1', api)
 
-if (tlsEnabled) {
+if (tlsEnabled || renderOrigin) {
   const frontendDirectory = path.resolve(__dirname, '../../frontend/dist')
   app.use(express.static(frontendDirectory, {
     setHeaders(res) {
