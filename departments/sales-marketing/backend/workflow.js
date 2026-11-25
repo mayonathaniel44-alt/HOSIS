@@ -221,6 +221,7 @@ function createWorkflow({
         leadId,
         campaignId: lead.campaignId,
         clientId: lead.clientId,
+        guestName: text(d, 'guestName', false) || previous?.guestName || '',
         date: dateValue,
         checkIn,
         checkOut,
@@ -312,6 +313,7 @@ function createWorkflow({
       const reservation = await confirmReservation(
         r,
         text(req.body, 'reservationRef'),
+        r.guestName || text(req.body, 'reservationGuest'),
       )
       const reservationRef = reservation.confirmation_code
       if (

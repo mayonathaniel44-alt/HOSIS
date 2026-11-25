@@ -3,7 +3,7 @@ import { frontOfficeApi } from '../../../frontend/src/services/api.js'
 
 const leaveTypes = ['Vacation', 'Sick', 'Emergency', 'Bereavement', 'Maternity', 'Paternity', 'Other']
 
-export default function StaffLeavePage({ today, search, api = frontOfficeApi }) {
+export default function StaffLeavePage({ today, search, api = frontOfficeApi, embedded = false }) {
   const [data, setData] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -43,7 +43,7 @@ export default function StaffLeavePage({ today, search, api = frontOfficeApi }) 
   }
 
   return <>
-    <div className="page-heading"><div><h1>Leave requests</h1><p>File a request with HR and track its decision.</p></div></div>
+    <div className="page-heading"><div>{embedded ? <h2>Leave requests</h2> : <h1>Leave requests</h1>}<p>File a request with HR and track its decision.</p></div></div>
     {data?.linked && <section className="surface data-surface">
       <div className="list-heading"><h2>File leave</h2></div>
       <form className="data-toolbar front-office-report-controls" onSubmit={submit}>

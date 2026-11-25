@@ -77,8 +77,8 @@ async function signReport({ reportType, period, date } = {}, userName) {
   return model.signReport(reportType, period, date, userName)
 }
 
-async function exportData(entity = 'invoices', format = 'csv', period = 'all') {
-  return model.exportData(entity, format, period)
+async function exportData(entity = 'invoices', format = 'csv', period = 'all', filters) {
+  return model.exportData(entity, format, period, filters)
 }
 
 async function dispatchToSubsystems(payload, userId, userName) {

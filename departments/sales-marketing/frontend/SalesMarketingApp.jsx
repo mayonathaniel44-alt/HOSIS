@@ -156,6 +156,7 @@ const definitions = {
     field('validUntil', 'Valid until', 'date'),
     field('checkIn', 'Check-in', 'date'),
     field('checkOut', 'Check-out', 'date'),
+    field('guestName', 'Expected guest full name'),
     field('gross', 'Price before discount (PHP)', 'number'),
     field('promotionId', 'Approved promotion', 'link', 'promotions', false),
     field('notes', 'Notes', 'textarea', null, false),
@@ -621,6 +622,7 @@ function Workspace({ user, signOut, onSessionChange }) {
                           'reservationRef',
                           'Booking confirmation number from Reservations',
                         ),
+                        ...(!r.guestName ? [field('reservationGuest', 'Expected guest full name on reservation')] : []),
                         field(
                           'preparation',
                           'Room setup and amenities for Housekeeping',

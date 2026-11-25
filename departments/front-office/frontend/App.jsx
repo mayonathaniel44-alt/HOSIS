@@ -2,17 +2,15 @@ import { matchesSearch, matchesStay } from './search.js'
 import { findingLabel } from '@housekeeping/format.js'
 import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { authApi, frontOfficeApi } from '../../../frontend/src/services/api.js'
-import AdminDashboard from '../../admin/frontend/AdminDashboard.jsx'
 import './App.css'
 import useHotelToday from '../../../frontend/src/useHotelToday.js'
 import useVisibleRefresh from '../../../frontend/src/useVisibleRefresh.js'
 import {loadWorkspace} from './workspace.js'
 import { housekeepingLandingHash, isHousekeepingHash } from '../../../frontend/src/modules/housekeeping/tabs.js'
-import HousekeepingApp from '@housekeeping/HousekeepingApp.jsx'
-import PublicLostFoundPage from '@housekeeping/pages/PublicLostFoundPage.jsx'
 import AccountRecordsPage from './AccountRecordsPage.jsx'
 import DepartmentStaffing from '../../../frontend/src/components/DepartmentStaffing.jsx'
 import StaffLeavePage from './StaffLeavePage.jsx'
+import LostAndFoundPage from './LostAndFoundPage.jsx'
 import ReportsPage from './ReportsPage.jsx'
 import { exportPdf } from '@housekeeping/exportReport.js'
 
@@ -25,6 +23,9 @@ const ACCESS_LABELS = {
   HR: 'Human Resources',
   ADMIN: 'Administrator',
 }
+const AdminDashboard = lazy(() => import('../../admin/frontend/AdminDashboard.jsx'))
+const HousekeepingApp = lazy(() => import('@housekeeping/HousekeepingApp.jsx'))
+const PublicLostFoundPage = lazy(() => import('@housekeeping/pages/PublicLostFoundPage.jsx'))
 const EngineeringApp=lazy(()=>import('../../engineering/frontend/EngineeringApp.jsx'))
 const SalesMarketingApp = lazy(() => import('../../sales-marketing/frontend/SalesMarketingApp.jsx'))
 const FinanceApp = lazy(() => import('../../finance/frontend/FinanceDashboard.jsx'))
@@ -143,10 +144,10 @@ const navigation = [
   { id: 'Rooms', icon: 'bed' },
   { id: 'Guest requests', icon: 'message' },
   { id: 'Housekeeping findings', icon: 'alert' },
+  { id: 'Lost & found', icon: 'box' },
   { id: 'Billing', icon: 'receipt' },
   { id: 'Reports', icon: 'calendar' },
   { id: 'Staff planning', icon: 'users' },
-  { id: 'Leave requests', icon: 'calendar' },
   { id: 'Account records', icon: 'users' },
 ]
 
@@ -157,6 +158,7 @@ function Icon({ name, size = 18, className = '' }) {
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
     users: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
     bed: <><path d="M3 18v-8M3 15h18v6M21 18v-8M3 12h18" /><path d="M7 12V8a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4" /></>,
+    box: <><rect x="3" y="5" width="18" height="5" rx="1" /><path d="M5 10v9h14v-9m-9 4h4" /></>,
     message: <><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z" /></>,
     receipt: <><path d="M4 3h16v18l-3-2-3 2-3-2-3 2-4-2z" /><path d="M8 8h8M8 12h8M8 16h4" /></>,
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
@@ -747,51 +749,55 @@ function App() {
     ? Object.keys(adminWorkspaces).find((role) => adminWorkspaces[role] === workspaceHash)
     : null
   function replaceSession(next) { authApi.saveSession(next, authApi.isRemembered()); setUser(next.user) }
-  if (publicLostFoundCode) return <PublicLostFoundPage code={decodeURIComponent(publicLostFoundCode)} />
+  if (publicLostFoundCode) return <Suspense fallback={<p>Loading lost and found</p>}><PublicLostFoundPage code={decodeURIComponent(publicLostFoundCode)} /></Suspense>
+  function askToSignOut() { logoutDialog.current?.showModal() }
+  function withLogout(workspace) {
+    return <><Suspense fallback={<p>Loading workspace</p>}>{workspace}</Suspense><LogoutDialog dialogRef={logoutDialog} onConfirm={signOut} /></>
+  }
   if (signedIn && (['HOUSEKEEPING', 'HOUSEKEEPING_VIEWER'].includes(user?.role) || user?.mustChangePassword || showHousekeeping)) {
-    return <>
+    return withLogout(<>
       {user?.role === 'ADMIN' && !user.mustChangePassword && <BackToAdmin onClick={returnToAdmin} />}
-      <HousekeepingErrorBoundary onSignOut={signOut}>
-        <HousekeepingApp session={{token:authApi.getToken(),user}} onLogout={signOut} onSessionChange={replaceSession} />
+      <HousekeepingErrorBoundary onSignOut={askToSignOut}>
+        <HousekeepingApp session={{token:authApi.getToken(),user}} onLogout={askToSignOut} onSessionChange={replaceSession} />
       </HousekeepingErrorBoundary>
-    </>
+    </>)
   }
   if (signedIn && ['FINANCE', 'HR', 'SALES_MARKETING'].includes(adminDepartment)) {
-    return <>
+    return withLogout(<>
       <BackToAdmin onClick={returnToAdmin} />
       <Suspense fallback={<p>Loading department workspace</p>}>
-        {adminDepartment === 'FINANCE' && <FinanceApp user={user} onSignOut={signOut} />}
-        {adminDepartment === 'HR' && <HumanResourcesApp user={user} onSignOut={signOut} />}
-        {adminDepartment === 'SALES_MARKETING' && <SalesMarketingApp user={user} onSignOut={signOut} onSessionChange={replaceSession} />}
+        {adminDepartment === 'FINANCE' && <FinanceApp user={user} onSignOut={askToSignOut} />}
+        {adminDepartment === 'HR' && <HumanResourcesApp user={user} onSignOut={askToSignOut} />}
+        {adminDepartment === 'SALES_MARKETING' && <SalesMarketingApp user={user} onSignOut={askToSignOut} onSessionChange={replaceSession} />}
       </Suspense>
-    </>
+    </>)
   }
   if (signedIn && ['ENGINEERING', 'TECHNICIAN'].includes(user?.role)) {
     if (user.role === 'ENGINEERING' && workspaceHash === engineeringHandoffHash) {
-      return <Suspense fallback={<p>Loading repairs…</p>}>
+      return withLogout(<Suspense fallback={<p>Loading repairs…</p>}>
         <a className="button button-secondary" href="/engineering-workspace/index.html">Engineering dashboard</a>
-        <EngineeringApp onSignOut={signOut} />
-      </Suspense>
+        <EngineeringApp onSignOut={askToSignOut} />
+      </Suspense>)
     }
     return <EngineeringEntry technician={user.role === 'TECHNICIAN'} />
   }
   if (signedIn && user?.role === 'FINANCE') {
-    return <Suspense fallback={<p>Loading department workspace…</p>}>
-      <FinanceApp user={user} onSignOut={signOut} />
-    </Suspense>
+    return withLogout(<Suspense fallback={<p>Loading department workspace…</p>}>
+      <FinanceApp user={user} onSignOut={askToSignOut} />
+    </Suspense>)
   }
   if (signedIn && user?.role === 'SALES_MARKETING') {
-    return <Suspense fallback={<p>Loading Sales &amp; Marketing…</p>}>
-      <SalesMarketingApp user={user} onSignOut={signOut} onSessionChange={replaceSession} />
-    </Suspense>
+    return withLogout(<Suspense fallback={<p>Loading Sales &amp; Marketing…</p>}>
+      <SalesMarketingApp user={user} onSignOut={askToSignOut} onSessionChange={replaceSession} />
+    </Suspense>)
   }
   if (signedIn && user?.role === 'HR') {
-    return <Suspense fallback={<p>Loading Human Resources…</p>}>
-      <HumanResourcesApp user={user} onSignOut={signOut} />
-    </Suspense>
+    return withLogout(<Suspense fallback={<p>Loading Human Resources…</p>}>
+      <HumanResourcesApp user={user} onSignOut={askToSignOut} />
+    </Suspense>)
   }
   if (signedIn && user?.role === 'ADMIN' && showAdminConsole) {
-    return <AdminDashboard initialSection={workspaceHash === adminIntegrationsHash ? 'Integrations' : 'Overview'} username={user.username} timeZone={user.timeZone} onOpenWorkspace={openAdminWorkspace} onSignOut={signOut} />
+    return withLogout(<AdminDashboard initialSection={workspaceHash === adminIntegrationsHash ? 'Integrations' : 'Overview'} username={user.username} timeZone={user.timeZone} onOpenWorkspace={openAdminWorkspace} onSignOut={askToSignOut} />)
   }
 
   if (!signedIn) {
@@ -1050,8 +1056,12 @@ function App() {
     'Housekeeping findings': renderHousekeepingFindings,
     Billing: renderBilling,
     Reports: () => <ReportsPage key="department" today={todayISO} search={search} />,
-    'Staff planning': () => <DepartmentStaffing department="frontdesk" />,
-    'Leave requests': () => <StaffLeavePage today={todayISO} search={search} />,
+    'Staff planning': () => <>
+      <div className="page-heading"><div><h1>Staff planning</h1></div></div>
+      <DepartmentStaffing department="frontdesk" />
+      <StaffLeavePage today={todayISO} search={search} embedded />
+    </>,
+    'Lost & found': () => <LostAndFoundPage search={search} />,
     'Account records': () => <AccountRecordsPage today={todayISO} search={search} />,
   }
 

@@ -48,7 +48,7 @@ import HR from "./data.js";
       return [HR.person(e), name(e.dept), HR.statusBadge(e.status), `₱${e.rate.toLocaleString()}`, e.days, paidLeave, `${e.ot} h`, e.abs, payroll];
     });
     const exportButton = `<button class="btn gold" data-hr-action="export">${HR.ic('download', 'style="width:16px;height:16px;vertical-align:-3px"')} Export for Finance</button>`;
-    return HR.alertBox('info', 'info', 'HR shares validated employee and attendance information with Finance. <b>Payroll computation and processing stay with Finance</b>, not the HR subsystem.') + HR.panel('Employee information for payroll', 'Data package Finance needs to compute payroll. Cut-off Nov 1 – 15, 2026.', HR.table(['Employee', 'Department', 'Status', 'Daily rate', 'Days worked', 'Paid leave', 'Overtime', 'Absences', 'Finance payroll'], rows), filter() + exportButton);
+    return HR.alertBox('info', 'info', 'HR shares validated employee and attendance information with Finance. <b>Payroll computation and processing stay with Finance</b>, not the HR subsystem.') + HR.panel('Employee information for payroll', 'Employee attendance summary. Save dated attendance under Attendance to share a pay period with Finance.', HR.table(['Employee', 'Department', 'Status', 'Daily rate', 'Days worked', 'Paid leave', 'Overtime', 'Absences', 'Finance payroll'], rows), filter() + exportButton);
   }
 
   HR.exportCSV = function () {

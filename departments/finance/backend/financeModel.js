@@ -178,6 +178,10 @@ async function getInvoice(id) {
 
 async function createInvoice(data, userId, userName = 'Finance Staff') {
   return transaction(async (client) => {
+    const { rows: [stay] } = data.reservationCode
+      ? await client.query('SELECT id, status FROM reservations WHERE confirmation_code=upper($1) FOR UPDATE', [data.reservationCode.trim()])
+      : { rows: [] }
+    if (stay?.status === 'CANCELLED') throw appError(409, 'RESERVATION_CANCELLED', 'A cancelled reservation cannot receive a stay invoice.')
     const invoiceCode = code('FIN-INV')
 
     const subtotal = Number(data.subtotal || 0)
@@ -190,8 +194,8 @@ async function createInvoice(data, userId, userName = 'Finance Staff') {
 
     const { rows } = await client.query(
       `INSERT INTO finance_invoices
-        (invoice_code, guest_name, guest_email, reservation_code, room_number, subtotal, discount, vat, total_amount, paid_amount, balance_due, status, issue_date, due_date, notes, created_by, invoice_type, department)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0.00, $9, $10, $11, $12, $13, $14, $15, $16)
+        (invoice_code, guest_name, guest_email, reservation_code, room_number, subtotal, discount, vat, total_amount, paid_amount, balance_due, status, issue_date, due_date, notes, created_by, invoice_type, department, reservation_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0.00, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING id, invoice_code AS "invoiceCode", guest_name AS "guestName", total_amount AS "totalAmount", status`,
       [
         invoiceCode,
@@ -210,6 +214,7 @@ async function createInvoice(data, userId, userName = 'Finance Staff') {
         userId || null,
         data.invoiceType,
         data.department,
+        stay?.id ?? null,
       ],
     )
 

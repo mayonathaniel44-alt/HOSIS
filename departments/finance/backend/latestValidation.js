@@ -46,6 +46,9 @@ function validateExpense(body) {
 
 function validatePayroll(body) {
   if (!body) throw appError(400, 'INVALID_PAYROLL', 'Payroll details required.')
+  if (typeof body.employeeId !== 'string' || !body.employeeId.trim() || body.employeeId.trim().length > 40) {
+    throw appError(400, 'INVALID_EMPLOYEE_ID', 'Enter the employee’s existing staff ID.')
+  }
   if (!body.employeeName || typeof body.employeeName !== 'string' || !body.employeeName.trim()) {
     throw appError(400, 'INVALID_NAME', 'Employee name is required.')
   }

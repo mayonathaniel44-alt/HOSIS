@@ -66,4 +66,27 @@ router.get('/front-office/guest-requests', authorize('FRONT_OFFICE'), async (req
   res.json({ requests: rows });
 });
 
+router.get('/front-office/lost-found', authorize('FRONT_OFFICE'), async (req, res) => {
+  const { search, status } = req.query;
+  v.maxLengths(req.query, { search: [120, 'Search'] });
+  v.oneOf(status, ['STORED', 'RELEASED', 'DISPOSED'], 'status');
+  const page = v.id(req.query.page ?? '1', 'page');
+  if (page > 100000) throw new HttpError(400, 'Invalid page');
+  const pageSize = 40;
+  const { rows } = await db.query(
+    `SELECT i.item_id, i.storage_label, i.item_description, i.found_location,
+            r.room_number, i.item_status,
+            TO_CHAR(i.found_at, 'YYYY-MM-DD HH24:MI') AS found_at
+       FROM hk_lost_found_items i
+       LEFT JOIN hk_rooms r ON r.room_id = i.room_id
+      WHERE ($1::text IS NULL OR i.item_status = $1)
+        AND strpos(lower(concat_ws(' ', i.item_description, i.storage_label,
+                                   i.found_location, r.room_number)), lower($2)) > 0
+      ORDER BY i.found_at DESC, i.item_id DESC
+      LIMIT $3 OFFSET $4`,
+    [status ?? null, String(search ?? '').trim(), pageSize + 1, (page - 1) * pageSize]
+  );
+  res.json({ items: rows.slice(0, pageSize), hasMore: rows.length > pageSize });
+});
+
 module.exports = router;

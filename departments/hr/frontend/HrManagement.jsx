@@ -25,7 +25,7 @@ function fieldsFor(kind, vacancies, record) {
       text('education', 'Education', 'text', true), text('experience', 'Experience', 'text', true),
     ]
     case 'employees': return [
-      text('name', 'Employee name'), text('pos', 'Position'), department,
+      text('name', 'Employee name'), text('pos', 'Position'), department, text('rate', 'Daily rate (PHP)', 'number'),
       select('status', 'Employment status', states), text('hired', 'Hire date', 'date'), text('contact', 'Contact', 'text', true),
     ]
     case 'attendance': return [

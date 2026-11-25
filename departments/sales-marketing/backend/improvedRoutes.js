@@ -164,21 +164,25 @@ function transaction(req, work) {
       changes.push({ record, previous, action })
       return record
     }
-    async function confirmReservation(quote, reference) {
+    async function confirmReservation(quote, reference, expectedGuest) {
       const {
         rows: [reservation],
       } = await client.query(
         `
-        SELECT id, confirmation_code FROM reservations
-        WHERE confirmation_code = upper($1) AND status IN ('CONFIRMED', 'CHECKED_IN')
-          AND check_in = $2::date AND check_out = $3::date AND room_id IS NOT NULL
-        FOR SHARE`,
+        SELECT r.id, r.confirmation_code, CONCAT_WS(' ', g.first_name, g.last_name) AS "guestName"
+        FROM reservations r JOIN guests g ON g.id=r.guest_id
+        WHERE r.confirmation_code = upper($1) AND r.status IN ('CONFIRMED', 'CHECKED_IN')
+          AND r.check_in = $2::date AND r.check_out = $3::date AND r.room_id IS NOT NULL
+        FOR SHARE OF r, g`,
         [reference, quote.checkIn, quote.checkOut],
       )
       if (!reservation)
         fail(
           'Enter a confirmed Front Office reservation with an assigned room and matching stay dates.',
         )
+      const normalizeName = (name) => name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
+      if (normalizeName(reservation.guestName) !== normalizeName(expectedGuest))
+        fail('The guest name does not match the Front Office reservation.', 409)
       return reservation
     }
     async function resetPreparation(reservationId) {
@@ -376,7 +380,7 @@ router.get('/users', requireSalesHead, async (_req, res) => {
     SELECT id, username, first_name AS "firstName", last_name AS "lastName",
       CASE WHEN position='SALES_HEAD' THEN 'SALES_HEAD' ELSE 'SALES_STAFF' END AS position,
       is_active AS "isActive"
-    FROM users WHERE role='SALES_MARKETING' ORDER BY username
+    FROM users WHERE role='SALES_MARKETING' AND deleted_at IS NULL ORDER BY username
   `)
   res.json({ users: rows })
 })

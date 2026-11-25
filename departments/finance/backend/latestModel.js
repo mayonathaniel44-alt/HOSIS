@@ -507,9 +507,8 @@ async function createPayroll(data, userId, userName = 'Finance Officer') {
   const totalDeductions = withholdingTax + sssDeduction + philhealthDeduction + pagibigDeduction + otherDeductions
   const netPayable = Math.max(0, grossPay - totalDeductions)
 
-  if (data.periodStart || data.periodEnd) validatePayPeriod(data.periodStart, data.periodEnd)
-  const periodStart = data.periodStart || new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10)
-  const periodEnd = data.periodEnd || new Date().toISOString().slice(0, 10)
+  const { periodStart, periodEnd } = data
+  validatePayPeriod(periodStart, periodEnd)
 
   const { rows } = await pool.query(
     `INSERT INTO finance_payroll (
@@ -521,7 +520,7 @@ async function createPayroll(data, userId, userName = 'Finance Officer') {
      RETURNING id, payroll_code AS "payrollCode", employee_name AS "employeeName", gross_pay AS "grossPay", net_payable AS "netPayable", status`,
     [
       payrollCode,
-      data.employeeId || `EMP-${Date.now().toString().slice(-4)}`,
+      data.employeeId.trim(),
       data.employeeName,
       data.department,
       data.roleTitle || 'Hotel Staff',
@@ -562,7 +561,15 @@ async function createPayroll(data, userId, userName = 'Finance Officer') {
 
 async function disbursePayroll(id, userId, userName) {
   return transaction(async (client) => {
-    const { rows: [record] } = await client.query('SELECT status, created_by FROM finance_payroll WHERE id=$1 FOR UPDATE', [id])
+    const { rows: [employee] } = await client.query('SELECT employee_id FROM finance_payroll WHERE id=$1', [id])
+    if (!employee) throw notFound('Payroll Record')
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('payroll:' || lower(btrim($1)), 0))", [employee.employee_id])
+    const { rows: [record] } = await client.query(`SELECT status, created_by, EXISTS (
+      SELECT FROM finance_payroll paid WHERE lower(btrim(paid.employee_id))=lower(btrim(p.employee_id))
+        AND paid.period_start=p.period_start AND paid.period_end=p.period_end
+        AND paid.id<>p.id AND paid.status='DISBURSED'
+      ) AS already_paid FROM finance_payroll p WHERE p.id=$1 FOR UPDATE`, [id])
+    if (record?.already_paid) throw appError(409, 'PAYROLL_ALREADY_DISBURSED', 'Payroll for this employee and period has already been disbursed.')
     if (!record) throw notFound('Payroll Record')
     if (record.status !== 'APPROVED' || record.created_by === userId) {
       throw appError(409, 'PAYROLL_DISBURSEMENT_BLOCKED', 'A different Finance user must record disbursement of approved payroll.')
@@ -807,7 +814,7 @@ function csvCell(value) {
   return '"' + text.replace(/"/g, '""') + '"'
 }
 
-async function exportData(entity = 'invoices', format = 'csv', period = 'all') {
+async function exportData(entity = 'invoices', format = 'csv', period = 'all', { search, eventType } = {}) {
   let records = []
   let filename = `hosis-${entity}-${Date.now()}`
 
@@ -889,7 +896,7 @@ async function exportData(entity = 'invoices', format = 'csv', period = 'all') {
     records = await listExpenses(undefined, undefined, { all: true })
     filename = `hosis-expenses-bulk-${Date.now()}`
   } else if (entity === 'audit') {
-    records = await listAuditLog(undefined, undefined, { all: true })
+    records = await listAuditLog(search, eventType, { all: true })
     filename = `hosis-audit-log-bulk-${Date.now()}`
   } else if (entity === 'hk-damages') {
     records = await listHousekeepingDamages()
@@ -1328,7 +1335,8 @@ async function syncHRTimesheets(periodStart, periodEnd) {
   const { rows: staff } = await pool.query(`
     SELECT e.id AS "employeeId", e.name, e.dept AS department, e.pos AS role,
       p.days_worked * 8 AS "regularHours", p.overtime_hours AS "overtimeHours",
-      p.daily_rate * p.days_worked AS "basicPay"
+      p.daily_rate * p.days_worked AS "basicPay",
+      COALESCE(p.daily_rate=0 AND p.days_worked>0, false) AS "missingRate"
     FROM hr_employees e
     LEFT JOIN hr_attendance_periods p ON p.employee_id=e.id AND p.period_start=$1 AND p.period_end=$2
     WHERE $1::date IS NULL OR p.employee_id IS NOT NULL
@@ -1627,11 +1635,11 @@ async function updateLeaveRequestStatus(id, { status, rejectionReason } = {}, re
     if (status === 'APPROVED') {
       try {
         await client.query(`
-          INSERT INTO hr_leave_requests (id, emp, type, start_date, end_date, days, status, reason, decided_at, decided_by, decision_notes)
-          SELECT $1, e.id, $2, $3, $4, $5, 'Approved', $6, NOW(), $7, 'Approved in Finance'
-          FROM hr_employees e WHERE e.id=$8
+          INSERT INTO hr_leave_requests (id, emp, type, start_date, end_date, days, status, reason, decided_at, decided_by, decision_notes, submitted_by)
+          SELECT $1, e.id, $2, $3, $4, $5, 'Approved', $6, NOW(), $7, 'Approved in Finance', u.id
+          FROM hr_employees e LEFT JOIN users u ON u.username=$9 WHERE e.id=$8
         `, ['FIN-' + request.request_code, request.leave_type, request.start_date, request.end_date,
-          request.total_days, request.reason, reviewerId, request.employee_id])
+          request.total_days, request.reason, reviewerId, request.employee_id, request.submitted_by])
       } catch (err) {
         if (err.code === '23P01') throw appError(409, 'LEAVE_OVERLAP', 'The dates overlap an existing HR leave request.')
         throw err

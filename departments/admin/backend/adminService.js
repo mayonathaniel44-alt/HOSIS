@@ -48,6 +48,7 @@ module.exports = {
   listStaff,
   createStaff,
   updateStaff,
+  deleteStaff: model.deleteStaff,
   listActivity,
   auditReport: (query) => model.auditReport(validation.auditFilters(query)),
   getSettings,

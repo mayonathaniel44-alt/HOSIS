@@ -42,9 +42,9 @@ async function fileLeave(userId, { type, startDate, endDate, reason } = {}, depa
     `, [employee.id, startDate, endDate])
     if (rowCount) throw appError(409, 'LEAVE_OVERLAP', 'These dates overlap a pending or approved request.')
     const { rows: [request] } = await client.query(`
-      INSERT INTO hr_leave_requests (id,emp,type,start_date,end_date,days,status,reason)
-      VALUES ($1,$2,$3,$4,$5,$6,'Pending',$7) RETURNING ${columns}
-    `, ['LR-' + (departmentRole === 'FRONT_OFFICE' ? 'FO' : 'STAFF') + '-' + randomUUID(), employee.id, type, startDate, endDate, days, reason.trim()])
+      INSERT INTO hr_leave_requests (id,emp,type,start_date,end_date,days,status,reason,submitted_by)
+      VALUES ($1,$2,$3,$4,$5,$6,'Pending',$7,$8) RETURNING ${columns}
+    `, ['LR-' + (departmentRole === 'FRONT_OFFICE' ? 'FO' : 'STAFF') + '-' + randomUUID(), employee.id, type, startDate, endDate, days, reason.trim(), userId])
     if (departmentRole === 'FRONT_OFFICE') await client.query(
       "INSERT INTO front_office_activity(user_id,action,description) VALUES($1,'LEAVE_REQUEST_FILED',$2)",
       [userId, 'Filed HR leave request for ' + startDate + ' to ' + endDate],

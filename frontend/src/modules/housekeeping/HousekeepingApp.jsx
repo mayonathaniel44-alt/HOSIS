@@ -135,6 +135,7 @@ export default function HousekeepingApp({ session: shellSession = null, onLogout
   }
 
   function logout() {
+    if (!shellLogout && !window.confirm("Are you sure you want to log out?")) return
     if (shellLogout) {
       shellLogout()
       return

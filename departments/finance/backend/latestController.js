@@ -19,8 +19,8 @@ const userName = (req) => req.user?.username || 'Finance Staff'
 
 async function exportData(req, res, next) {
   try {
-    const { entity, format, period } = req.query
-    const result = await service.exportData(entity, format, period)
+    const { entity, format, period, search, eventType } = req.query
+    const result = await service.exportData(entity, format, period, { search, eventType })
     return res.json({ data: result.data, filename: result.filename })
   } catch (err) {
     next(err)

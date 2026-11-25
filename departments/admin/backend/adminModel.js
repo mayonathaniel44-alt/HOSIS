@@ -36,7 +36,7 @@ async function dashboard() {
       `SELECT COUNT(*)::integer AS total,
               COUNT(*) FILTER (WHERE is_active)::integer AS active,
               COUNT(*) FILTER (WHERE is_active AND role = 'ADMIN')::integer AS admins
-       FROM users`,
+       FROM users WHERE deleted_at IS NULL`,
     ),
     pool.query(
       `SELECT COUNT(*)::integer AS "last24Hours"
@@ -70,7 +70,7 @@ async function listStaff() {
   const { rows } = await pool.query(
     `SELECT id, username, role, position, first_name AS "firstName", last_name AS "lastName", email, is_active AS "isActive",
             created_at AS "createdAt", updated_at AS "updatedAt"
-     FROM users
+     FROM users WHERE deleted_at IS NULL
      ORDER BY is_active DESC, role, username`,
   )
   return rows
@@ -111,19 +111,19 @@ async function createStaff(staff, userId) {
   })
 }
 
-async function updateStaff(id, fields, userId) {
+async function updateStaff(id, fields, userId, { deleting = false } = {}) {
   return transaction(async (client) => {
     await client.query('SELECT pg_advisory_xact_lock(742914)')
     const currentResult = await client.query(
-      'SELECT id, username, role, is_active, position FROM users WHERE id = $1 FOR UPDATE',
+      'SELECT id, username, role, is_active, position FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE',
       [id],
     )
     const current = currentResult.rows[0]
     if (!current) throw appError(404, 'NOT_FOUND', 'Staff account was not found.')
     if (String(current.id) === String(userId)
-      && ((fields.role && fields.role !== current.role)
+      && (deleting || (fields.role && fields.role !== current.role)
         || (fields.isActive !== undefined && fields.isActive !== current.is_active))) {
-      throw appError(400, 'SELF_MODIFICATION_NOT_ALLOWED', 'You cannot change your own role or active status.')
+      throw appError(400, 'SELF_MODIFICATION_NOT_ALLOWED', deleting ? 'You cannot delete your own account.' : 'You cannot change your own role or active status.')
     }
 
     const nextRole = fields.role || current.role
@@ -139,7 +139,7 @@ async function updateStaff(id, fields, userId) {
     } else if (current.role !== nextRole && nextRole !== 'HOUSEKEEPING') {
       fields.position = accountPosition(nextRole)
     }
-    if (current.role === 'HOUSEKEEPING' && current.is_active && (nextRole !== 'HOUSEKEEPING' || !nextActive)) {
+    if (current.role === 'HOUSEKEEPING' && (deleting || (current.is_active && (nextRole !== 'HOUSEKEEPING' || !nextActive)))) {
       const { rows: [work] } = await client.query(
         `SELECT
           (SELECT COUNT(*)::int FROM hk_cleaning_tasks WHERE staff_id=$1 AND task_status NOT IN ('COMPLETED','INSPECTED')) AS tasks,
@@ -166,6 +166,7 @@ async function updateStaff(id, fields, userId) {
     const assignments = []
     const values = []
     const changedFields = []
+    if (deleting) assignments.push('deleted_at = NOW()')
     if (fields.role) {
       values.push(fields.role)
       assignments.push(`role = $${values.length}`)
@@ -184,7 +185,7 @@ async function updateStaff(id, fields, userId) {
     for (const [key,column] of Object.entries({firstName:'first_name',lastName:'last_name',email:'email',position:'position'})) {
       if (Object.hasOwn(fields,key)) { values.push(fields[key] || (key==='email'?null:'')); assignments.push(`${column} = $${values.length}`); changedFields.push(key) }
     }
-    const revokeSessions = nextRole !== current.role || nextActive !== current.is_active
+    const revokeSessions = deleting || nextRole !== current.role || nextActive !== current.is_active
       || (fields.position !== undefined && fields.position !== current.position) || !!fields.passwordHash
     values.push(id, revokeSessions)
     const { rows } = await client.query(
@@ -200,11 +201,15 @@ async function updateStaff(id, fields, userId) {
     await recordActivity(
       client,
       userId,
-      'ADMIN_STAFF_UPDATED',
-      `Updated ${changedFields.join(', ')} for staff account "${current.username}".`,
+      deleting ? 'ADMIN_STAFF_DELETED' : 'ADMIN_STAFF_UPDATED',
+      deleting ? `Deleted staff account "${current.username}".` : `Updated ${changedFields.join(', ')} for staff account "${current.username}".`,
     )
     return rows[0]
   })
+}
+
+function deleteStaff(id, userId) {
+  return updateStaff(id, { isActive: false }, userId, { deleting: true })
 }
 
 async function listActivity(limit) {
@@ -278,6 +283,7 @@ module.exports = {
   listStaff,
   createStaff,
   updateStaff,
+  deleteStaff,
   listActivity,
   auditReport,
   getSettings,

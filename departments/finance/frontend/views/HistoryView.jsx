@@ -2,19 +2,8 @@ import { useCallback, useState, useEffect } from 'react'
 import { financeApi } from '../financeApi.js'
 import { exportToCsv, exportToJson } from '../utils/exportHelper'
 
-export default function HistoryView({ showToast }) {
-  const [events, setEvents] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [selectedTxn, setSelectedTxn] = useState(null)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [eventTypeFilter, setEventTypeFilter] = useState('All')
-
-  const loadAudit = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await financeApi.audit(searchTerm, eventTypeFilter)
-      const raw = res.data || res || []
-      const mapped = raw.map((ev) => ({
+function mapAuditEvents(raw) {
+  return raw.map((ev) => ({
         id: ev.transactionCode || `TXN-${ev.id}`,
         dbId: ev.id,
         activity: ev.activity,
@@ -34,7 +23,21 @@ export default function HistoryView({ showToast }) {
           : '—',
         details: ev.details || {},
       }))
-      setEvents(mapped)
+}
+
+export default function HistoryView({ showToast }) {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selectedTxn, setSelectedTxn] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [eventTypeFilter, setEventTypeFilter] = useState('All')
+
+  const loadAudit = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await financeApi.audit(searchTerm, eventTypeFilter)
+      const raw = res.data || res || []
+      setEvents(mapAuditEvents(raw))
     } catch (err) {
       console.error('Failed to load audit events from database:', err)
       showToast('Error connecting to audit log in database.')
@@ -50,31 +53,20 @@ export default function HistoryView({ showToast }) {
     return () => clearTimeout(timer)
   }, [loadAudit])
 
-  function handleBulkExportCsv() {
-    if (!events.length) {
-      showToast('No records to export.')
-      return
+  async function handleBulkExport(format) {
+    try {
+      const raw = await financeApi.exportData('audit', 'json', 'all', { search: searchTerm, eventType: eventTypeFilter })
+      const records = mapAuditEvents(raw)
+      if (!records.length) {
+        showToast('No records to export.')
+        return
+      }
+      if (format === 'csv') exportToCsv('hosis-financial-records', records)
+      else exportToJson('hosis-financial-records', records)
+      showToast('Exported financial records.')
+    } catch (error) {
+      showToast(error.message)
     }
-    const headers = [
-      { key: 'id', label: 'Transaction Code' },
-      { key: 'activity', label: 'Activity' },
-      { key: 'ref', label: 'Reference Code' },
-      { key: 'amountLabel', label: 'Amount' },
-      { key: 'source', label: 'Department / Source' },
-      { key: 'user', label: 'Staff User' },
-      { key: 'when', label: 'Timestamp' },
-    ]
-    exportToCsv('hosis-financial-records', events, headers)
-    showToast('Exported financial records to CSV.')
-  }
-
-  function handleBulkExportJson() {
-    if (!events.length) {
-      showToast('No records to export.')
-      return
-    }
-    exportToJson('hosis-financial-records', events)
-    showToast('Exported financial records to JSON.')
   }
 
   const filteredEvents = events.filter((ev) => {
@@ -102,7 +94,7 @@ export default function HistoryView({ showToast }) {
           <button
             type="button"
             className="fin-btn fin-btn-secondary"
-            onClick={handleBulkExportCsv}
+            onClick={() => handleBulkExport('csv')}
             title="Bulk export financial records to CSV"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -115,7 +107,7 @@ export default function HistoryView({ showToast }) {
           <button
             type="button"
             className="fin-btn fin-btn-secondary"
-            onClick={handleBulkExportJson}
+            onClick={() => handleBulkExport('json')}
             title="Bulk export financial records to JSON"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

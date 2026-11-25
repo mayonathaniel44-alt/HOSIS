@@ -521,6 +521,13 @@ async function stayFolio(id, client = pool) {
        FROM hk_charge_findings f JOIN finance_invoices i ON i.id=f.finance_invoice_id
        WHERE f.reservation_id=r.id AND f.status='APPROVED' AND i.status NOT IN ('DRAFT','VOID')
        UNION ALL
+       SELECT i.id, i.invoice_code, i.total_amount, i.status, 'Finance', 'OTHER', GREATEST(i.balance_due,0)
+       FROM finance_invoices i
+       WHERE (i.reservation_id=r.id OR (i.reservation_id IS NULL AND i.reservation_code=r.confirmation_code))
+         AND i.status NOT IN ('DRAFT','VOID')
+         AND NOT EXISTS (SELECT FROM hk_charge_findings f WHERE f.finance_invoice_id=i.id)
+         AND NOT EXISTS (SELECT FROM finance_sales_milestones m WHERE m.invoice_id=i.id)
+       UNION ALL
        SELECT i.id, i.invoice_code, i.total_amount, i.status, 'Finance',
          CASE WHEN EXISTS (
            SELECT 1 FROM finance_sales_milestones complete

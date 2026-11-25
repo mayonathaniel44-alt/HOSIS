@@ -67,6 +67,10 @@ export default function PayrollView({ user, showToast }) {
     if (!selectedId) return
     const found = hrStaffList.find((s) => s.employeeId === selectedId)
     if (!found) return
+    if (found.missingRate) {
+      showToast('HR must set the daily rate and resave this attendance period before you can import it.')
+      return
+    }
 
     setEmpId(found.employeeId)
     setEmpName(found.name)
@@ -162,10 +166,14 @@ export default function PayrollView({ user, showToast }) {
       showToast('Employee name is required.')
       return
     }
+    if (!empId.trim()) {
+      showToast('Enter the employee’s existing staff ID.')
+      return
+    }
     setSubmitting(true)
     try {
       await financeApi.createPayroll({
-        employeeId: empId || `EMP-26${Math.floor(100 + Math.random() * 900)}`,
+        employeeId: empId.trim(),
         employeeName: empName.trim(),
         department,
         roleTitle,

@@ -263,9 +263,9 @@ router.post('/leave-requests', authorize('HOUSEKEEPING'), async (req, res) => {
     if (overlaps.rows[0]) throw new HttpError(409, 'These dates overlap an existing pending or approved leave request.');
     const id = `LR-HK-${req.user.userId}-${Date.now().toString(36).toUpperCase()}`;
     const { rows } = await client.query(
-      `INSERT INTO hr_leave_requests (id,emp,type,start_date,end_date,days,status,reason)
-       VALUES ($1,$2,$3,$4,$5,$6,'Pending',$7) RETURNING *`,
-      [id, emp, body.type.replace(/_/g, ' '), startDate, endDate, days, reason]
+      `INSERT INTO hr_leave_requests (id,emp,type,start_date,end_date,days,status,reason,submitted_by)
+       VALUES ($1,$2,$3,$4,$5,$6,'Pending',$7,$8) RETURNING *`,
+      [id, emp, body.type.replace(/_/g, ' '), startDate, endDate, days, reason, req.user.userId]
     );
     return rows[0];
   });

@@ -6,6 +6,19 @@ const { appError } = require('../../../backend/src/lib/errors')
 const { createEmployeeForApplicant, nextEmployeeId } = require('./recruitment')
 
 const router = express.Router()
+async function audit(client, actor, action, employeeOrRecordId) {
+  await client.query('INSERT INTO front_office_activity(user_id, action, description) VALUES ($1,$2,$3)',
+    [actor.id, action, String(employeeOrRecordId)])
+}
+
+function auditedWrite(actor, action, sql, values) {
+  return db.withTransaction(async (client) => {
+    const result = await client.query(sql, values)
+    if (result.rows[0]) await audit(client, actor, action, result.rows[0].id)
+    return result
+  })
+}
+
 function employeeFromRow(row) {
   return {
     id: row.id, name: row.name, dept: row.dept, pos: row.pos, status: row.status,
@@ -32,7 +45,7 @@ router.post('/vacancies', async (request, response, next) => {
   }
   try {
     const id = `VAC-${randomUUID()}`;
-    const result = await pool.query(`INSERT INTO hr_job_vacancies
+    const result = await auditedWrite(request.user, 'HR_VACANCY_CREATED', `INSERT INTO hr_job_vacancies
       (id, title, dept, openings, posted, status, description)
       VALUES ($1,$2,$3,$4,CURRENT_DATE,$5,$6) RETURNING *`,
     [id, title.trim(), dept, Number(openings), status, typeof description === 'string' ? description.trim() : '']);
@@ -49,7 +62,7 @@ router.put('/vacancies/:id', async (request, response, next) => {
     throw appError(400, 'HR_RECORD_ERROR', 'Provide a position, valid department, positive openings, and valid vacancy status.');
   }
   try {
-    const result = await pool.query(`UPDATE hr_job_vacancies SET title = $1, dept = $2, openings = $3, status = $4, description = $5
+    const result = await auditedWrite(request.user, 'HR_VACANCY_UPDATED', `UPDATE hr_job_vacancies SET title = $1, dept = $2, openings = $3, status = $4, description = $5
       WHERE id = $6 RETURNING *`,
     [title.trim(), dept, Number(openings), status, typeof description === 'string' ? description.trim() : '', request.params.id]);
     if (!result.rowCount) throw appError(404, 'HR_RECORD_ERROR', 'Vacancy not found.');
@@ -63,7 +76,7 @@ router.delete('/vacancies/:id', async (request, response, next) => {
   try {
     const assigned = await pool.query('SELECT 1 FROM hr_applicants WHERE vacancy_id = $1 LIMIT 1', [request.params.id]);
     if (assigned.rowCount) throw appError(409, 'HR_RECORD_ERROR', 'This vacancy has applicants. Close or retain it so their recruitment history is preserved.');
-    const result = await pool.query(`DELETE FROM hr_job_vacancies v WHERE id=$1
+    const result = await auditedWrite(request.user, 'HR_VACANCY_DELETED', `DELETE FROM hr_job_vacancies v WHERE id=$1
       AND NOT EXISTS (SELECT 1 FROM hr_applicants a WHERE a.vacancy_id=v.id) RETURNING id`, [request.params.id]);
     if (!result.rowCount) throw appError(404, 'HR_RECORD_ERROR', 'Vacancy not found.');
     response.json({ ok: true });
@@ -82,7 +95,7 @@ router.post('/applicants', async (request, response, next) => {
     if (!vacancy.rowCount) throw appError(404, 'HR_RECORD_ERROR', 'Applied position not found.');
     if (vacancy.rows[0].status !== 'Open') throw appError(409, 'HR_RECORD_ERROR', 'Applications are only accepted for open positions.');
     const id = `CAN-${randomUUID()}`;
-    const result = await pool.query(`INSERT INTO hr_applicants
+    const result = await auditedWrite(request.user, 'HR_APPLICANT_CREATED', `INSERT INTO hr_applicants
       (id, vacancy_id, name, department, position, application_date, status, email, phone, education, experience)
       VALUES ($1,$2,$3,$4,$5,CURRENT_DATE,'Pending',$6,$7,$8,$9) RETURNING id`,
     [id, vacancyId, name.trim(), vacancy.rows[0].dept, vacancy.rows[0].title,
@@ -144,6 +157,7 @@ router.put('/applicants/:id', async (request, response, next) => {
       [request.params.id]);
       hiredEmployeeId = await createEmployeeForApplicant(client, hiredApplicant.rows[0]);
     }
+    await audit(client, request.user, stage === 'Hired' ? 'HR_APPLICANT_HIRED' : 'HR_APPLICANT_UPDATED', request.params.id);
     await client.query('COMMIT');
     response.json({ applicant: updated.rows[0], ...(hiredEmployeeId ? { hiredEmployeeId } : {}) });
   } catch (error) {
@@ -158,7 +172,7 @@ router.delete('/applicants/:id', async (request, response, next) => {
   try {
     const hired = await pool.query('SELECT id FROM hr_employees WHERE recruitment_id = $1', [request.params.id]);
     if (hired.rowCount) throw appError(409, 'HR_RECORD_ERROR', 'This applicant is a hired employee. Keep the recruitment history attached to the employee record.');
-    const result = await pool.query("DELETE FROM hr_applicants WHERE id = $1 AND status <> 'Hired' RETURNING id", [request.params.id]);
+    const result = await auditedWrite(request.user, 'HR_APPLICANT_DELETED', "DELETE FROM hr_applicants WHERE id = $1 AND status <> 'Hired' RETURNING id", [request.params.id]);
     if (!result.rowCount) throw appError(404, 'HR_RECORD_ERROR', 'Applicant not found.');
     response.json({ ok: true });
   } catch (error) {
@@ -167,10 +181,11 @@ router.delete('/applicants/:id', async (request, response, next) => {
 });
 
 router.post('/employees', async (request, response, next) => {
-  const { name, pos, dept, status, contact, hired } = request.body;
+  const { name, pos, dept, status, contact, hired, rate } = request.body;
   if (typeof name !== 'string' || !name.trim() || name.length > 150 || typeof pos !== 'string' || !pos.trim() ||
       !['frontdesk', 'housekeeping', 'finance', 'maintenance', 'sales', 'hr'].includes(dept) ||
       !['Regular', 'Probationary', 'Contractual'].includes(status) ||
+      (rate != null && (!Number.isInteger(rate) || rate < 0 || rate > 1000000)) ||
       (hired && !isDateOnly(hired))) {
     throw appError(400, 'HR_RECORD_ERROR', 'Provide a name, position, valid department, employment status, and hire date.');
   }
@@ -180,10 +195,11 @@ router.post('/employees', async (request, response, next) => {
     const { employeeId, department } = await nextEmployeeId(client, dept);
     const result = await client.query(`INSERT INTO hr_employees
       (id, name, dept, pos, status, hired, rate, assignment, week, today, time_in, days, late, absences, overtime, contact, quals)
-      VALUES ($1,$2,$3,$4,$5,COALESCE($6::date,CURRENT_DATE),0,$7,
+      VALUES ($1,$2,$3,$4,$5,COALESCE($6::date,CURRENT_DATE),COALESCE($9,0),$7,
         '["DAY","DAY","DAY","DAY","DAY","OFF","OFF"]'::jsonb,'present','—',0,0,0,0,$8,'[]'::jsonb)
       RETURNING *`,
-    [employeeId, name.trim(), dept, pos.trim(), status, hired || null, department.assignment, contact || '']);
+    [employeeId, name.trim(), dept, pos.trim(), status, hired || null, department.assignment, contact || '', rate ?? null]);
+    await audit(client, request.user, 'HR_EMPLOYEE_CREATED', employeeId);
     await client.query('COMMIT');
     response.status(201).json({ employee: employeeFromRow(result.rows[0]) });
   } catch (error) {
@@ -195,17 +211,18 @@ router.post('/employees', async (request, response, next) => {
 });
 
 router.put('/employees/:id', async (request, response, next) => {
-  const { name, pos, dept, status, contact, hired } = request.body;
+  const { name, pos, dept, status, contact, hired, rate } = request.body;
   if (typeof name !== 'string' || !name.trim() || name.length > 150 || typeof pos !== 'string' || !pos.trim() ||
       !['frontdesk', 'housekeeping', 'finance', 'maintenance', 'sales', 'hr'].includes(dept) ||
       !['Regular', 'Probationary', 'Contractual'].includes(status) ||
+      (rate != null && (!Number.isInteger(rate) || rate < 0 || rate > 1000000)) ||
       (hired && !isDateOnly(hired))) {
     throw appError(400, 'HR_RECORD_ERROR', 'Provide a name, position, valid department, employment status, and hire date.');
   }
   try {
-    const result = await pool.query(`UPDATE hr_employees SET name = $1, pos = $2, dept = $3, status = $4, contact = $5, hired = COALESCE($6::date, hired)
+    const result = await auditedWrite(request.user, 'HR_EMPLOYEE_UPDATED', `UPDATE hr_employees SET name = $1, pos = $2, dept = $3, status = $4, contact = $5, hired = COALESCE($6::date, hired), rate = COALESCE($8, rate)
       WHERE id = $7 AND (staff_user_id IS NULL OR dept=$3) RETURNING *`,
-    [name.trim(), pos.trim(), dept, status, contact || '', hired || null, request.params.id]);
+    [name.trim(), pos.trim(), dept, status, contact || '', hired || null, request.params.id, rate ?? null]);
     if (!result.rowCount) throw appError(409, 'EMPLOYEE_UPDATE_BLOCKED', 'Employee is missing or this department change conflicts with the linked staff account.');
     response.json({ employee: employeeFromRow(result.rows[0]) });
   } catch (error) {
@@ -224,10 +241,12 @@ router.delete('/employees/:id', async (request, response, next) => {
       pool.query('SELECT 1 FROM hr_assignment_logs WHERE emp = $1 LIMIT 1', [request.params.id])
     ]);
     if (leaves.rowCount || assignments.rowCount) throw appError(409, 'HR_RECORD_ERROR', 'This employee has leave or assignment history and cannot be deleted.');
-    const { rowCount } = await pool.query(`DELETE FROM hr_employees e WHERE id=$1 AND staff_user_id IS NULL AND recruitment_id IS NULL
+    const { rowCount } = await auditedWrite(request.user, 'HR_EMPLOYEE_DELETED', `DELETE FROM hr_employees e WHERE id=$1 AND staff_user_id IS NULL AND recruitment_id IS NULL
       AND NOT EXISTS (SELECT 1 FROM finance_payroll WHERE employee_id=e.id)
-      AND NOT EXISTS (SELECT 1 FROM finance_leave_requests WHERE employee_id=e.id)`, [request.params.id]);
-    if (!rowCount) throw appError(409, 'EMPLOYEE_HAS_HISTORY', 'This employee is linked to Finance or another staff record.');
+      AND NOT EXISTS (SELECT 1 FROM finance_leave_requests WHERE employee_id=e.id)
+      AND NOT EXISTS (SELECT 1 FROM hr_attendance_periods WHERE employee_id=e.id)
+      RETURNING id`, [request.params.id]);
+    if (!rowCount) throw appError(409, 'EMPLOYEE_HAS_HISTORY', 'This employee has payroll, leave, or attendance history.');
     response.json({ ok: true });
   } catch (error) {
     next(error);
@@ -278,6 +297,7 @@ router.patch('/employees/:id/attendance', async (req, res) => {
     const { rows: [employee] } = await client.query(`UPDATE hr_employees SET today=$2,time_in=$3,days=$4,late=$5,absences=$6,overtime=$7
       WHERE id=$1 RETURNING rate`, [req.params.id,today,timeIn,days,late,absences,overtime])
     if (!employee) throw appError(404,'EMPLOYEE_NOT_FOUND','Employee not found.')
+    await audit(client, req.user, 'HR_ATTENDANCE_UPDATED', req.params.id)
     if (periodStart && periodEnd) {
       await client.query(`INSERT INTO hr_attendance_periods (employee_id,period_start,period_end,days_worked,overtime_hours,daily_rate)
         VALUES ($1,$2,$3,$4,$5,$6)
@@ -305,8 +325,8 @@ router.post('/leaves', async (req, res) => {
     const overlap = await client.query(`SELECT 1 FROM hr_leave_requests WHERE emp=$1 AND status IN ('Pending','Approved')
       AND daterange(start_date,end_date,'[]') && daterange($2::date,$3::date,'[]')`,[employeeId,startDate,endDate])
     if (overlap.rowCount) throw appError(409,'LEAVE_OVERLAP','These dates overlap pending or approved leave.')
-    await client.query(`INSERT INTO hr_leave_requests (id,emp,type,start_date,end_date,days,status,reason)
-      VALUES($1,$2,$3,$4,$5,$6,'Pending',$7)`,[id,employeeId,type,startDate,endDate,days,reason.trim()])
+    await client.query(`INSERT INTO hr_leave_requests (id,emp,type,start_date,end_date,days,status,reason,submitted_by)
+      VALUES($1,$2,$3,$4,$5,$6,'Pending',$7,$8)`,[id,employeeId,type,startDate,endDate,days,reason.trim(),req.user.id])
   })
   res.status(201).json({ id })
 })

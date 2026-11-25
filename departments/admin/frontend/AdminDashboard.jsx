@@ -1,6 +1,6 @@
 import AdminReportsPage from './AdminReportsPage.jsx'
 import AdminAuditLog from './AdminAuditLog.jsx'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi, authApi } from '../../../frontend/src/services/api.js'
 import useVisibleRefresh from '../../../frontend/src/useVisibleRefresh.js'
 import './AdminDashboard.css'
@@ -44,6 +44,8 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
   const [overview, setOverview] = useState(null)
   const [staff, setStaff] = useState([])
   const [staffEdit, setStaffEdit] = useState(null)
+  const [staffToDelete, setStaffToDelete] = useState(null)
+  const deleteDialog = useRef(null)
   const [settings, setSettings] = useState(null)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -126,6 +128,18 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
     if (succeeded) {
       setNewStaff({ username: '', password: '', role: 'FRONT_OFFICE', position:'HOUSEKEEPER', firstName:'',lastName:'',email:'' })
       setShowNewStaff(false)
+    }
+  }
+
+  async function confirmDeleteStaff(event) {
+    event.preventDefault()
+    if (!staffToDelete || busy) return
+    const member = staffToDelete
+    deleteDialog.current.close()
+    if (await runAction(() => adminApi.deleteStaff(member.id), 'Staff account deleted.')) {
+      setStaff((current) => current.filter((row) => row.id !== member.id))
+      setStaffEdit((current) => current?.id === member.id ? null : current)
+      setPasswordResetId((current) => current === member.id ? null : current)
     }
   }
 
@@ -341,6 +355,10 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
                           <button className="small-action" disabled={busy} onClick={() => setStaffEdit({ ...member, original: member, isSelf, role: staffRoles.some(([role]) => role === member.role) ? member.role : '' })}>Edit profile</button>
                           <button className="small-action" disabled={busy || isSelf || (!member.isActive && !staffRoles.some(([role]) => role === member.role))} onClick={() => runAction(() => adminApi.updateStaff(member.id, { isActive: !member.isActive }), member.isActive ? 'Staff account deactivated.' : 'Staff account activated.')}>{member.isActive ? 'Deactivate' : 'Activate'}</button>
                           <button className="small-action small-action-quiet" disabled={busy} onClick={() => { setPasswordResetId(passwordResetId === member.id ? null : member.id); setNewPassword('') }}>Reset password</button>
+                          <button type="button" className="small-action admin-delete-action" disabled={busy || isSelf} aria-label={`Delete account ${member.username}`} onClick={() => {
+                            setStaffToDelete(member)
+                            deleteDialog.current.showModal()
+                          }}>Delete</button>
                           {passwordResetId === member.id && <form className="admin-reset-form" onSubmit={(event) => resetPassword(event, member.id)}><input aria-label={`New password for ${member.username}`} type="password" minLength={12} maxLength={72} required autoComplete="new-password" placeholder="New password (12+ chars)" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /><button disabled={busy}>Save</button></form>}
                         </td>
                       </tr>
@@ -350,6 +368,16 @@ export default function AdminDashboard({ username, onOpenWorkspace, onSignOut, t
                 {!loading && filteredStaff.length === 0 && <p className="admin-empty">{staff.length ? 'No staff accounts match these filters.' : 'No staff accounts found.'}</p>}
                 </div>
               </section>
+              <dialog ref={deleteDialog} className="modal-card front-office-logout" aria-labelledby="delete-staff-heading" onClose={() => setStaffToDelete(null)}>
+                <form onSubmit={confirmDeleteStaff}>
+                  <h2 id="delete-staff-heading">Delete {staffToDelete?.username}?</h2>
+                  <p>This account will lose access immediately. Its activity and linked records will remain in HOSIS.</p>
+                  <div className="modal-actions">
+                    <button type="button" className="button button-secondary" onClick={() => deleteDialog.current.close()}>Cancel</button>
+                    <button type="submit" className="button button-primary admin-delete-confirm">Delete account</button>
+                  </div>
+                </form>
+              </dialog>
             </>
           )}
 

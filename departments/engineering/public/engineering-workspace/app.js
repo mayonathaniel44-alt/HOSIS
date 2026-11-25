@@ -53,6 +53,38 @@ let leaveEmployeeFilter = '';
 let leaveFromFilter = '';
 let leaveToFilter = '';
 let reportArchives = [];
+const unavailableSections = new Map();
+
+function loadWorkspaceExtras() {
+    const sections = [];
+    if (isHead()) sections.push(
+        ['Staff directory', async () => { directory = await apiRequest('/directory'); }],
+        ['Stock notifications', async () => { stockNotifications = await apiRequest('/notifications'); }]
+    );
+    if (page === 'Staff Consumption') sections.push(
+        ['Materials consumption', async () => { staffConsumption = await apiRequest('/staff-consumption'); }]
+    );
+    if (page === 'Finance Records' || page === 'Materials & Expense Review') sections.push(
+        ['Finance handoff', async () => { financeOutbox = await apiRequest('/integration/outbox'); }]
+    );
+    if (page === 'Leave Records') sections.push(['Leave records', loadLeaveData]);
+    if (page === 'Admin Reports') sections.push(['Report archives', loadReportArchives]);
+    if (page === 'Staff Directory') sections.push(['HR staffing', loadEngineeringHr]);
+    if (isHead()) sections.push(['Technician accounts', async () => { technicianUsers = await apiRequest('/users'); }]);
+    return sections;
+}
+
+async function refreshWorkspaceExtras(sections) {
+    await Promise.all(sections.map(async ([label, load]) => {
+        try {
+            await load();
+            unavailableSections.delete(label);
+        } catch {
+            unavailableSections.set(label, load);
+        }
+    }));
+    if (!document.querySelector('dialog[open]')) render();
+}
 let consumptionStaff = '';
 let consumptionFrom = '';
 let consumptionTo = '';
@@ -261,10 +293,6 @@ async function initializeApplication() {
         }
         db = await apiRequest('/data');
         lastSaved = structuredClone(db);
-        if (isHead()) {
-            technicianUsers = await apiRequest('/users');
-        }
-        await Promise.all([loadHeadIntegration(), loadLeaveData(), loadReportArchives(), loadEngineeringHr()]);
         if (!canAccessPage(page))
             return window.location.replace(
                 isHead() ? 'index.html' : 'technician.html'
@@ -272,7 +300,7 @@ async function initializeApplication() {
         populateSessionAccount();
         restorePageFilters();
         render();
-        await openNotificationDestination();
+        void refreshWorkspaceExtras(loadWorkspaceExtras()).then(openNotificationDestination);
         if (page === 'Materials & Expense Review' && window.location.hash === '#stock-consumption')
             $('#stock-consumption')?.scrollIntoView({ block: 'start' });
     } catch (error) {
@@ -1672,6 +1700,22 @@ function render() {
         ? '<section class="panel"><h2>Refresh needed</h2><p>A save failed or another user changed the records. Refresh to load the latest data before continuing.</p><button class="primary" data-action="refresh-records">Refresh Records</button><div id="pageTools"></div></section>'
         : renderers[page]();
     $('#pageTools').append(tools);
+    if (unavailableSections.size) {
+        const notice = document.createElement('section');
+        notice.className = 'panel';
+        notice.setAttribute('role', 'status');
+        const text = document.createElement('p');
+        text.textContent = 'Could not load ' + [...unavailableSections.keys()].join(', ') + '.';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.textContent = 'Retry';
+        retry.addEventListener('click', () => {
+            retry.disabled = true;
+            void refreshWorkspaceExtras([...unavailableSections]);
+        });
+        notice.append(text, retry);
+        $('#app').prepend(notice);
+    }
     updateClock();
     if (focusedTool && focusedTool.isConnected !== false) {
         focusedTool.focus();
@@ -2570,8 +2614,20 @@ if (sidebarResizeHandle) {
         event.preventDefault();
     });
 }
-$('#signOut').addEventListener('click', async () => {
+const logoutConfirmation = document.createElement('dialog');
+logoutConfirmation.className = 'engineering-logout';
+logoutConfirmation.setAttribute('aria-labelledby', 'engineering-logout-title');
+logoutConfirmation.innerHTML = `<form method="dialog"><h2 id="engineering-logout-title">Are you sure you want to log out?</h2>
+    <p>You?ll need to sign in again to access your workspace.</p>
+    <div><button value="cancel" autofocus>Stay signed in</button><button class="primary" value="logout">Log out</button></div></form>`;
+document.body.append(logoutConfirmation);
+$('#signOut').addEventListener('click', () => {
     setTopbarPopup('', true);
+    logoutConfirmation.returnValue = '';
+    logoutConfirmation.showModal();
+});
+logoutConfirmation.addEventListener('close', async () => {
+    if (logoutConfirmation.returnValue !== 'logout') return;
     const token = storedToken();
     try {
         await saveQueue;

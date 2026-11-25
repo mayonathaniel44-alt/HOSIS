@@ -7,7 +7,7 @@ const { requirePosition } = require('../../../backend/src/middleware/auth.js');
 const router = express.Router();
 
 const SHIFTS = ['MORNING', 'AFTERNOON', 'NIGHT'];
-const { DATE_RE, TIME_RE } = v;
+const { TIME_RE } = v;
 
 function checkSchedule(body) {
   v.oneOf(body.shift, SHIFTS, 'shift');
@@ -87,9 +87,7 @@ function assertNotPast(shiftDate) {
 // with each person's cleaning task count for that day.
 router.get('/', async (req, res) => {
   const date = req.query.date || db.today();
-  if (!DATE_RE.test(date)) {
-    throw new HttpError(400, 'date must be in YYYY-MM-DD format.');
-  }
+  v.date(date, 'Schedule date');
   const { rows } = await db.query(
     `SELECT s.*, TO_CHAR(s.shift_date, 'YYYY-MM-DD') AS shift_date,
             CONCAT(u.first_name, ' ', u.last_name) AS staff_name, u.position,

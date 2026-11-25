@@ -5,24 +5,20 @@ const { authorize } = require('../../../backend/src/middleware/auth.js');
 
 const router = express.Router();
 
+const v = require('./validate.js');
+
 function range(query) {
-  const today = new Date();
-  const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)).toISOString().slice(0, 10);
-  const next = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
-  const from = String(query.from || first);
-  const to = String(query.to || next);
-  if (![from, to].every((v) => /^\d{4}-\d{2}-\d{2}$/.test(v)) || from >= to) {
-    throw new HttpError(400, 'Use a valid date range: from=YYYY-MM-DD&to=YYYY-MM-DD, with from before to.');
-  }
+  const first = db.today().slice(0, 7) + '-01';
+  const nextDate = new Date(first + 'T00:00:00Z');
+  nextDate.setUTCMonth(nextDate.getUTCMonth() + 1);
+  const from = v.date(query.from ?? first, 'Start date');
+  const to = v.date(query.to ?? nextDate.toISOString().slice(0, 10), 'End date');
+  if (from >= to) throw new HttpError(400, 'End date must be after the start date.');
   return { from, to };
 }
 
 function reportDate(value) {
-  const date = String(value || new Date().toISOString().slice(0, 10));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
-    throw new HttpError(400, 'Use a valid date in YYYY-MM-DD format.');
-  }
-  return date;
+  return v.date(value ?? db.today(), 'Report date');
 }
 
 // Housekeeping reads HR-owned assignments and approved leave without editing

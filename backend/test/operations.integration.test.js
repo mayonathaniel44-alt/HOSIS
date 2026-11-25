@@ -119,6 +119,9 @@ test(
         assert.equal((await api('PUT', '/hr/applicants/' + id, 'hr', application)).hiredEmployeeId, hiredEmployeeId)
         await api('DELETE', '/hr/applicants/' + id, 'hr', undefined, 409)
         await api('DELETE', '/hr/employees/' + hiredEmployeeId, 'hr', undefined, 409)
+        await api('PUT', '/hr/employees/' + hiredEmployeeId, 'hr', {
+          name: 'Fictional Applicant', pos: 'Coordinator', dept: 'frontdesk', status: 'Probationary', rate: 500,
+        })
         await api('PATCH', '/hr/employees/' + hiredEmployeeId + '/attendance', 'hr', {
           today: 'present', timeIn: '08:00', days: 4, late: 0, absences: 0, overtime: 1,
           periodStart: '2026-11-01', periodEnd: '2026-11-15',
@@ -130,6 +133,9 @@ test(
         const unmatched = (await api('GET', '/finance/latest/integrations/hr/timesheets?periodStart=2026-10-01&periodEnd=2026-10-15', 'finance')).staff
         assert.ok(!unmatched.some(row => row.employeeId === hiredEmployeeId))
         assert.equal(staff.find(row => row.employeeId === hiredEmployeeId).regularHours, 32)
+        assert.equal(Number(staff.find(row => row.employeeId === hiredEmployeeId).basicPay), 2000)
+        const audit = await api('GET', '/admin/audit?module=Human+Resources&export=1', 'admin')
+        assert.ok(audit.rows.some(row => row.action === 'HR_ATTENDANCE_UPDATED' && row.actor === prefix + '.hr'))
       })
       await t.test('HR department handoffs scope staffing, accounts and leave to the appropriate users', async () => {
         const employee = await api('POST', '/hr/employees', 'hr', {
@@ -343,6 +349,10 @@ test(
           employeeId: prefix + '.finleave', employeeName: 'Finance Employee', department: 'Finance',
           basicPay: '90.00', periodStart: dates.today, periodEnd: dates.later,
         }, 201)
+        await api('POST', path + '/payroll', 'finance', {
+          employeeId: prefix + '.finleave', employeeName: 'Finance Employee', department: 'Finance',
+          basicPay: '90.00', periodStart: dates.today, periodEnd: dates.later,
+        }, 409)
         await api('PATCH', path + '/payroll/' + employeePayroll.id + '/disburse', 'admin')
         const hrPayroll = (await api('GET', '/hr/bootstrap', 'hr')).payrollStatus.find(row => row.employee_id === prefix + '.finleave')
         assert.equal(hrPayroll.status, 'DISBURSED')
@@ -704,8 +714,19 @@ test(
         )
         const task = await api('POST','/housekeeping/tasks','sup',{roomId:newRoom.id,taskType:'TOUCH_UP',staffId:newStaff.id},201)
         await api('PATCH',`/admin/staff/${newStaff.id}`,'admin',{isActive:false},409)
+        await api('DELETE',`/admin/staff/${newStaff.id}`,'admin',undefined,409)
         await api('PATCH',`/housekeeping/tasks/${task.task.task_id}`,'sup',{staffId:null})
         await api('PATCH',`/admin/staff/${newStaff.id}`,'admin',{isActive:false})
+        await api('PATCH',`/admin/staff/${newStaff.id}`,'admin',{isActive:true})
+        const staffSession = await api('POST','/auth/login',null,{username,password,role:'HOUSEKEEPING'})
+        await api('DELETE',`/admin/staff/${newStaff.id}`,'fo',undefined,403)
+        await api('DELETE',`/admin/staff/${accounts.admin}`,'admin',undefined,400)
+        await api('DELETE',`/admin/staff/${newStaff.id}`,'admin',undefined,204)
+        await api('GET','/auth/me',staffSession,undefined,401)
+        await api('PATCH',`/admin/staff/${newStaff.id}`,'admin',{isActive:true},404)
+        assert.ok(!(await api('GET','/admin/staff','admin')).some(member => member.id === newStaff.id))
+        const deletedActivity = await api('GET','/admin/audit?module=Administration&export=1','admin')
+        assert.ok(deletedActivity.rows.some(row => row.action === 'ADMIN_STAFF_DELETED' && row.description.includes(username)))
         const { rows:[retired] } = await pool.query("INSERT INTO users(username,password_hash,role,is_active) VALUES($1,'test-only','FOOD_BEVERAGE',false) RETURNING id",[prefix+'.retired'])
         await api('PATCH',`/admin/staff/${retired.id}`,'admin',{isActive:true},409)
         const settings = await api('GET','/admin/settings','admin')
@@ -900,9 +921,10 @@ test(
           name: 'Group stay', leadId: lead.id, gross: 1500, date: today,
           checkIn: period.start, checkOut: period.finish, validUntil: period.start,
         }, 201)
-        await act(quote, 'confirm', 'sales', { availabilityConfirmed: true, reservationRef: 'MISSING' }, 400)
+        await act(quote, 'confirm', 'sales', { availabilityConfirmed: true, reservationRef: 'MISSING', reservationGuest: 'Test Guest' }, 400)
+        await act(quote, 'confirm', 'sales', { availabilityConfirmed: true, reservationRef: stay.confirmationCode, reservationGuest: 'Another Guest' }, 409)
         const sale = await act(quote, 'confirm', 'sales', {
-          availabilityConfirmed: true, reservationRef: stay.confirmationCode, preparation: 'Set up two extra towels',
+          availabilityConfirmed: true, reservationRef: stay.confirmationCode, reservationGuest: 'Test Guest', preparation: 'Set up two extra towels',
         })
         assert.equal(sale.reservationRef, stay.confirmationCode)
         const finance = '/finance/latest/integrations/sales/'
@@ -1029,6 +1051,13 @@ test(
         assert.equal(Number((await api('GET',folio,'fo')).balance),0)
         const shared = await api('GET','/finance/customer-payments','finance')
         assert.equal(shared.payments.find((record) => record.invoiceNumber === invoice.invoiceNumber).amount,'51.00')
+        const standalone = await api('POST', '/finance/invoices', 'finance', {
+          guestName: 'Test Guest', reservationCode: booking.confirmationCode, issueNow: true,
+          items: [{ desc: 'Service charge', qty: 1, unitPrice: '100.00' }],
+        }, 201)
+        assert.equal(Number((await api('GET',folio,'fo')).balance),Number(standalone.totalAmount))
+        await api('POST', `/front-office/reservations/${booking.id}/check-out`, 'fo',undefined,409)
+        await api('POST', '/finance/latest/invoices/' + standalone.id + '/void', 'admin')
         await api('POST', `/front-office/reservations/${booking.id}/check-out`, 'fo')
       })
       await t.test('reservation guest names obey field length validation',async()=>{
@@ -1491,6 +1520,7 @@ test(
         },
       )
       await t.test('approved HR leave blocks a Housekeeping schedule', async () => {
+        await api('GET', '/housekeeping/schedules?date=2026-02-30', 'sup', undefined, 400)
         const employee = prefix + '.housekeeper'
         const leave = prefix + '.hk-leave'
         await pool.query(
@@ -1545,6 +1575,13 @@ test(
           storageLocation: 'Test cabinet',
         }, 201)
         const itemId = created.item.item_id
+        const lookup = '/housekeeping/front-office/lost-found?search=' + encodeURIComponent(created.item.storage_label)
+        const { items } = await api('GET', lookup + '&status=STORED', 'fo')
+        assert.deepEqual(items.map(item => item.item_id), [itemId])
+        assert.equal(items[0].item_description, created.item.item_description)
+        assert.equal(Object.hasOwn(items[0], 'storage_location'), false)
+        await api('GET', lookup, 'sales', undefined, 403)
+        await api('GET', `/housekeeping/lost-found/${itemId}/claims`, 'fo', undefined, 403)
         await api('POST', `/housekeeping/lost-found/${itemId}/photos`, 'cleaner', {
           image: 'data:image/png;base64,PHNjcmlwdD4=',
         }, 400)
@@ -1557,6 +1594,14 @@ test(
           claimantName: 'Test Claimant', claimantContact: 'test@example.invalid',
         }, 201)
         assert.equal(rejected.released, false)
+        const released = await api('POST', `/housekeeping/lost-found/${itemId}/claims`, 'sup', {
+          claimantName: 'Test Claimant', claimantContact: 'test@example.invalid',
+          idType: 'PASSPORT', idNumber: 'TEST1234', idVerified: true, descriptionMatch: true,
+        }, 201)
+        assert.equal(released.released, true)
+        const updated = await api('GET', lookup + '&status=RELEASED', 'fo')
+        assert.deepEqual(updated.items.map(item => [item.item_id, item.item_status]), [[itemId, 'RELEASED']])
+        assert.equal((await api('GET', lookup + '&status=STORED', 'fo')).items.length, 0)
       })
       await t.test(
         'repairs keep rooms off sale until repair release and post-repair cleaning',

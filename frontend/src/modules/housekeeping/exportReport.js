@@ -1,11 +1,3 @@
-import { jsPDF } from 'jspdf'
-import { autoTable } from 'jspdf-autotable'
-import writeXlsxFile from 'write-excel-file/browser'
-
-// Keep the report libraries in the normal application bundle. This is a
-// little larger, but avoids stale development-server module URLs breaking
-// exports after the server is restarted or updated.
-
 function stamp() {
   return new Date().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 }
@@ -18,6 +10,7 @@ export function spreadsheetText(value) {
 }
 
 export async function exportPdf({ title, fileName, columns, rows, department = 'Housekeeping', footer }) {
+  const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const doc = new jsPDF({ orientation: columns.length > 5 ? 'landscape' : 'portrait' })
   doc.setFontSize(14)
   doc.text(`Grand Horizon Hotel - ${title}`, 14, 16)
@@ -52,6 +45,7 @@ export async function exportExcel({ title, fileName, columns, rows, footer }) {
     ...rows.map((r) => columns.map((c) => ({ value: spreadsheetText(c.value(r)) }))),
     ...(footer ? [[], [{ value: spreadsheetText(footer), fontWeight: 'bold' }]] : []),
   ]
+  const { default: writeXlsxFile } = await import('write-excel-file/browser')
   await writeXlsxFile(data, { columns: columns.map(() => ({ width: 22 })) }).toFile(`${fileName}.xlsx`)
 }
 

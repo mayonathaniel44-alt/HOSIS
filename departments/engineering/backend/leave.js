@@ -163,9 +163,9 @@ router.post('/', async (req, res) => {
         if (overlap.rowCount) throw appError(409, 'LEAVE_OVERLAP', 'These dates overlap a pending or approved HR leave request.');
         const hrLeaveId = 'LR-ENG-' + actionId;
         await client.query(`
-            INSERT INTO hr_leave_requests(id,emp,type,start_date,end_date,days,status,reason)
-            VALUES($1,$2,$3,$4,$5,$6,'Pending',$7)`,
-            [hrLeaveId, staff.id, body.leaveType, body.startDate, body.endDate, days, reason]);
+            INSERT INTO hr_leave_requests(id,emp,type,start_date,end_date,days,status,reason,submitted_by)
+            VALUES($1,$2,$3,$4,$5,$6,'Pending',$7,$8)`,
+            [hrLeaveId, staff.id, body.leaveType, body.startDate, body.endDate, days, reason, req.user.id]);
         const created = await client.query(
             `INSERT INTO engineering.engineering_leave_records
                 (operation_id, employee_id, employee_name, leave_type, start_date, end_date, reason, created_by, hr_leave_id)

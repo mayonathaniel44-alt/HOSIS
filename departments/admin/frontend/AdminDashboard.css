@@ -589,3 +589,6 @@
 .admin-report-list small {
   display: block;
 }
+.admin-delete-action { color: #a32637; }
+.admin-delete-confirm.button-primary { background: #a32637; color: white; }
+.admin-delete-confirm.button-primary:hover { background: #861d2b; }
