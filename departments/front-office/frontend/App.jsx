@@ -801,6 +801,7 @@ function App() {
   }
 
   if (!signedIn) {
+    const selectedAccessLabel = ACCESS_LABELS[accessRole]
     return (
       <main className="login-page">
         <div className="login-frame">
@@ -824,7 +825,7 @@ function App() {
                 <span className="login-icon"><Icon name="lock" size={18} /></span>
                 <span className="eyebrow">TEAM PORTAL</span>
                 <h2>Welcome back</h2>
-                <p>{accessRole ? `Sign in to your ${ACCESS_LABELS[accessRole]} workspace.` : 'Sign in with your HOSIS staff account.'}</p>
+                <p>{selectedAccessLabel ? `Sign in to your ${selectedAccessLabel} workspace.` : 'Sign in with your HOSIS staff account.'}</p>
               </div>
               <form className="login-form" onSubmit={signIn} aria-busy={loginLoading}>
                 {loginError && <p className="login-error" role="alert">{loginError}</p>}
@@ -837,7 +838,7 @@ function App() {
                 <div className="form-options"><label className="remember-label"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Remember me</label><button type="button" className="text-button" onClick={() => notify('Please contact your system administrator to reset your password.')}>Forgot password?</button></div>
                 <button className="login-submit" type="submit" disabled={loginLoading}>{loginLoading ? 'Signing in…' : 'Sign in'} <Icon name="arrow" size={16} /></button>
               </form>
-              <div className="login-footer"><span>{ACCESS_LABELS[accessRole].toUpperCase()} ACCESS</span><span><i /> SECURE API SIGN-IN</span></div>
+              <div className="login-footer"><span>{selectedAccessLabel ? selectedAccessLabel.toUpperCase() + ' ACCESS' : 'STAFF ACCESS'}</span><span><i /> SECURE API SIGN-IN</span></div>
             </section>
           </div>
           <footer className="login-bottom"><span>© {today.getFullYear()} Grand Horizon Hotel</span><span>Secure staff access · {ACCESS_LABELS[accessRole]}</span></footer>
