@@ -238,7 +238,7 @@ function App() {
       : window.location.hash === humanResourcesHash ? 'HR'
       : window.location.hash === financeHash ? 'FINANCE'
       : window.location.hash === salesMarketingHash ? 'SALES_MARKETING'
-      : isHousekeepingHash(window.location.hash) ? 'HOUSEKEEPING' : 'FRONT_OFFICE',
+      : isHousekeepingHash(window.location.hash) ? 'HOUSEKEEPING' : '',
   )
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(false)
@@ -431,7 +431,7 @@ function App() {
     setLoginError('')
     setLoginLoading(true)
     try {
-      const session = await authApi.login(username.trim(), password, accessRole, remember)
+      const session = await authApi.login(username.trim(), password, accessRole || undefined, remember)
       authApi.saveSession(session, remember)
       setUser(session.user)
       setSignedIn(true)
@@ -824,7 +824,7 @@ function App() {
                 <span className="login-icon"><Icon name="lock" size={18} /></span>
                 <span className="eyebrow">TEAM PORTAL</span>
                 <h2>Welcome back</h2>
-                <p>Sign in to your {ACCESS_LABELS[accessRole]} workspace.</p>
+                <p>{accessRole ? `Sign in to your ${ACCESS_LABELS[accessRole]} workspace.` : 'Sign in with your HOSIS staff account.'}</p>
               </div>
               <form className="login-form" onSubmit={signIn} aria-busy={loginLoading}>
                 {loginError && <p className="login-error" role="alert">{loginError}</p>}
@@ -833,7 +833,7 @@ function App() {
                 <label htmlFor="password">Password</label>
                 <div className="input-wrap"><Icon name="lock" size={17} /><input id="password" required disabled={loginLoading} type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" autoComplete="current-password" /><button className="input-action" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword((value) => !value)}><Icon name="eye" size={17} /></button></div>
                 <label htmlFor="accessRole">Access type</label>
-                <div className="select-wrap"><select id="accessRole" disabled={loginLoading} value={accessRole} onChange={(event) => setAccessRole(event.target.value)}><option value="FRONT_OFFICE">Front Office</option><option value="HOUSEKEEPING">Housekeeping</option><option value="ENGINEERING">Engineering &amp; Maintenance</option><option value="SALES_MARKETING">Sales &amp; Marketing</option><option value="HR">Human Resources</option><option value="FINANCE">Accounting &amp; Finance</option><option value="ADMIN">Administrator</option></select><Icon name="chevron" size={15} /></div>
+                <div className="select-wrap"><select id="accessRole" disabled={loginLoading} value={accessRole} onChange={(event) => setAccessRole(event.target.value)}><option value="">Use my account role</option><option value="FRONT_OFFICE">Front Office</option><option value="HOUSEKEEPING">Housekeeping</option><option value="ENGINEERING">Engineering &amp; Maintenance</option><option value="SALES_MARKETING">Sales &amp; Marketing</option><option value="HR">Human Resources</option><option value="FINANCE">Accounting &amp; Finance</option><option value="ADMIN">Administrator</option></select><Icon name="chevron" size={15} /></div>
                 <div className="form-options"><label className="remember-label"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Remember me</label><button type="button" className="text-button" onClick={() => notify('Please contact your system administrator to reset your password.')}>Forgot password?</button></div>
                 <button className="login-submit" type="submit" disabled={loginLoading}>{loginLoading ? 'Signing in…' : 'Sign in'} <Icon name="arrow" size={16} /></button>
               </form>
